@@ -1,14 +1,14 @@
 # npm 分发与发布
 
-面向维护者。版本以源码根目录 `package.json` 为准；包名配置为 `codex-hongguo`，默认 GitHub 市场为 `mreasonyang/codex-hongguo`。实际发布状态见 README 的发布提示，并以 npm registry 回读为准。
+面向维护者。版本以源码根目录 `package.json` 为准；包名配置为 `@kyun.si/codex-hongguo`，默认 GitHub 市场为 `mreasonyang/codex-hongguo`。实际发布状态见 README 的发布提示，并以 npm registry 回读为准。
 
 ## 安装与更新
 
 首发完成后的用户入口：
 
 ```sh
-npx codex-hongguo@latest setup
-npx codex-hongguo@latest update
+npx @kyun.si/codex-hongguo@latest setup
+npx @kyun.si/codex-hongguo@latest update
 ```
 
 命令先检查 Node、npm、Codex CLI 和 FFmpeg，再通过 Codex 原生市场安装插件。Git 仓库的 `.agents/plugins/marketplace.json` 指向 npm 的确定版本；CLI 沿用 `codex-hongguo@hongguo-local` 标识。`setup` 注册来源并安装，`update` 对已经登记的同一 Git 来源先刷新市场，再安装。
@@ -30,9 +30,9 @@ MCP 使用同名的 `bin/run-node` / Windows `bin/run-node.exe` 入口，Hooks �
 - `.codex-plugin/plugin.json`、`.mcp.json`、`hooks/` 和 `skills/`。
 - `bin/`、预构建的 `dist/cli/`、`dist/server/`、`dist/hooks/`、`dist/setup/` 和 `dist/ui/`。
 - `dist/vendor/openhongguo/`，包括 WASM。
-- 截取后的中英文 README 和 `licenses/` 第三方许可声明。
+- 截取后的中英文 README、项目 MIT 许可证 `LICENSE` 和 `licenses/` 第三方许可声明。
 
-包不声明安装依赖或生命周期脚本，也不包含本机绝对路径、观看媒体、设备档案、测试数据和凭据。便携清单保留在源码，安装包采用已验证的兼容清单。项目尚未指定许可证，npm 元数据使用 `UNLICENSED`；第三方依赖仍按各自许可分发。
+包不声明安装依赖或生命周期脚本，也不包含本机绝对路径、观看媒体、设备档案、测试数据和凭据。便携清单保留在源码，安装包采用已验证的兼容清单。项目采用 [MIT 许可证](../LICENSE)，npm 元数据使用 `MIT`；第三方依赖仍按各自许可分发。
 
 ## 产物与验收
 
@@ -45,7 +45,7 @@ npm run verify:install
 
 | 产物 | 用途 |
 | --- | --- |
-| `release/codex-hongguo-<版本>.tgz` | 待发布的完整 npm 包，发布脚本直接上传此文件。 |
+| `release/kyun.si-codex-hongguo-<版本>.tgz` | 待发布的完整 npm 包，发布脚本直接上传此文件。 |
 | `release/codex-hongguo-<版本>.zip` | 相同插件产物组成的离线本地市场。 |
 | `release/marketplace/.agents/plugins/marketplace.json` | 待采用的版本索引，npm 发布核实成功后复制到仓库。 |
 | `release/package-metadata.json` | 包名文件、版本和大小等打包元数据。 |
@@ -71,7 +71,7 @@ node scripts/verify-install.mjs --previous-zip "/absolute/path/codex-hongguo-0.0
 4. 非交互环境可运行 `npm run release:publish`。脚本隐藏 npm 原始输出，不能代为完成交互式登录或双重认证。需要交互认证时，在自己的终端运行下方命令，将版本占位替换为实际版本：
 
    ```sh
-   npm publish "./release/codex-hongguo-<版本>.tgz" --access public --registry=https://registry.npmjs.org
+   npm publish "./release/kyun.si-codex-hongguo-<版本>.tgz" --access public --registry=https://registry.npmjs.org
    npm run release:publish -- --index-only
    ```
 

@@ -6,6 +6,8 @@
 
 完成安装并信任 Hooks 后，照常发任务，对话里的「等待时看一集」每轮最多推荐三部。已有进度优先显示「继续观看」；本集已看完且还有后续分集时显示「看下一集」。其余位置轮换没看过的剧，点剧名即可在当前聊天里打开播放器并静音开播。
 
+![在 Codex 处理任务时，于右侧面板观看红果短剧](docs/images/codex-hongguo-player.png)
+
 ## 观看用法
 
 | 观看场景 | 打开方式 |
@@ -63,7 +65,7 @@ node plugins/codex-hongguo/bin/codex-hongguo.mjs setup --marketplace .
 
 ### 在线安装
 
-npm 首发后，可使用：
+使用 npm 安装：
 
 ```sh
 npx @kyun.si/codex-hongguo@latest setup
@@ -90,7 +92,7 @@ npx @kyun.si/codex-hongguo@latest setup
 
 更新或卸载前，请先关闭所有播放器面板和内置浏览器分屏；管理插件后请使用新会话验证。
 
-离线安装按「离线包」一节更新。npm 首发后的在线更新命令为：
+离线安装按「离线包」一节更新。在线更新命令为：
 
 ```sh
 npx @kyun.si/codex-hongguo@latest update
@@ -131,5 +133,5 @@ npm 包结构、升级与发布流程见 [npm 分发说明](docs/npm-distributio
 
 ## 许可证与致谢
 
-- **项目许可证**：本仓库尚未指定项目许可证，npm 产物标记为 `UNLICENSED`。第三方运行时依赖的许可声明随插件根目录 `licenses/` 分发。短剧剧目与媒体内容的版权归原权利人所有。
+- **项目许可证**：本项目采用 [MIT 许可证](LICENSE)，npm 元数据标记为 `MIT`。第三方运行时依赖的许可声明随插件根目录 `licenses/` 分发。短剧剧目与媒体内容的版权归原权利人所有。
 - **上游与参考资料**：项目灵感来自 [frostming/dsh-hongguo](https://github.com/frostming/dsh-hongguo)，红果片库与播放解析使用 [openhongguo](https://github.com/beilunyang/openhongguo)，宿主扩展接口依据 [OpenAI 插件扩展](https://developers.openai.com/plugins/build/extensions)、[插件打包](https://developers.openai.com/plugins/build/plugins) 和 [Codex Hooks](https://learn.chatgpt.com/docs/hooks)。

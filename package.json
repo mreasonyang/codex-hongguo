@@ -1,7 +1,8 @@
 {
-  "name": "codex-hongguo",
+  "name": "@kyun.si/codex-hongguo",
   "version": "0.0.20",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=22.16"

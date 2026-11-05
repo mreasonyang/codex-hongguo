@@ -6,6 +6,8 @@ Watch Hongguo short dramas in the right-hand panel while Codex works on a task. 
 
 After installation and Hook review, continue working normally. The optional **Watch while you wait** card offers up to three shows per turn. It prioritizes **Continue watching**, or **Watch next** when the saved episode is complete and another episode is available. Other slots rotate unwatched shows. Clicking a title opens the player in that chat and starts muted playback.
 
+![Watching Hongguo short dramas in the side panel while Codex works on a task](docs/images/codex-hongguo-player.png)
+
 ## Usage
 
 | Scenario | How to Open |
@@ -63,7 +65,7 @@ The offline archive uses the same build as npm, with automatic runtime discovery
 
 ### Online installation
 
-After the first npm release, use:
+Install with npm:
 
 ```sh
 npx @kyun.si/codex-hongguo@latest setup
@@ -91,7 +93,7 @@ The setup command checks dependencies and installs a pinned package version thro
 
 Close all open player panels and split-view browser tabs before updating or uninstalling. Open a new conversation to verify after managing plugins.
 
-For offline installations, follow the offline package instructions above. After the first npm release, online installations can use:
+For offline installations, follow the offline package instructions above. Online installations can use:
 
 ```sh
 npx @kyun.si/codex-hongguo@latest update
@@ -132,5 +134,5 @@ See [npm distribution, upgrades and publishing](docs/npm-distribution.md) for pa
 
 ## License & Credits
 
-- **Project license**: No project license has been specified; npm artifacts use `UNLICENSED`. Bundled third-party dependency notices are under `licenses/` in the plugin root. Copyrights for drama series, covers and media streams belong to their respective rightsholders.
+- **Project license**: This project is licensed under the [MIT License](LICENSE); npm metadata uses `MIT`. Bundled third-party dependency notices are under `licenses/` in the plugin root. Copyrights for drama series, covers and media streams belong to their respective rightsholders.
 - **Upstream & specifications**: Inspired by [frostming/dsh-hongguo](https://github.com/frostming/dsh-hongguo), with Hongguo catalog and playback resolution powered by [openhongguo](https://github.com/beilunyang/openhongguo). Host integration follows [OpenAI Plugin Extensions](https://developers.openai.com/plugins/build/extensions), [Plugin Packaging](https://developers.openai.com/plugins/build/plugins), and [Codex Hooks](https://learn.chatgpt.com/docs/hooks).

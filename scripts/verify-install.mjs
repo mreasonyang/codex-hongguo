@@ -10,7 +10,7 @@ import assert from 'node:assert/strict'
 import { unzipSync } from 'fflate'
 import { createHash } from 'node:crypto'
 import { Store } from '../src/server/store.mjs'
-import { marketplace } from './distribution.mjs'
+import { marketplace, npmPackageName } from './distribution.mjs'
 
 const tmp = await mkdtemp(join(tmpdir(), '红果 安装 '))
 const root = join(tmp, '本地 市场'),
@@ -55,7 +55,9 @@ try {
     assert.ok(entry.startsWith(folder + '/'))
     const relative = entry.slice(folder.length + 1)
     assert.ok(relative.split('/').every((part) => part && part !== '.' && part !== '..' && !/[\\:]/.test(part)))
-    assert.doesNotMatch(relative, /^(docs|test)\/|^plugins\/codex-hongguo\/(fixtures|test)\/|\.(mp4|m4s|m3u8)$/i)
+    assert.doesNotMatch(relative, /^test\/|^plugins\/codex-hongguo\/(fixtures|test)\/|\.(mp4|m4s|m3u8)$/i)
+    if (/^(?:plugins\/codex-hongguo\/)?docs\//.test(relative))
+      assert.match(relative, /^(?:plugins\/codex-hongguo\/)?docs\/images\/[^/]+\.(?:png|jpe?g|webp|svg)$/i)
     const file = join(root, relative)
     await mkdir(dirname(file), { recursive: true })
     await writeFile(file, bytes)
@@ -77,15 +79,18 @@ try {
     '-keyout', join(tmp, 'registry.key'), '-out', join(tmp, 'registry.crt'),
     '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1'], { stdio: 'ignore', timeout: 15000 })
   assert.equal(cert.status, 0, '无法生成临时测试仓库证书')
-  const archivePath = resolve('release', 'codex-hongguo-' + version + '.tgz')
-  registry = fork(new URL('./test-registry.mjs', import.meta.url), [tmp, archivePath, version], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] })
+  const metadata = JSON.parse(await readFile(resolve('release/package-metadata.json'), 'utf8'))
+  assert.equal(metadata.name, npmPackageName)
+  assert.equal(metadata.version, version)
+  const archivePath = resolve('release', metadata.filename)
+  registry = fork(new URL('./test-registry.mjs', import.meta.url), [tmp, archivePath, version, npmPackageName], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] })
   const { origin } = await new Promise((ok, fail) => {
     const timer = setTimeout(() => fail(Error('临时 npm 仓库启动超时')), 5000)
     registry.once('message', message => { clearTimeout(timer); ok(message) })
     registry.once('error', () => { clearTimeout(timer); fail(Error('临时 npm 仓库启动失败')) })
   })
   await mkdir(join(npmMarket, '.agents/plugins'), { recursive: true })
-  await writeFile(join(npmMarket, '.agents/plugins/marketplace.json'), JSON.stringify(marketplace(version, { source: 'npm', package: 'codex-hongguo', version, registry: origin })))
+  await writeFile(join(npmMarket, '.agents/plugins/marketplace.json'), JSON.stringify(marketplace(version, { source: 'npm', package: npmPackageName, version, registry: origin })))
   // Inject only the dedicated test-data path into the tarball's config through the host policy later.
   // Data isolation also applies to npm payloads via their HOME-specific default data directory.
   const defaultData = dataRoot({ env: { ...env, HONGGUO_DATA_DIR: undefined }, home: tmp })
@@ -93,8 +98,8 @@ try {
   const { cp } = await import('node:fs/promises')
   await cp(env.HONGGUO_DATA_DIR, defaultData, { recursive: true })
   env.HONGGUO_DATA_DIR = defaultData
-  run('npm', ['exec', '--yes', '--registry', origin, '--package', 'codex-hongguo@' + version, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
-  run('npm', ['exec', '--yes', '--registry', origin, '--package', 'codex-hongguo@' + version, '--', 'codex-hongguo', 'update', '--marketplace', npmMarket])
+  run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
+  run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'update', '--marketplace', npmMarket])
   console.log('真实 npm exec/npx 安装入口、原生 npm 源下载、旧市场迁移与重复更新通过')
   child = spawn(commands.codex, ['app-server'], { cwd: root, env, stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true })
   const requests = new Map()
@@ -314,7 +319,7 @@ try {
   try { assert.equal(progress.history().find(row => row.seriesId === 'hg-987654321').positionMs, 12345) } finally { progress.close() }
   const sha256 = createHash('sha256').update(await readFile(archivePath)).digest('hex')
   await writeFile(resolve('release/verification.json'), JSON.stringify({
-    version, previousVersion: folder.replace('codex-hongguo-', ''), sha256,
+    name: npmPackageName, version, previousVersion: folder.replace('codex-hongguo-', ''), sha256,
     platform: process.platform, arch: process.arch, windowsPreview: process.platform === 'win32',
     checkedAt: new Date().toISOString(),
     checks: ['npx-setup', 'repeat-update', 'native-npm-source', 'offline-migration', 'progress-preserved', 'hook-review-required', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'uninstall-preserves-data'],
