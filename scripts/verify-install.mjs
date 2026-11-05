@@ -1,13 +1,12 @@
 // Exercise the installed copy in a disposable CLI profile, including paths with spaces.
-import { mkdtemp, mkdir, rm, readFile, writeFile, access, chmod } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, readFile, writeFile, access } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fork } from 'node:child_process'
 import { spawnSync, spawn, findExecutable, stopChild } from '../src/runtime/executables.mjs'
 import { dataRoot } from '../src/server/paths.mjs'
 import { createInterface } from 'node:readline'
 import assert from 'node:assert/strict'
-import { unzipSync } from 'fflate'
 import { createHash } from 'node:crypto'
 import { Store } from '../src/server/store.mjs'
 import { marketplace, npmPackageName } from './distribution.mjs'
@@ -45,35 +44,14 @@ function run(bin, args) {
 let child, registry
 try {
   await mkdir(profile)
-  const previousIndex = process.argv.indexOf('--previous-zip')
-  const previousZip = previousIndex >= 0 ? resolve(process.argv[previousIndex + 1]) : null
-  const folder = previousZip ? basename(previousZip).replace(/\.zip$/, '') : 'codex-hongguo-' + version
-  assert.match(folder, /^codex-hongguo-\d+\.\d+\.\d+$/)
-  const archive = unzipSync(await readFile(previousZip || resolve('release', folder + '.zip')))
-  for (const [entry, bytes] of Object.entries(archive)) {
-    assert.ok(entry.startsWith(folder + '/'))
-    const relative = entry.slice(folder.length + 1)
-    assert.ok(relative.split('/').every((part) => part && part !== '.' && part !== '..' && !/[\\:]/.test(part)))
-    assert.doesNotMatch(relative, /^test\/|^plugins\/codex-hongguo\/(fixtures|test)\/|\.(mp4|m4s|m3u8)$/i)
-    if (/^(?:plugins\/codex-hongguo\/)?docs\//.test(relative))
-      assert.match(relative, /^(?:plugins\/codex-hongguo\/)?docs\/images\/[^/]+\.(?:png|jpe?g|webp|svg)$/i)
-    const file = join(root, relative)
-    await mkdir(dirname(file), { recursive: true })
-    await writeFile(file, bytes)
-    if (relative === 'plugins/codex-hongguo/bin/run-node') await chmod(file, 0o755)
-  }
-  // The MCP subprocess receives an allowlist of environment variables from Codex.
-  const mcpPath = join(root, 'plugins/codex-hongguo/.mcp.json')
-  const config = JSON.parse(await readFile(mcpPath, 'utf8'))
-  config.mcpServers['codex-hongguo'].env = { HONGGUO_DATA_DIR: env.HONGGUO_DATA_DIR }
-  await writeFile(mcpPath, JSON.stringify(config))
-  run('codex', ['plugin', 'marketplace', 'add', root])
-  run('codex', ['plugin', 'add', 'codex-hongguo@hongguo-local'])
-  const seeded = new Store(env.HONGGUO_DATA_DIR)
-  seeded.save({ seriesId: 'hg-987654321', episodeId: 'hg-987654322', title: '安装迁移进度', label: '2', positionMs: 12345, durationMs: 60000 })
-  seeded.setPreferences({ autoPrompt: true, searchTerms: ['总裁', '重生', '逆袭'] })
-  seeded.setSetupDismissed(true)
-  seeded.close()
+  await mkdir(root, { recursive: true })
+  const trap = join(tmp, 'no-system-ffmpeg')
+  await mkdir(trap)
+  env.HONGGUO_FORBIDDEN_FFMPEG = join(tmp, 'system-ffmpeg-was-used')
+  await writeFile(join(trap, process.platform === 'win32' ? 'ffmpeg.cmd' : 'ffmpeg'), process.platform === 'win32'
+    ? '@echo off\r\necho used>"%HONGGUO_FORBIDDEN_FFMPEG%"\r\nexit /b 91\r\n'
+    : '#!/bin/sh\nprintf used > "$HONGGUO_FORBIDDEN_FFMPEG"\nexit 91\n', { mode: 0o755 })
+  env.PATH = trap + (process.platform === 'win32' ? ';' : ':') + env.PATH
   const cert = spawnSync(commands.openssl, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-keyout', join(tmp, 'registry.key'), '-out', join(tmp, 'registry.crt'),
     '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1'], { stdio: 'ignore', timeout: 15000 })
@@ -90,17 +68,20 @@ try {
   })
   await mkdir(join(npmMarket, '.agents/plugins'), { recursive: true })
   await writeFile(join(npmMarket, '.agents/plugins/marketplace.json'), JSON.stringify(marketplace(version, { source: 'npm', package: npmPackageName, version, registry: origin })))
-  // Inject only the dedicated test-data path into the tarball's config through the host policy later.
-  // Data isolation also applies to npm payloads via their HOME-specific default data directory.
   const defaultData = dataRoot({ env: { ...env, HONGGUO_DATA_DIR: undefined }, home: tmp })
-  await mkdir(dirname(defaultData), { recursive: true })
-  const { cp } = await import('node:fs/promises')
-  await cp(env.HONGGUO_DATA_DIR, defaultData, { recursive: true })
   env.HONGGUO_DATA_DIR = defaultData
   run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
-  run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'update', '--marketplace', npmMarket])
   commands.ffmpeg = findExecutable('ffmpeg', undefined, { env, home: tmp })
-  console.log('真实 npm exec/npx 安装入口、原生 npm 源下载、旧市场迁移与重复更新通过')
+  assert.ok(commands.ffmpeg.startsWith(tmp), '播放组件必须位于隔离用户缓存')
+  await access(commands.ffmpeg)
+  await assert.rejects(access(env.HONGGUO_FORBIDDEN_FFMPEG), '不应调用系统 FFmpeg')
+  const seeded = new Store(defaultData)
+  seeded.save({ seriesId: 'hg-987654321', episodeId: 'hg-987654322', title: '安装验收进度', label: '2', positionMs: 12345, durationMs: 60000 })
+  seeded.setPreferences({ autoPrompt: true, searchTerms: ['总裁', '重生', '逆袭'] })
+  seeded.setSetupDismissed(true)
+  seeded.close()
+  run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
+  console.log('全新 npm 安装、播放组件自动准备和重复安装通过，未调用系统 FFmpeg')
   child = spawn(commands.codex, ['app-server'], { cwd: root, env, stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true })
   const requests = new Map()
   createInterface({ input: child.stdout }).on('line', (line) => {
@@ -236,9 +217,9 @@ try {
   const opened = await hostCall('open_drama_panel', {})
   assert.ok(!opened.isError && typeof opened._meta?.panel === 'string', '打开播放器失败')
   const history = await hostCall('get_history', { panel: opened._meta.panel })
-  assert.equal(history._meta?.data?.items?.find(row => row.seriesId === 'hg-987654321')?.positionMs, 12345, 'npm 迁移后观看进度丢失')
+  assert.equal(history._meta?.data?.items?.find(row => row.seriesId === 'hg-987654321')?.positionMs, 12345, '重复安装后观看进度丢失')
   const firstSetup = await hostCall('get_setup_status', { panel: opened._meta.panel })
-  assert.equal(firstSetup._meta?.data?.dismissed, true, 'npm 迁移后引导设置丢失')
+  assert.equal(firstSetup._meta?.data?.dismissed, true, '重复安装后引导设置丢失')
   assert.notEqual(firstSetup._meta.data.hooks.status, 'ready')
   assert.ok(firstSetup._meta.data.hooks.events.every(event => event.status !== 'ready'))
   const dismissed = await hostCall('set_setup_dismissed', { panel: opened._meta.panel, dismissed: true })
@@ -317,12 +298,13 @@ try {
   console.log('隔离卸载通过')
   const progress = new Store(defaultData)
   try { assert.equal(progress.history().find(row => row.seriesId === 'hg-987654321').positionMs, 12345) } finally { progress.close() }
+  await assert.rejects(access(env.HONGGUO_FORBIDDEN_FFMPEG), '不应调用系统 FFmpeg')
   const sha256 = createHash('sha256').update(await readFile(archivePath)).digest('hex')
   await writeFile(resolve('release/verification.json'), JSON.stringify({
-    name: npmPackageName, version, previousVersion: folder.replace('codex-hongguo-', ''), sha256,
+    name: npmPackageName, version, installation: 'fresh', sha256,
     platform: process.platform, arch: process.arch, windowsPreview: process.platform === 'win32',
     checkedAt: new Date().toISOString(),
-    checks: ['npx-setup', 'repeat-update', 'native-npm-source', 'offline-migration', 'progress-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'uninstall-preserves-data'],
+    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'progress-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'uninstall-preserves-data'],
     mediaDecoded: process.argv.includes('--playback'), desktopPlaybackObserved: false,
   }, null, 2) + '\n')
 } finally {

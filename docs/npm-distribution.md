@@ -51,15 +51,15 @@ npm run verify:install
 | `release/package-metadata.json` | 包名文件、版本和大小等打包元数据。 |
 | `release/verification.json` | 成功的安装回执，包含版本、迁移基线、检查项和 tgz 的 SHA-256。 |
 
-隔离验证创建本地 HTTPS npm 测试仓库及临时 CA，在临时 HOME/Codex 配置下执行真实 npm exec/npx 和 Codex 原生 npm 下载；生产 TLS 策略不变。默认从本版 ZIP 迁移，检查进度、设置、宿主工具、两个 UI 资源、真实片库/分集、三个待信任 Hooks，以及卸载保留数据。
+隔离验证创建本地 HTTPS npm 测试仓库及临时 CA，在临时 HOME/Codex 配置下执行真实 npm exec/npx 和 Codex 原生 npm 下载；生产 TLS 策略不变。从空白 HOME/Codex 配置全新安装，检查进度、设置、宿主工具、两个 UI 资源、真实片库/分集、三个待信任 Hooks，以及卸载保留数据。
 
-验证旧版升级并额外解码真实分集时运行：
+额外验证真实分集解码时运行：
 
 ```sh
-node scripts/verify-install.mjs --previous-zip "/absolute/path/codex-hongguo-0.0.8.zip" --playback
+node scripts/verify-install.mjs --playback
 ```
 
-将路径替换为实际旧发行包。`--playback` 取回安装副本提供的初始化段与媒体段，用 FFmpeg 解码。它不等同于桌面视频控件实播；回执的 `desktopPlaybackObserved` 固定为 false。公开 npm/GitHub 的真实安装链路、桌面画面与自然回合自动暂停、Linux 实机需分别验收，不能从本地测试仓库的成功推导为已上线。
+`--playback` 取回安装副本提供的初始化段与媒体段，用 FFmpeg 解码。它不等同于桌面视频控件实播；回执的 `desktopPlaybackObserved` 固定为 false。公开 npm/GitHub 的真实安装链路、桌面画面与自然回合自动暂停、Linux 实机需分别验收，不能从本地测试仓库的成功推导为已上线。
 
 重新打包会使旧回执失效，需要重新安装验证。已发布的 npm 名称/版本不能覆盖，修改已发布内容应递增版本；见 [npm publish 文档](https://docs.npmjs.com/cli/v11/commands/npm-publish/)。
 

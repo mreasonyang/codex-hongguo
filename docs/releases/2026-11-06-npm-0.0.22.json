@@ -1,0 +1,44 @@
+{
+  "name": "@kyun.si/codex-hongguo",
+  "version": "0.0.22",
+  "url": "https://www.npmjs.com/package/@kyun.si/codex-hongguo",
+  "sourceCommit": "8eb0c53",
+  "integrity": "sha512-PeWMXNY+fjvTsB1DQQV3KfHBrrwJ19x92jA8TThrFJiXMjJrCt7CqL12QAueIa7QPlUCgaU2NGMQtEs/h18DBw==",
+  "sha256": "7a703ce6c9d10859e48a45728f19670dd0ddbb4658d8d21c2dd755231922d9ad",
+  "size": 13059730,
+  "publishedAt": "2026-11-05T18:59:38.182Z",
+  "publicationOrder": "Published after build checks, before full installation and playback acceptance, at the user request.",
+  "verificationStatus": "local-and-isolated-installation-passed; public-installation-in-progress",
+  "checks": [
+    "build",
+    "registry-integrity",
+    "full-local-tests",
+    "fresh-isolated-npm-installation",
+    "managed-ffmpeg-without-system-install",
+    "live-catalog",
+    "real-episode-mcp-transfer-and-decoding"
+  ],
+  "tests": {
+    "total": 71,
+    "passed": 68,
+    "skipped": 3
+  },
+  "installation": "fresh; no previous-version compatibility or migration acceptance",
+  "isolatedInstallationChecks": [
+    "npx-setup",
+    "fresh-install",
+    "repeat-setup",
+    "native-npm-source",
+    "progress-preserved",
+    "managed-ffmpeg-without-system-install",
+    "hook-review-required",
+    "launcher-stdin",
+    "hook-stop",
+    "hook-interrupt",
+    "host-mcp",
+    "live-catalog",
+    "uninstall-preserves-data"
+  ],
+  "mediaDecoded": true,
+  "desktopPlaybackObserved": false
+}

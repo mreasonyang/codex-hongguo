@@ -28,15 +28,15 @@ npm run verify:install
 | `npm run build` | 校验版本与前端类型，打包 MCP、Hooks、Setup、CLI，复制上游 SDK/WASM，并内联生成播放器 HTML。 |
 | `npm test` | 先构建，再运行 `test/*.test.mjs`；覆盖回合状态、推荐轮换、安装迁移和恢复、持久化、解密、转码与媒体传输。测试数量以当次输出为准。 |
 | `npm run package` | 生成完整 npm tgz、同产物离线 ZIP、待发布索引和包元数据。源码根目录的 package 保持 `private: true`，实际发布包单独生成。 |
-| `npm run verify:install` | 从当前离线 ZIP 迁移到原生 npm 源，验证真实 npm exec/npx 安装和重复更新、宿主工具与 UI 资源、片库/分集、进度保留、待信任 Hooks、卸载保留数据；成功后写入绑定 tgz 哈希的回执。需要联网。 |
+| `npm run verify:install` | 从空白配置安装原生 npm 源，验证真实 npm exec/npx 安装和重复更新、宿主工具与 UI 资源、片库/分集、进度保留、待信任 Hooks、卸载保留数据；成功后写入绑定 tgz 哈希的回执。需要联网。 |
 
-默认安装验证使用当前版本 ZIP，验证的是来源迁移。验证旧版本升级和真实分集解码时，显式提供旧发行包并开启播放检查：
+安装验证从空白配置开始，不验证旧版兼容。额外验证真实分集解码时运行：
 
 ```sh
-node scripts/verify-install.mjs --previous-zip "/absolute/path/codex-hongguo-0.0.8.zip" --playback
+node scripts/verify-install.mjs --playback
 ```
 
-将路径替换为要兼容的旧发行包。`--playback` 额外经安装副本准备真实分集，通过 MCP 取回初始化段和媒体段，再用 FFmpeg 解码；默认验证不执行此项。隔离验证使用临时数据和配置，不信任个人 Hooks，不发起模型请求。
+`--playback` 额外经安装副本准备真实分集，通过 MCP 取回初始化段和媒体段，再用 FFmpeg 解码；默认验证不执行此项。隔离验证使用临时数据和配置，不信任个人 Hooks，不发起模型请求。
 
 这仍不等同于桌面视频控件已实播或真实任务自然结束已触发暂停。当前回执的 `desktopPlaybackObserved` 固定为 `false`；桌面画面、听音、自然 Stop/Interrupt 和 Linux 实机需另行观察。回执只对应其绑定的 tgz，重新打包后需重新执行安装验证。
 
