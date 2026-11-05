@@ -1,0 +1,63 @@
+{
+  "name": "@kyun.si/codex-hongguo",
+  "version": "0.0.21",
+  "previousVersion": "0.0.20",
+  "sourceCommit": "cfafbcb6e90c0a077c68341bfec3babdc7cc2ab1",
+  "url": "https://www.npmjs.com/package/@kyun.si/codex-hongguo",
+  "tarball": "https://registry.npmjs.org/@kyun.si/codex-hongguo/-/codex-hongguo-0.0.21.tgz",
+  "sha256": "d468ee848e889665baaad4e46d82483ee1b25893c17e74cb67c598b50856a9c2",
+  "integrity": "sha512-2lf0ZAP5vmS6ZumoxQ1jrCZNTOjebh/K6n2skiLyAbI8ArymEULQJqh98SxfAMblJBSGq8DXlkSA6ABJWOsKgw==",
+  "size": 12998502,
+  "checkedAt": "2026-11-05T18:21:34.804Z",
+  "platform": "darwin",
+  "arch": "arm64",
+  "tests": {
+    "total": 65,
+    "passed": 62,
+    "skipped": 3
+  },
+  "checks": [
+    "registry-latest",
+    "registry-integrity",
+    "anonymous-public-npx-setup",
+    "github-default-marketplace",
+    "native-npm-cache",
+    "public-0.0.20-to-0.0.21-migration",
+    "progress-preserved",
+    "preferences-preserved",
+    "repeat-public-npx-update",
+    "isolated-uninstall"
+  ],
+  "upgradeBaseline": "Public npm 0.0.20 through a frozen local marketplace index, then update to the default GitHub marketplace.",
+  "verificationNotes": [
+    "The first update attempt from the original GitHub 0.0.20 profile failed before detailed diagnostics were retained. Fresh setup, frozen-index 0.0.20 migration, and repeated GitHub updates subsequently passed."
+  ],
+  "localInstallationChecks": [
+    "npx-setup",
+    "repeat-update",
+    "native-npm-source",
+    "offline-migration",
+    "progress-preserved",
+    "hook-review-required",
+    "launcher-stdin",
+    "hook-stop",
+    "hook-interrupt",
+    "host-mcp",
+    "live-catalog",
+    "uninstall-preserves-data"
+  ],
+  "desktopPlaybackObserved": false,
+  "crossPlatformCi": {
+    "url": "https://github.com/mreasonyang/codex-hongguo/actions/runs/42081941186",
+    "sourceCommit": "cfafbcb6e90c0a077c68341bfec3babdc7cc2ab1",
+    "lastObserved": {
+      "ubuntu-latest": "success",
+      "macos-latest": "queued",
+      "windows-latest": "in_progress"
+    }
+  },
+  "browserVerification": {
+    "publishAuthentication": "completed in Brave",
+    "packagePage": "blocked by a human-verification challenge; release verified through the public registry and real npm installation"
+  }
+}
