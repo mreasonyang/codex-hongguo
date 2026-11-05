@@ -61,6 +61,8 @@ export const schemas = {
     autoPrompt: z.boolean().optional(),
     searchTerms: z.array(z.string().trim().min(1).max(30)).min(1).max(6).optional(),
     autoplayNext: z.boolean().optional(),
+    autoPauseOnFinish: z.boolean().optional(),
+    autoPlayOnStart: z.boolean().optional(),
   }),
   read_panel_chunk: z.object({
     episodeId: dramaId,
@@ -208,7 +210,10 @@ export class Service {
         // and legacy fixed-turn browser links retain their original scope.
         if (p.observeSession) {
           if (p.turnId || (scope.waiting && !scope.waiting.taken)) throw new PlayerError('请先打开播放器', 403)
-          return this.store.state(scope.sessionId, browser ? scope.fixedTurn : undefined)
+          return {
+            ...this.store.state(scope.sessionId, browser ? scope.fixedTurn : undefined),
+            preferences: this.store.preferences(),
+          }
         }
         const fixed = scope.waiting?.turnId ?? (browser ? scope.fixedTurn : null)
         if (fixed && p.turnId && p.turnId !== fixed) throw new PlayerError('播放器已绑定其他回合', 403)
@@ -276,6 +281,7 @@ export class Service {
       case 'get_preferences':
         return this.store.preferences()
       case 'set_preferences': {
+        if (!this.store.persistent) throw new PlayerError('本机设置目录不可写', 503)
         const previous = this.store.preferences()
         const settings = this.store.setPreferences(p)
         if (JSON.stringify(previous.searchTerms) !== JSON.stringify(settings.searchTerms)) {

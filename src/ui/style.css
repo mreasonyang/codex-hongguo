@@ -502,6 +502,12 @@ h1 {
   display: grid;
   gap: 12px;
 }
+.settingsHint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  line-height: 1.5;
+}
 .field {
   display: grid;
   gap: 6px;

@@ -284,7 +284,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   })
   assert.equal(data.isError, true)
   const resources = (await client.listResources()).resources
-  const playerUri = 'ui://hongguo/v11/player', waitingUri = 'ui://hongguo/v12/waiting'
+  const playerUri = 'ui://hongguo/v13/player', waitingUri = 'ui://hongguo/v13/waiting'
   assert.equal(tools.find(t => t.name === 'show_waiting_picks')._meta.ui.resourceUri, waitingUri)
   assert.equal(tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri, playerUri)
   assert.deepEqual(resources.map(r => r.uri).sort(), [playerUri, waitingUri])
@@ -294,7 +294,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
     'ui://hongguo/v2/player', 'ui://hongguo/v2/waiting', 'ui://hongguo/v3/player', 'ui://hongguo/v3/waiting',
     'ui://hongguo/v4/player', 'ui://hongguo/v4/waiting', 'ui://hongguo/v5/player', 'ui://hongguo/v5/waiting',
     'ui://hongguo/v6/player', 'ui://hongguo/v6/waiting', 'ui://hongguo/v7/waiting',
-    'ui://hongguo/v8/player', 'ui://hongguo/v9/waiting']) {
+    'ui://hongguo/v8/player', 'ui://hongguo/v9/waiting', 'ui://hongguo/v11/player', 'ui://hongguo/v12/waiting']) {
     const read = (await client.readResource({ uri })).contents[0]
     assert.equal(read.uri, uri)
     assert.deepEqual(read._meta.ui.csp, policy)
@@ -394,6 +394,7 @@ test('an inaccessible data directory reports failed persistence and cannot prete
   const progress = { seriesId: 'hg-10', episodeId: 'hg-101', title: '剧名', label: '1', positionMs: 0, durationMs: 1000 }
   await assert.rejects(svc.call(ctx, 'save_progress', progress), /不可写/)
   await assert.rejects(svc.call(ctx, 'get_run_state', {}))
+  await assert.rejects(svc.call(ctx, 'set_preferences', { autoPauseOnFinish: false }), /不可写/)
 })
 
 test('history has one row per drama and removes all its episodes', (t) => {

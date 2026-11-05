@@ -32,7 +32,7 @@ function render(data: Setup) {
   }))
   const help = !data.database ? '进度暂时无法保存，请检查红果的数据目录权限。'
     : !data.ffmpeg ? '尚未找到 FFmpeg。安装后重启 Codex，再从「设置 → 使用指南」重新检查。'
-    : ready ? '回合联动已就绪。当前对话的任务结束时，视频会自动暂停。'
+    : ready ? '回合联动已就绪。可在设置中配置任务开始自动播放和任务结束自动暂停。'
     : data.hooks.status === 'unknown' ? '暂时无法读取 Hooks 状态，请在宿主设置中核对。现在可以先手动观看。'
     : data.hooks.events.some(event => event.status === 'missing') ? '尚未发现完整的回合事件。请检查插件已启用，并在新的本地对话中重试。'
     : '回合联动尚未配置。完成下方操作后重新检查，也可以先手动观看。'

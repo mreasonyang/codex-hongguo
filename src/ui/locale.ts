@@ -14,8 +14,8 @@ const en: Record<string, string> = {
   '进度暂时无法保存，请检查红果的数据目录权限。': 'Progress cannot be saved. Check permissions for Hongguo’s data folder.',
   '尚未找到 FFmpeg。安装后重启 Codex，再从「设置 → 使用指南」重新检查。':
     'FFmpeg is missing. Install it, restart Codex, then check again in Settings → Getting started.',
-  '回合联动已就绪。当前对话的任务结束时，视频会自动暂停。':
-    'Playback will pause automatically when a task ends in this chat.',
+  '回合联动已就绪。可在设置中配置任务开始自动播放和任务结束自动暂停。':
+    'Task hooks are ready. Configure automatic play and pause in Settings.',
   '暂时无法读取 Hooks 状态，请在宿主设置中核对。现在可以先手动观看。':
     'Hook status is unavailable. Check the host settings; you can watch manually for now.',
   '尚未发现完整的回合事件。请检查插件已启用，并在新的本地对话中重试。':
@@ -27,6 +27,10 @@ const en: Record<string, string> = {
   '本次已收起指南，暂时无法保存此设置。': 'Guide hidden for now. This preference could not be saved.',
   自检: 'Diagnostics',
   设置: 'Settings',
+  以下设置对所有聊天生效: 'These settings apply to all chats',
+  任务结束自动暂停: 'Pause automatically when a task ends',
+  任务开始自动播放: 'Play automatically when a task starts',
+  '自动播放已选中的剧集，从上次位置继续': 'Play the selected episode from its saved position',
   当前回合进行时显示推荐: 'Suggest shows during a turn',
   推荐补充关键词: 'Additional recommendation keywords',
   用逗号分隔: 'Separate with commas',

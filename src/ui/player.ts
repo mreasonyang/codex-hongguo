@@ -2,9 +2,9 @@ import { initLocale, tr } from './locale'
 import { coverArt, fill, icon, setCover, setIcon } from './ui-kit'
 import { panelStream } from './panel-stream'
 import { mediaErrorMessage, waitForMetadata } from './media-startup'
-import { finishedTurn } from './playback-turn'
+import { finishedTurn, startedTurn } from './playback-turn'
 import { initOnboarding, showSetup } from './onboarding'
-import { browser, call, connect, hostLocale, type Context, type State } from './api'
+import { browser, call, connect, hostLocale, type Context, type State, type Preferences } from './api'
 import { pickLabel, showWaitingPicks, waitingCard, type WaitingSelection } from './waiting'
 
 type Series = {
@@ -67,7 +67,10 @@ let polling: Promise<void> | undefined
 let lastSave = 0,
   saved = Promise.resolve()
 
-let prefs = { autoPrompt: true, autoplayNext: true, searchTerms: ['总裁', '重生', '逆袭'] }
+let prefs: Preferences = {
+  autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: false,
+  searchTerms: ['总裁', '重生', '逆袭'],
+}
 let playback: 'idle' | 'playing' | 'finished' = 'idle'
 type InterruptedPlayback = { action: number; lastPosition?: number }
 let backgroundPlayback: InterruptedPlayback | undefined
@@ -613,7 +616,7 @@ function displayState() {
   )
 }
 function poll() {
-  if (!pageActive || (browser && !context.identified)) return Promise.resolve()
+  if (!pageActive) return Promise.resolve()
   polling ??= readTurnState().finally(() => { polling = undefined })
   return polling
 }
@@ -623,12 +626,21 @@ async function readTurnState() {
       observeSession: true, playerInstance: document.hidden ? undefined : instance,
     }, 1800)
     if (!pageActive) return
+    if (state.preferences) {
+      const promptChanged = prefs.autoPrompt !== state.preferences.autoPrompt
+      prefs = state.preferences
+      autoNext.checked = prefs.autoplayNext
+      if (promptChanged) renderPicks()
+    }
     const reason = finishedTurn(current, state)
+    const starting = startedTurn(current, state)
     const changed = current?.state !== state.state || current?.turnId !== state.turnId
     current = state
     if (changed) renderPicks()
     displayState()
-    if (reason && series) void pause(reason)
+    if (reason && series && prefs.autoPauseOnFinish) void pause(reason)
+    else if (starting && prefs.autoPlayOnStart && series && episode?.playable &&
+        video.paused && !preparing) void start(state.turnId!, true)
   } catch {
     if (!pageActive) return
     el('lamp').classList.remove('on')
@@ -642,7 +654,7 @@ function updateTime() {
   fill(seek)
   text('time', clock(video.currentTime) + ' / ' + clock(dur))
 }
-async function start(recommendationTurn?: string) {
+async function start(recommendationTurn?: string, automatic = false) {
   if (!episode?.playable || !series || !pageActive) return
   const n = ++action,
     ep = episode,
@@ -703,13 +715,14 @@ async function start(recommendationTurn?: string) {
       }
       loaded = true
     }
-    // Only a delayed recommendation belongs to a specific turn. An ordinary
-    // Play gesture on loaded media reaches video.play() without a host request.
+    // Delayed recommendations and turn-start autoplay must still belong to a
+    // running turn. Ordinary Play on loaded media needs no host request.
     if (recommendationTurn) {
       const state = await call<State>('get_run_state', { observeSession: true }, 1800)
       if (n !== action) return
-      if (state.turnId !== recommendationTurn || state.state !== 'submitted') {
-        void pause('这条推荐已结束')
+      if (state.turnId !== recommendationTurn || state.state !== 'submitted' ||
+          (automatic && !state.preferences?.autoPlayOnStart)) {
+        void pause(automatic ? '' : '这条推荐已结束')
         return
       }
     }
@@ -759,7 +772,9 @@ function finishEpisode() {
 }
 video.onended = finishEpisode
 autoNext.onchange = () => {
-  void call('set_preferences', { autoplayNext: autoNext.checked }).catch(e => notice(explain(e)))
+  void call<Preferences>('set_preferences', { autoplayNext: autoNext.checked })
+    .then(updated => { prefs = updated })
+    .catch(e => notice(explain(e)))
 }
 video.ontimeupdate = () => {
   updateTime()
@@ -925,6 +940,8 @@ el('prefs').onclick = () => {
   el('settings').hidden = !el('settings').hidden
   el('prefs').setAttribute('aria-expanded', String(!el('settings').hidden))
   el<HTMLInputElement>('autoPrompt').checked = prefs.autoPrompt
+  el<HTMLInputElement>('autoPauseOnFinish').checked = prefs.autoPauseOnFinish
+  el<HTMLInputElement>('autoPlayOnStart').checked = prefs.autoPlayOnStart
   el<HTMLInputElement>('terms').value = prefs.searchTerms.join('，')
 }
 el('settings').onsubmit = (e) => {
@@ -935,10 +952,13 @@ el('settings').onsubmit = (e) => {
     .filter(Boolean)
   void call<typeof prefs>('set_preferences', {
     autoPrompt: el<HTMLInputElement>('autoPrompt').checked,
+    autoPauseOnFinish: el<HTMLInputElement>('autoPauseOnFinish').checked,
+    autoPlayOnStart: el<HTMLInputElement>('autoPlayOnStart').checked,
     searchTerms,
   })
     .then(async (updated) => {
       prefs = updated
+      autoNext.checked = prefs.autoplayNext
       el('settings').hidden = true
       el('prefs').setAttribute('aria-expanded', 'false')
       renderPicks()

@@ -6,10 +6,18 @@ export type Context = {
   turnId?: string
   selection?: { seriesId: string; episodeId?: string; title?: string }
 }
+export type Preferences = {
+  autoPrompt: boolean
+  autoplayNext: boolean
+  autoPauseOnFinish: boolean
+  autoPlayOnStart: boolean
+  searchTerms: string[]
+}
 export type State = {
   state: 'unknown' | 'submitted' | 'stopped' | 'interrupted'
   turnId: string | null
   observedAt: number | null
+  preferences?: Preferences
 }
 export const browser = document.documentElement.dataset.host === 'browser'
 let panel = ''

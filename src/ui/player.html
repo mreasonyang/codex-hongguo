@@ -129,6 +129,16 @@
       </header>
 
       <form id="settings" class="sheet" hidden>
+        <p class="settingsHint">以下设置对所有聊天生效</p>
+        <label class="switchRow">
+          <span>任务结束自动暂停</span>
+          <input type="checkbox" id="autoPauseOnFinish" class="switch" />
+        </label>
+        <label class="switchRow">
+          <span>任务开始自动播放</span>
+          <input type="checkbox" id="autoPlayOnStart" class="switch" />
+        </label>
+        <p class="settingsHint">自动播放已选中的剧集，从上次位置继续</p>
         <label class="switchRow">
           <span>当前回合进行时显示推荐</span>
           <input type="checkbox" id="autoPrompt" class="switch" />
