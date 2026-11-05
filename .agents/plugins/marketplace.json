@@ -1,10 +1,21 @@
 {
   "name": "hongguo-local",
-  "interface": { "displayName": "红果短剧" },
-  "plugins": [{
-    "name": "codex-hongguo",
-    "source": { "source": "npm", "package": "codex-hongguo", "version": "0.0.9" },
-    "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
-    "category": "Entertainment"
-  }]
+  "interface": {
+    "displayName": "红果短剧"
+  },
+  "plugins": [
+    {
+      "name": "codex-hongguo",
+      "source": {
+        "source": "npm",
+        "package": "@kyun.si/codex-hongguo",
+        "version": "0.0.20"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Entertainment"
+    }
+  ]
 }

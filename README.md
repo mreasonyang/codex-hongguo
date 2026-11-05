@@ -38,7 +38,7 @@
 
 需要 macOS 或 Linux、Node.js >=22.16（含 npm）、支持 npm 插件源的 Codex CLI，以及 FFmpeg（建议 >=8）。macOS 可用 `brew install node ffmpeg` 安装依赖。本机验收使用 Codex CLI 0.157.1；Linux 尚待桌面实机验收。Windows x64 原生启动器已随离线包提供，当前为试用，npm 安装限制将在实机验收通过后开放；见 [Windows 试用说明](docs/windows-support.md)。
 
-首次 npm/GitHub 发布尚未完成：源码仓库已公开，npm 包和 GitHub Releases 安装包尚未发布。当前可从源码构建后安装，或使用维护者提供的离线 ZIP；下方在线命令需等 npm 首发后使用。发布与验收状态见[分发说明](docs/npm-distribution.md)。
+npm 正式发行包已发布。安装与更新通过 Codex 原生插件市场完成。
 
 ### 从源码构建
 
@@ -121,7 +121,7 @@ npx @kyun.si/codex-hongguo@latest update
 | 进度保存 | 播放期间每约 5 秒自动保存一次进度，暂停、拖动、换集或隐藏面板时也会立即保存。 |
 | 回合联动与连播 | 任务开始自动播放、任务结束自动暂停均默认开启，详见「全局播放设置」。连播默认开启，当前集播完自动播放下一集；关闭后也会记住。 |
 | 外观与语言 | 选剧页与播放器跟随 Codex 浅色/深色外观及中英文界面；窄侧栏在画面下方显示选集栏，宽面板将选集栏置于画面右侧。 |
-| 验证范围 | macOS 本地回归、隔离 npm/npx 安装与旧来源迁移、真实宿主片库/分集及分片解码已验证。跨平台 CI 状态见 [GitHub Actions](https://github.com/mreasonyang/codex-hongguo/actions)。Windows/Linux 桌面实机与自然任务联动的完整验收仍待完成；npm 公网安装和 GitHub Releases 安装包尚未发布。 |
+| 验证范围 | macOS 本地回归、隔离 npm/npx 安装与旧来源迁移、真实宿主片库/分集及分片解码已验证。跨平台 CI 状态见 [GitHub Actions](https://github.com/mreasonyang/codex-hongguo/actions)。Windows/Linux 桌面实机与自然任务联动的完整验收仍待完成；GitHub Releases 安装包尚未发布。 |
 
 <!-- development -->
 

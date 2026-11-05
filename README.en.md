@@ -38,7 +38,7 @@ The switches are independent, saved across restarts, and shared by all chats. Ot
 
 Requires macOS or Linux, Node.js >=22.16 with npm, a Codex CLI supporting npm plugin sources, and FFmpeg (>=8 recommended). On macOS, install dependencies with `brew install node ffmpeg`. Local verification uses Codex CLI 0.157.1. Linux desktop verification is pending. The offline ZIP includes a native Windows x64 preview launcher; Windows npm installation remains gated until desktop acceptance. See the [Windows preview guide](docs/windows-support.md).
 
-First npm/GitHub publication is pending: the source repository is public, but the npm package and GitHub Releases installers have not been published. For now, build from source or use an offline ZIP provided by the maintainer. The online commands below require the first npm release. See the [distribution notes](docs/npm-distribution.md).
+The npm release is available. Installation and updates use the native Codex plugin marketplace.
 
 ### Build from source
 
@@ -122,7 +122,7 @@ Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn s
 | Progress persistence | Saves playback position locally every ~5 seconds while playing, as well as on pause, seek, episode change, or panel hide. |
 | Turn linkage & autoplay | Task-start autoplay and task-end automatic pausing both default to on; see Global playback settings above. Autoplay next is enabled by default and remembers changes. |
 | Appearance & locale | Adapts to narrow sidebars (episodes below video) and wide panels (episodes beside video), following Codex light/dark themes and Chinese/English UI locales. |
-| Verification status | macOS local regression, isolated npm/npx installation and source migration, live host catalog/episode access, and fragment decoding have been verified. See [GitHub Actions](https://github.com/mreasonyang/codex-hongguo/actions) for cross-platform CI status. Full Windows/Linux desktop and natural task-playback acceptance remain pending. The public npm package and GitHub Releases installers have not been published. |
+| Verification status | macOS local regression, isolated npm/npx installation and source migration, live host catalog/episode access, and fragment decoding have been verified. See [GitHub Actions](https://github.com/mreasonyang/codex-hongguo/actions) for cross-platform CI status. Full Windows/Linux desktop and natural task-playback acceptance remain pending. GitHub Releases installers have not been published. |
 
 <!-- development -->
 
