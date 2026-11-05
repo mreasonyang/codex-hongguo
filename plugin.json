@@ -1,0 +1,18 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "codex-hongguo",
+  "version": "0.0.18",
+  "description": "在 Codex 会话侧栏观看红果短剧，回合停止时保存进度。",
+  "extensions": {
+    "com.openai": {
+      "hooks": "./hooks/hooks.json",
+      "onboardingSkill": "./skills/hongguo-setup/SKILL.md",
+      "interface": {
+        "displayName": "红果短剧",
+        "shortDescription": "选剧、续播与回合自动暂停",
+        "brandColor": "#FB7053",
+        "category": "Entertainment"
+      }
+    }
+  }
+}

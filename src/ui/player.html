@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="zh-CN" data-host="panel" data-surface="player">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>红果短剧</title>
+    <style>
+      /*STYLE*/
+    </style>
+  </head>
+  <body>
+    <svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+      <symbol id="i-play" viewBox="0 0 24 24">
+        <path
+          d="M8 5.6v12.8a1 1 0 0 0 1.5.86l10.2-6.4a1 1 0 0 0 0-1.72L9.5 4.74A1 1 0 0 0 8 5.6Z"
+          fill="currentColor"
+          stroke="none"
+        />
+      </symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24">
+        <rect x="6.5" y="5" width="3.6" height="14" rx="1.1" fill="currentColor" stroke="none" />
+        <rect x="13.9" y="5" width="3.6" height="14" rx="1.1" fill="currentColor" stroke="none" />
+      </symbol>
+      <symbol id="i-next" viewBox="0 0 24 24">
+        <path
+          d="M6 6.3v11.4a.9.9 0 0 0 1.4.75l8.1-5.7a.9.9 0 0 0 0-1.5L7.4 5.55A.9.9 0 0 0 6 6.3Z"
+          fill="currentColor"
+          stroke="none"
+        />
+        <path d="M18.5 5.5v13" />
+      </symbol>
+      <symbol id="i-prev" viewBox="0 0 24 24">
+        <path
+          d="M18 6.3v11.4a.9.9 0 0 1-1.4.75l-8.1-5.7a.9.9 0 0 1 0-1.5l8.1-5.7A.9.9 0 0 1 18 6.3Z"
+          fill="currentColor"
+          stroke="none"
+        />
+        <path d="M5.5 5.5v13" />
+      </symbol>
+      <symbol id="i-shuffle" viewBox="0 0 24 24">
+        <path d="M3.5 7h3c2 0 3.2 1 4.2 2.6l2.6 4.8C14.3 16 15.5 17 17.5 17h3" />
+        <path d="M3.5 17h3c1.3 0 2.3-.5 3.1-1.3M14.4 8.3C15.2 7.5 16.2 7 17.5 7h3" />
+        <path d="m18 4.5 2.5 2.5L18 9.5M18 14.5l2.5 2.5-2.5 2.5" />
+      </symbol>
+      <symbol id="i-volume" viewBox="0 0 24 24">
+        <path d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4Z" />
+        <path d="M15.5 9.2a4 4 0 0 1 0 5.6M18 6.7a7.5 7.5 0 0 1 0 10.6" />
+      </symbol>
+      <symbol id="i-mute" viewBox="0 0 24 24">
+        <path d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4Z" />
+        <path d="m16 9.5 5 5M21 9.5l-5 5" />
+      </symbol>
+      <symbol id="i-expand" viewBox="0 0 24 24">
+        <path d="M4.5 9V4.5H9M15 4.5h4.5V9M19.5 15v4.5H15M9 19.5H4.5V15" />
+      </symbol>
+      <symbol id="i-collapse" viewBox="0 0 24 24">
+        <path d="M9 4.5V9H4.5M19.5 9H15V4.5M15 19.5V15h4.5M4.5 15H9v4.5" />
+      </symbol>
+      <symbol id="i-back" viewBox="0 0 24 24"><path d="m14.5 6-6 6 6 6" /></symbol>
+      <symbol id="i-down" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5" /></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24">
+        <path d="M4 7.5h9M17 7.5h3M4 16.5h3M11 16.5h9" />
+        <circle cx="15" cy="7.5" r="2" />
+        <circle cx="9" cy="16.5" r="2" />
+      </symbol>
+      <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2.5-6 5 12 2.5-6h4" /></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="6" />
+        <path d="m19.5 19.5-4.2-4.2" />
+      </symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24">
+        <path d="M19.5 11A7.5 7.5 0 0 0 6.2 7.2L4.5 9" />
+        <path d="M4.5 4.5V9H9" />
+        <path d="M4.5 13a7.5 7.5 0 0 0 13.3 3.8l1.7-1.8" />
+        <path d="M19.5 19.5V15H15" />
+      </symbol>
+      <symbol id="i-split" viewBox="0 0 24 24">
+        <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+        <path d="M12 4.5v15" />
+      </symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24">
+        <rect x="8.5" y="8.5" width="11" height="11" rx="2" />
+        <path d="M15.5 8.5v-2a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" />
+      </symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17" /></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 7.5V12l3 2" />
+      </symbol>
+      <symbol id="i-spin" viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5" /></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 8v4.5M12 16h.01" />
+      </symbol>
+    </svg>
+    <section id="waitingCard" aria-label="等待时看一集" hidden>
+      <div class="waitingHead">
+        <span class="waitingLabel">等待时看一集</span>
+        <button id="waitingDismiss" class="icon sm" type="button" aria-label="收起本轮推荐" title="收起本轮推荐">
+          <svg class="i" aria-hidden="true"><use href="#i-x" /></svg>
+        </button>
+      </div>
+      <div id="waitingTitles"></div>
+      <span id="waitingMessage" role="status"></span>
+    </section>
+    <main>
+      <header class="topbar">
+        <div class="brand">
+          <span class="mark" aria-hidden="true">
+            <svg class="i"><use href="#i-play" /></svg>
+          </span>
+          <h1>红果短剧</h1>
+        </div>
+        <div class="tools">
+          <button
+            id="prefs"
+            class="icon"
+            type="button"
+            aria-label="设置"
+            title="设置"
+            aria-expanded="false"
+            aria-controls="settings"
+          >
+            <svg class="i" aria-hidden="true"><use href="#i-sliders" /></svg>
+          </button>
+        </div>
+      </header>
+
+      <form id="settings" class="sheet" hidden>
+        <label class="switchRow">
+          <span>当前回合进行时显示推荐</span>
+          <input type="checkbox" id="autoPrompt" class="switch" />
+        </label>
+        <label class="field">
+          <span>推荐补充关键词</span>
+          <input id="terms" maxlength="185" placeholder="用逗号分隔" />
+        </label>
+        <div class="sheetActions">
+          <button type="button" id="health" class="link" aria-expanded="false" aria-controls="healthInfo">
+            <svg class="i" aria-hidden="true"><use href="#i-pulse" /></svg>
+            <span>自检</span>
+          </button>
+          <button type="button" id="settingsCancel" class="btn ghost">取消</button>
+          <button type="submit" class="btn primary">保存设置</button>
+        </div>
+        <div id="healthInfo" hidden></div>
+        <button type="button" id="setupOpen" class="link">使用指南</button>
+      </form>
+
+      <section id="setupGuide" class="sheet" aria-labelledby="setupTitle" hidden>
+        <div class="setupHead">
+          <h2 id="setupTitle">开始使用红果</h2>
+          <button id="setupCheck" class="link" type="button">重新检查</button>
+        </div>
+        <p>点剧名即可播放，默认静音；打开扬声器出声。</p>
+        <div id="setupRows" role="status" aria-live="polite"></div>
+        <p id="setupHelp"></p>
+        <p class="setupHooks">回合联动需要在 Codex 设置 → Hooks 审查并信任红果的 UserPromptSubmit、Stop、Interrupt。</p>
+        <div class="sheetActions">
+          <button id="setupDone" class="btn primary" type="button">开始选剧</button>
+        </div>
+      </section>
+
+      <section class="linkage" aria-label="回合联动">
+        <div class="statusbar">
+          <div class="status">
+            <span id="lamp" aria-hidden="true"></span>
+            <strong id="state">正在连接</strong>
+          </div>
+          <button id="choose" class="link" type="button" hidden>确认会话</button>
+        </div>
+        <div id="notice" role="status" aria-live="polite"></div>
+        <div id="choices"></div>
+        <div id="prompt" hidden>
+          <div class="promptHead">
+            <span>等待时看一集</span>
+            <button id="dismiss" class="icon sm" type="button" aria-label="收起本轮推荐" title="收起本轮推荐">
+              <svg class="i" aria-hidden="true"><use href="#i-x" /></svg>
+            </button>
+          </div>
+          <div id="picks"></div>
+        </div>
+      </section>
+
+      <section id="home" aria-labelledby="homeTitle">
+        <div class="library">
+          <h2 id="homeTitle">选剧</h2>
+          <button id="more" class="btn ghost" type="button" hidden>
+            <svg class="i" aria-hidden="true"><use href="#i-refresh" /></svg>
+            <span>换一批</span>
+          </button>
+        </div>
+        <form id="search" role="search">
+          <svg class="i" aria-hidden="true"><use href="#i-search" /></svg>
+          <input
+            id="query"
+            type="search"
+            maxlength="120"
+            placeholder="搜索剧名"
+            aria-label="搜索剧名"
+            autocomplete="off"
+            enterkeyhint="search"
+          />
+          <button type="submit">搜索</button>
+        </form>
+        <div id="continue"></div>
+        <details id="resume" hidden>
+          <summary>
+            <svg class="i" aria-hidden="true"><use href="#i-clock" /></svg>
+            <span>观看历史</span>
+            <span id="historyCount"></span>
+            <svg class="i chev" aria-hidden="true"><use href="#i-down" /></svg>
+          </summary>
+          <div id="history"></div>
+        </details>
+        <div id="featured"></div>
+        <p id="catalogStatus" aria-live="polite">正在读取片库…</p>
+        <div id="cards"></div>
+      </section>
+
+      <section class="watch" id="watch" aria-label="播放器" hidden>
+        <div class="watchbar">
+          <button class="icon" id="back" type="button" aria-label="返回选剧" title="返回选剧">
+            <svg class="i" aria-hidden="true"><use href="#i-back" /></svg>
+          </button>
+          <div class="ctx">
+            <h2 id="title">选择一部短剧</h2>
+            <span id="subtitle"></span>
+          </div>
+          <button id="pair" class="link" type="button" title="在同窗分屏播放" hidden>
+            <svg class="i" aria-hidden="true"><use href="#i-split" /></svg>
+            <span>分屏</span>
+          </button>
+        </div>
+        <div id="link" class="sheet" hidden>
+          <label for="linkValue">在 Codex 内置浏览器打开此链接（60 秒内有效）</label>
+          <div class="linkRow">
+            <input id="linkValue" readonly />
+            <button id="copy" class="btn" type="button">
+              <svg class="i" aria-hidden="true"><use href="#i-copy" /></svg>
+              <span>复制链接</span>
+            </button>
+          </div>
+        </div>
+        <div class="watchBody">
+          <div class="primary">
+            <div class="screen" id="stage">
+              <video muted playsinline preload="metadata" aria-label="短剧视频"></video>
+              <span class="spinner" aria-hidden="true">
+                <svg class="i"><use href="#i-spin" /></svg>
+              </span>
+              <button id="center" type="button" aria-label="播放当前集" title="播放当前集" disabled>
+                <svg class="i" aria-hidden="true"><use href="#i-play" /></svg>
+              </button>
+              <div id="stopped" hidden>
+                <span id="whyStopped" role="status"></span>
+                <button id="resumePlayback" class="btn" type="button">继续播放</button>
+              </div>
+              <div class="overlay">
+                <input type="range" id="seek" aria-label="播放进度" min="0" max="1000" value="0" />
+                <div class="controls">
+                  <button id="play" class="ctl" type="button" aria-label="播放" title="播放" disabled>
+                    <svg class="i" aria-hidden="true"><use href="#i-play" /></svg>
+                  </button>
+                  <button id="next" class="ctl" type="button" aria-label="下一集" title="下一集" disabled>
+                    <svg class="i" aria-hidden="true"><use href="#i-next" /></svg>
+                  </button>
+                  <span id="time">0:00</span>
+                  <span class="select">
+                    <select id="speed" aria-label="播放速度">
+                      <option>0.75×</option>
+                      <option selected>1×</option>
+                      <option>1.25×</option>
+                      <option>1.5×</option>
+                      <option>2×</option>
+                    </select>
+                  </span>
+                  <button
+                    id="mute"
+                    class="ctl"
+                    type="button"
+                    aria-pressed="true"
+                    aria-label="取消静音"
+                    title="取消静音"
+                  >
+                    <svg class="i" aria-hidden="true"><use href="#i-mute" /></svg>
+                  </button>
+                  <button id="fullscreen" class="ctl" type="button" aria-label="全屏" title="全屏">
+                    <svg class="i" aria-hidden="true"><use href="#i-expand" /></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div id="resumed" hidden>
+              <svg class="i" aria-hidden="true"><use href="#i-clock" /></svg>
+              <span id="resumeTime"></span>
+              <button id="restart" class="link" type="button">从头播放</button>
+            </div>
+            <div class="toolbar">
+              <button class="icon" id="prev" type="button" aria-label="上一集" title="上一集">
+                <svg class="i" aria-hidden="true"><use href="#i-prev" /></svg>
+              </button>
+              <button class="btn ghost" id="random" type="button" title="随机一集">
+                <svg class="i" aria-hidden="true"><use href="#i-shuffle" /></svg>
+                <span class="lbl">随机一集</span>
+              </button>
+              <span class="spacer"></span>
+              <label class="volume">
+                <svg class="i" aria-hidden="true"><use href="#i-volume" /></svg>
+                <span class="sr">音量</span>
+                <input type="range" id="volume" min="0" max="100" value="70" />
+              </label>
+              <label class="switchRow compact">
+                <input type="checkbox" id="autonext" class="switch" checked />
+                <span>连播</span>
+              </label>
+            </div>
+          </div>
+          <div class="episodesPane">
+            <div class="paneHead">
+              <h3>选集</h3>
+              <span id="episodeCount"></span>
+            </div>
+            <div id="groups" role="group" aria-label="分集范围"></div>
+            <div class="episodeList" id="episodes" role="group" aria-label="选集"></div>
+            <button id="moreEpisodes" class="btn" type="button" hidden>更多分集</button>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script nonce="__NONCE__">
+      /*SCRIPT*/
+    </script>
+  </body>
+</html>

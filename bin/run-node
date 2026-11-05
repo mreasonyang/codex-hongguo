@@ -1,0 +1,29 @@
+#!/bin/sh
+# Keep this launcher portable: the installed package is read-only and contains no machine paths.
+set -eu
+root=$(CDPATH= cd -P -- "${0%/*}/.." && pwd)
+case "${1:-}" in
+  server) target="$root/dist/server/index.mjs" ;;
+  hook) target="$root/dist/hooks/write.mjs" ;;
+  check) target="$root/dist/setup/check.mjs" ;;
+  *) printf '%s\n' 'Usage: run-node server|hook|check' >&2; exit 2 ;;
+esac
+try_node() {
+  [ -n "$1" ] && [ -x "$1" ] || return 1
+  "$1" --no-warnings -e 'const [a,b]=process.versions.node.split(".").map(Number);if(a<22||(a===22&&b<16))process.exit(1);require("node:sqlite")' </dev/null >/dev/null 2>&1 || return 1
+  exec "$1" --no-warnings "$target"
+}
+if [ -n "${HONGGUO_NODE:-}" ]; then
+  try_node "$HONGGUO_NODE" || true
+  printf '%s\n' 'HONGGUO_NODE requires an executable Node.js >=22.16 with node:sqlite.' >&2
+  exit 1
+fi
+try_node "$(command -v node 2>/dev/null || true)" || true
+for candidate in /opt/homebrew/bin/node /usr/local/bin/node /usr/bin/node \
+  "$HOME/.volta/bin/node" "$HOME"/.nvm/versions/node/*/bin/node \
+  "$HOME"/.local/share/mise/installs/node/*/bin/node \
+  "$HOME"/.local/share/fnm/node-versions/*/installation/bin/node; do
+  try_node "$candidate" || true
+done
+printf '%s\n' '红果短剧需要 Node.js >=22.16。安装后重新打开 Codex，再运行插件 Setup。' >&2
+exit 1

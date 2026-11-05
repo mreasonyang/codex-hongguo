@@ -1,0 +1,40 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${PLUGIN_ROOT}/bin/run-node\" hook",
+            "commandWindows": "node \"%PLUGIN_ROOT%\\dist\\hooks\\write.mjs\"",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${PLUGIN_ROOT}/bin/run-node\" hook",
+            "commandWindows": "node \"%PLUGIN_ROOT%\\dist\\hooks\\write.mjs\"",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+    "Interrupt": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${PLUGIN_ROOT}/bin/run-node\" hook",
+            "commandWindows": "node \"%PLUGIN_ROOT%\\dist\\hooks\\write.mjs\"",
+            "timeout": 2
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "codex-hongguo": {
+      "command": "sh",
+      "args": [
+        "bin/run-node",
+        "server"
+      ],
+      "cwd": "."
+    }
+  }
+}
