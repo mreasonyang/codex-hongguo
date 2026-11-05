@@ -42,34 +42,7 @@ The switches are independent, saved across restarts, and shared by all chats. Ot
 
 ## Installation & Setup
 
-Requires macOS or Linux, Node.js >=22.16 with npm, a Codex CLI supporting npm plugin sources, and FFmpeg (>=8 recommended). On macOS, install dependencies with `brew install node ffmpeg`. Local verification uses Codex CLI 0.157.1. Linux desktop verification is pending. The offline ZIP includes a native Windows x64 preview launcher; Windows npm installation remains gated until desktop acceptance. See the [Windows preview guide](docs/windows-support.md).
-
-The npm release is available. Installation and updates use the native Codex plugin marketplace.
-
-### Build from source
-
-In addition to the runtime dependencies, building requires Go >=1.25 to generate the Windows launcher.
-
-```sh
-git clone https://github.com/mreasonyang/codex-hongguo.git
-cd codex-hongguo
-npm ci
-npm run package
-```
-
-This generates `release/codex-hongguo-<version>/` and a ZIP with the same name. Enter the generated directory and follow the installation command below. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development workflow.
-
-### Offline package
-
-Extract `codex-hongguo-<version>.zip` into a permanent directory, or enter `release/codex-hongguo-<version>/` after building from source. Run from that directory:
-
-```sh
-node plugins/codex-hongguo/bin/codex-hongguo.mjs setup --marketplace .
-```
-
-The offline archive uses the same build as npm, with automatic runtime discovery. Repeat this command for offline updates, pointing `--marketplace` at the new directory. Always repeat this option for custom sources; omitting it selects the default GitHub marketplace.
-
-### Online installation
+Supports macOS and Linux. Requires Node.js >=22.16 with npm, a Codex CLI supporting npm plugin sources, and FFmpeg (>=8 recommended). On macOS, install dependencies with `brew install node ffmpeg`.
 
 Install with npm:
 
@@ -99,20 +72,19 @@ The setup command checks dependencies and installs a pinned package version thro
 
 Close all open player panels and split-view browser tabs before updating or uninstalling. Open a new conversation to verify after managing plugins.
 
-For offline installations, follow the offline package instructions above. Online installations can use:
+Update with:
 
 ```sh
 npx @kyun.si/codex-hongguo@latest update
 ```
 
-These commands apply to online installations; native updates can also use `codex plugin marketplace upgrade hongguo-local`. Follow the offline instructions for ZIP installations. The installer keeps the same `codex-hongguo@hongguo-local` identity. Migrating a ZIP installation to the online source replaces its marketplace and attempts to restore the old source on failure. Viewing data stays in its original location. Use `setup --dry-run` to preview the plan; this still checks dependencies. After updating, open a new conversation and review changed Hooks when prompted.
+Updates preserve viewing progress and settings. Open a new chat afterward and review changed Hooks when prompted.
 
 - **Disable or uninstall**: Disable the plugin in Codex plugin settings, or run `codex plugin remove codex-hongguo@hongguo-local`. After uninstalling, you can keep or manually remove the dedicated user data directory below:
 
 | OS | User Data Directory |
 | --- | --- |
 | macOS | `~/Library/Application Support/CodexHongguo/` |
-| Windows x64 (preview) | `%LOCALAPPDATA%\CodexHongguo\` |
 | Linux | `codex-hongguo` under `XDG_DATA_HOME` (defaults to `~/.local/share/codex-hongguo/`) |
 
 Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn state, recommendation rotation and settings. `media/` holds prepared full episodes, capped at 40 episodes and 1 GiB with protection for active files. `panel-media/` contains temporary panel fragments with separate cleanup; its size is outside that 1 GiB limit. `device/` holds the upstream SDK's anonymous device profile. Raw hook payloads, prompts and assistant replies are not written to disk. Third-party runtime dependency notices are under `licenses/` in the plugin root.
@@ -128,13 +100,13 @@ Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn s
 | Progress persistence | Saves playback position locally every ~5 seconds while playing, as well as on pause, seek, episode change, or panel hide. |
 | Turn linkage & autoplay | Task-start autoplay and task-end automatic pausing both default to on; see Global playback settings above. Autoplay next is enabled by default and remembers changes. |
 | Appearance & locale | Adapts to narrow sidebars (episodes below video) and wide panels (episodes beside video), following Codex light/dark themes and Chinese/English UI locales. |
-| Verification status | macOS local regression, isolated npm/npx installation and source migration, live host catalog/episode access, fragment decoding, and public npm installation and updates have been verified. See [GitHub Actions](https://github.com/mreasonyang/codex-hongguo/actions) for cross-platform CI status. Full Windows/Linux desktop and natural task-playback acceptance remain pending. GitHub Releases installers have not been published. |
+| Verification status | macOS local regression, isolated npm/npx installation and source migration, live host catalog/episode access, fragment decoding, and public npm installation and updates have been verified. See [GitHub Actions](https://github.com/mreasonyang/codex-hongguo/actions) for cross-platform CI status. Full Linux desktop and natural task-playback acceptance remain pending. |
 
 <!-- development -->
 
 ## Contributing
 
-Build, test, release packaging, isolated installation verification, environment variables, and versioning rules live in [CONTRIBUTING.md](CONTRIBUTING.md).
+Development and testing instructions are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 See [npm distribution, upgrades and publishing](docs/npm-distribution.md) for package structure and release maintenance.
 

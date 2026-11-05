@@ -42,34 +42,7 @@
 
 ## 安装与配置
 
-需要 macOS 或 Linux、Node.js >=22.16（含 npm）、支持 npm 插件源的 Codex CLI，以及 FFmpeg（建议 >=8）。macOS 可用 `brew install node ffmpeg` 安装依赖。本机验收使用 Codex CLI 0.157.1；Linux 尚待桌面实机验收。Windows x64 原生启动器已随离线包提供，当前为试用，npm 安装限制将在实机验收通过后开放；见 [Windows 试用说明](docs/windows-support.md)。
-
-npm 正式发行包已发布。安装与更新通过 Codex 原生插件市场完成。
-
-### 从源码构建
-
-除运行依赖外，构建还需要 Go >=1.25，用于生成 Windows 启动器。
-
-```sh
-git clone https://github.com/mreasonyang/codex-hongguo.git
-cd codex-hongguo
-npm ci
-npm run package
-```
-
-构建会生成 `release/codex-hongguo-<版本号>/` 和同名 ZIP。进入生成的目录，按下一节的命令安装；完整开发说明见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-### 离线包
-
-将 `codex-hongguo-<版本号>.zip` 解压到长期保留的目录；若刚从源码构建，可直接进入生成的 `release/codex-hongguo-<版本号>/`。在该目录运行：
-
-```sh
-node plugins/codex-hongguo/bin/codex-hongguo.mjs setup --marketplace .
-```
-
-离线包与 npm 包使用同一构建产物，启动器自动发现运行环境。离线更新时重复上述命令，将 `--marketplace` 指向新版解压目录。自定义来源的后续安装或更新也应显式带上此参数；省略时会选择默认 GitHub 市场。
-
-### 在线安装
+支持 macOS 和 Linux。需要 Node.js >=22.16（含 npm）、支持 npm 插件源的 Codex CLI，以及 FFmpeg（建议 >=8）。macOS 可用 `brew install node ffmpeg` 安装依赖。
 
 使用 npm 安装：
 
@@ -98,20 +71,19 @@ npx @kyun.si/codex-hongguo@latest setup
 
 更新或卸载前，请先关闭所有播放器面板和内置浏览器分屏；管理插件后请使用新会话验证。
 
-离线安装按「离线包」一节更新。在线更新命令为：
+更新命令：
 
 ```sh
 npx @kyun.si/codex-hongguo@latest update
 ```
 
-上述命令用于在线安装，原生更新也可用 `codex plugin marketplace upgrade hongguo-local`。向导沿用 `codex-hongguo@hongguo-local` 标识；从旧 ZIP 迁移到在线来源时替换市场，失败会尝试恢复原来源，观看数据保留在原目录。可以先用 `setup --dry-run` 查看计划；预览同样会检查运行环境。更新后使用新聊天，并检查 Hooks 是否需要重新审查。
+更新会保留观看进度和设置。完成后打开新聊天，并按提示重新审查 Hooks。
 
 - **禁用与卸载**：可从插件设置中禁用，或运行 `codex plugin remove codex-hongguo@hongguo-local` 卸载。卸载后可按需保留或手动清理以下专用数据目录：
 
 | 系统 | 用户数据目录 |
 | --- | --- |
 | macOS | `~/Library/Application Support/CodexHongguo/` |
-| Windows x64（试用） | `%LOCALAPPDATA%\CodexHongguo\` |
 | Linux | `XDG_DATA_HOME` 下的 `codex-hongguo`（缺省为 `~/.local/share/codex-hongguo/`） |
 
 目录内 `player.sqlite`（及其 WAL/SHM 文件）保存观看进度、回合状态、推荐轮换与播放器设置；`media/` 保存本机处理后的整集缓存（上限 40 集、1 GiB，活动文件有保护期）；`panel-media/` 保存单独回收的临时面板分片，其占用不计入整集缓存的 1 GiB 上限；`device/` 为上游 SDK 管理的匿名设备档案。本插件不将 Hook 原始输入、提示词和模型回复写入磁盘。第三方运行时依赖的许可证位于插件根目录 `licenses/`。
@@ -127,13 +99,13 @@ npx @kyun.si/codex-hongguo@latest update
 | 进度保存 | 播放期间每约 5 秒自动保存一次进度，暂停、拖动、换集或隐藏面板时也会立即保存。 |
 | 回合联动与连播 | 任务开始自动播放、任务结束自动暂停均默认开启，详见「全局播放设置」。连播默认开启，当前集播完自动播放下一集；关闭后也会记住。 |
 | 外观与语言 | 选剧页与播放器跟随 Codex 浅色/深色外观及中英文界面；窄侧栏在画面下方显示选集栏，宽面板将选集栏置于画面右侧。 |
-| 验证范围 | macOS 本地回归、隔离 npm/npx 安装与旧来源迁移、真实宿主片库/分集及分片解码，以及公网 npm 安装与更新已验证。跨平台 CI 状态见 [GitHub Actions](https://github.com/mreasonyang/codex-hongguo/actions)。Windows/Linux 桌面实机与自然任务联动的完整验收仍待完成；GitHub Releases 安装包尚未发布。 |
+| 验证范围 | macOS 本地回归、隔离 npm/npx 安装与旧来源迁移、真实宿主片库/分集及分片解码，以及公网 npm 安装与更新已验证。跨平台 CI 状态见 [GitHub Actions](https://github.com/mreasonyang/codex-hongguo/actions)。Linux 桌面实机与自然任务联动的完整验收仍待完成。 |
 
 <!-- development -->
 
 ## 贡献与开发
 
-源码构建、自动测试、内测包打包脚本、安装验证环境变量及版本管理规则已移至 [CONTRIBUTING.md](CONTRIBUTING.md)。
+开发与测试说明见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 npm 包结构、升级与发布流程见 [npm 分发说明](docs/npm-distribution.md)。
 
