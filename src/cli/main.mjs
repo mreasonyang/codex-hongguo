@@ -1,7 +1,6 @@
-import { spawnSync } from 'node:child_process'
 import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { prepareRuntime, findExecutable } from '../runtime/executables.mjs'
+import { prepareRuntime, findExecutable, spawnSync } from '../runtime/executables.mjs'
 import { inspectHooks } from '../server/setup.mjs'
 
 export const marketplaceName = 'hongguo-local'
@@ -67,7 +66,7 @@ export async function main(argv = process.argv.slice(2)) {
       return
     }
     if (!['setup', 'update', 'doctor'].includes(action)) throw Error('未知命令；运行 codex-hongguo --help 查看用法。')
-    if (process.platform === 'win32') throw Error('当前 npm 发行包支持 macOS 和 Linux；Windows 启动器尚未完成验收。')
+    if (process.platform === 'win32' && process.arch !== 'x64') throw Error('Windows 试用版需要 x64 Node.js。')
     const [major, minor] = process.versions.node.split('.').map(Number)
     if (major < 22 || (major === 22 && minor < 16)) throw Error('需要 Node.js >=22.16。')
     prepareRuntime()

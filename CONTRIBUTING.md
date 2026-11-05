@@ -1,16 +1,20 @@
-# 开发与维护指南 (Contributing)
+# 开发与维护指南
 
-本文档承接 `codex-hongguo` 的本地构建、自动测试、内测包打包、安装验证及版本管理规则。日常使用与安装说明见 [README.md](README.md)（英文版见 [README.en.md](README.en.md)）。
+用户安装和观看说明见 [README.md](README.md)（[English](README.en.md)）；npm 包结构、首次上线和 CI 发布见 [npm 分发说明](docs/npm-distribution.md)。版本以 `package.json` 为准。
 
-## 开发环境要求
+## 开发环境
 
-- **Node.js `>= 22.16`**：服务端与 Hook 写入器使用 Node 内置的 `node:sqlite`。
-- **FFmpeg**：建议使用 `8` 或以上版本，用于红果整集重封装、CENC 单文件解密重封装、面板 HLS 分片生成、HEIC/封面缩放转码以及本地媒体回归测试。
-- **Codex CLI (`codex`)**：运行隔离安装验证（`scripts/verify-install.mjs`）时需本机可执行 `codex plugin` 与 `codex app-server`。
+- Node.js >=22.16，包含 `node:sqlite`，并有 npm 可执行程序。
+- FFmpeg，建议 >=8；测试需要 H.264、HEVC、AAC 和 ALAC 相关编解码能力。
+- Codex CLI：需要 `plugin` 和 `app-server` 子命令及 npm 插件源支持。本机隔离验收与发布 workflow 使用 0.157.1；这不是对所有其他版本的兼容性保证。
+- Go >=1.25：构建时交叉编译 Windows x64 原生启动器，无 CGO；使用发行包不需要 Go。
+- OpenSSL：隔离安装脚本用它生成本地 HTTPS 测试仓库的临时证书。
 
-## 构建、测试、打包与安装验证
+npm 包目前开放 macOS/Linux；离线包另提供 Windows x64 原生试用入口。本机验收为 macOS，Linux/Windows 桌面实机仍待验证。Windows 安装、CI 范围及开放条件见 [Windows 支持](docs/windows-support.md)。
 
-在源码根目录按顺序运行：
+## 构建与验证
+
+从源码根目录运行：
 
 ```sh
 npm ci
@@ -19,51 +23,81 @@ npm run package
 npm run verify:install
 ```
 
-| 命令 | 脚本与行为说明 |
+| 命令 | 作用 |
 | --- | --- |
-| `npm run build` | 校验版本、运行前端类型检查，用 esbuild 打包 MCP、Hooks、Setup 与 CLI 至 `dist/`，复制上游 SDK/WASM 并生成内联播放器 HTML。 |
-| `npm test` | 构建后运行 41 项自动回归，覆盖媒体协议、解密转码、回合联动、安装迁移与失败恢复，媒体样本位于 `test/fixtures/`。 |
-| `npm run package` | 生成完整 npm tgz、同产物离线 ZIP、待发布版本索引；截取中英文 README 消费者指南，并收集运行依赖许可证。 |
-| `npm run verify:install` | 使用临时 HTTPS npm 仓库与独立 Codex 配置，验证真实 npm exec/npx 安装、原生 npm 源、重复更新、旧市场迁移、进度保留、24 个 MCP 工具、两个 UI 资源、片库/分集、3 个待信任 Hooks，以及卸载保留数据。输出绑定 tgz 哈希的验收回执。 |
+| `npm run build` | 校验版本与前端类型，打包 MCP、Hooks、Setup、CLI，复制上游 SDK/WASM，并内联生成播放器 HTML。 |
+| `npm test` | 先构建，再运行 `test/*.test.mjs`；覆盖回合状态、推荐轮换、安装迁移和恢复、持久化、解密、转码与媒体传输。测试数量以当次输出为准。 |
+| `npm run package` | 生成完整 npm tgz、同产物离线 ZIP、待发布索引和包元数据。源码根目录的 package 保持 `private: true`，实际发布包单独生成。 |
+| `npm run verify:install` | 从当前离线 ZIP 迁移到原生 npm 源，验证真实 npm exec/npx 安装和重复更新、宿主工具与 UI 资源、片库/分集、进度保留、待信任 Hooks、卸载保留数据；成功后写入绑定 tgz 哈希的回执。需要联网。 |
 
-> **注意**：中英文 README 必须保留 `<!-- development -->` 分界且其后内容非空。安装目录使用已通过宿主验证的 `.codex-plugin/plugin.json` 与 `.mcp.json`；便携清单保留在源码，避免 Codex 0.157.1 的 Hook 遮蔽问题。
+默认安装验证使用当前版本 ZIP，验证的是来源迁移。验证旧版本升级和真实分集解码时，显式提供旧发行包并开启播放检查：
 
-## 版本号规则
+```sh
+node scripts/verify-install.mjs --previous-zip "/absolute/path/codex-hongguo-0.0.8.zip" --playback
+```
 
-- 版本号从 `0.0.1` 起，格式须为三段 `0`–`999` 的整数（由 [scripts/version.mjs](scripts/version.mjs) 强校验）。
-- 发布下一版时运行：
+将路径替换为要兼容的旧发行包。`--playback` 额外经安装副本准备真实分集，通过 MCP 取回初始化段和媒体段，再用 FFmpeg 解码；默认验证不执行此项。隔离验证使用临时数据和配置，不信任个人 Hooks，不发起模型请求。
 
-  ```sh
-  npm run version:patch
-  ```
+这仍不等同于桌面视频控件已实播或真实任务自然结束已触发暂停。当前回执的 `desktopPlaybackObserved` 固定为 `false`；桌面画面、听音、自然 Stop/Interrupt 和 Linux 实机需另行观察。回执只对应其绑定的 tgz，重新打包后需重新执行安装验证。
 
-  该命令仅将第三位加一（例如 `0.0.3 → 0.0.4`），并自动同步 `package.json`、`package-lock.json`、[plugin.json](plugin.json) 和 [.codex-plugin/plugin.json](.codex-plugin/plugin.json)。
-- 当第三位达到 `999` 时停止自动递增；调整前两位版本号须由项目维护者明确指定。
-- 日常重新构建（`npm run build`）或重新打包（`npm run package`）沿用当前版本号，不递增版本。若手动修改后清单版本不一致，可运行 `node scripts/version.mjs --sync` 同步。
+中英文 README 必须保留 `<!-- development -->` 分界，且其后内容非空；打包只收录分界前的消费者指南。安装目录使用 `.codex-plugin/plugin.json` 与 `.mcp.json`，源码中的便携清单不装入包内，以沿用已在 0.157.1 验证的 Hooks 发现方式。
 
-## 环境变量与调试参数
+## 代码目录
 
-| 变量名 | 作用阶段 | 用途说明 |
-| --- | --- | --- |
-| `HONGGUO_DATA_DIR` | 服务运行 / 测试 | 指定隔离的数据与缓存目录（包含 `player.sqlite`、`media/`、`panel-media/`、`device/`），避免测试污染个人观看进度。 |
-| `HONGGUO_NODE` | POSIX 启动器 | 显式指定 Node >=22.16 可执行文件；缺省自动寻找。 |
-| `HONGGUO_FFMPEG` | 服务 / Setup | 指定 FFmpeg 可执行文件；缺省自动寻找，不写入发布包。 |
-| `HONGGUO_CODEX` | 安装 / Setup | 指定 Codex CLI，用于原生插件安装及 hooks/list 状态回读。 |
-| `HONGGUO_PROFILE_PATH` | 服务运行 | 指定上游 SDK 匿名设备档案位置。 |
+| 目录或文件 | 职责 |
+| --- | --- |
+| `src/hooks/write.mjs` | 读取回合事件，写入允许的状态字段；符合条件时提示模型调用一次可选推荐工具。 |
+| `src/server/store.mjs` | SQLite 进度、回合、设置、推荐轮换和播放器可见性记录。 |
+| `src/server/service.mjs` | 会话/回合绑定、面板能力、推荐领取、分集授权和应用工具调用。 |
+| `src/server/index.mjs` | 注册 MCP 工具及 `ui://hongguo/v3/player`、`ui://hongguo/v3/waiting` 两个 UI 资源；旧会话 URI 仅保留重开兼容。 |
+| `src/server/catalog.mjs` | 匿名 SDK 片库、搜索、分集和封面处理。 |
+| `src/server/media.mjs`、`adaptive.mjs` | 整集获取、授权媒体解密/重封装、HLS/DASH 输入和主媒体缓存。 |
+| `src/server/panel-media.mjs` | 面板 H.264/AAC 准备、硬件转码及软件回退、fMP4 分片和分块读取。 |
+| `src/server/browser.mjs` | 一次性本机分屏配对、会话与媒体访问控制。 |
+| `src/ui/` | 片库、播放器、推荐卡片、宿主交互、首次引导和中英文界面。 |
+| `src/cli/`、`src/runtime/`、`bin/` | npm 命令入口、原生市场安装/更新、运行时发现和 POSIX 启动器；`launcher/windows/` 为 Windows x64 启动器源码。 |
+| `scripts/` | 构建、打包、版本同步、隔离安装验证和发布。 |
 
-在本地排查或编写测试时：
+`show_waiting_picks` 是模型可见的推荐入口，其余播放器操作由应用界面调用。推荐卡片和播放器共用 HTML，但使用不同资源与展示模式；更改卡片进入播放器的流程时，需要同时检查 `waiting.ts` 和 `player.ts`。
 
-- 媒体密钥由 SDK 在内存中获取，并通过 FFmpeg 标准输入（`ffconcat` 管道）传给本机 `ffmpeg` 进程，禁止写入命令参数、日志或持久化文件。
-- 本插件的 Hook 写入器（`src/hooks/write.mjs`）仅解析并记录 `session_id`、`turn_id` 和 `hook_event_name`（限 `UserPromptSubmit`、`Stop`、`Interrupt`），不保存 Hook 原始输入、提示词或回复；发生任何异常均静默返回 `{}`，不得阻塞宿主回合。
-- Setup 检查逻辑（`src/server/setup.mjs`、`src/setup/check.mjs` 和 [skills/hongguo-setup/SKILL.md](skills/hongguo-setup/SKILL.md)）只按当前插件身份与安装路径过滤 `hooks/list` 的公开状态，绝不暴露原始 Hook 命令或宿主内部诊断信息，也不自动修改用户的信任配置。
+## 修改时需要保持的行为
 
-## 发布与验证
+- 跟随播放只绑定启动时的一个回合；旧事件或其他对话的停止不能误停它。隐藏面板、后台恢复或状态失联后保持暂停，自动连播也不能跨回合启动。
+- 每回合最多创建一张推荐卡片。候选在该回合内固定，实际可见后才推进轮换；同一数据目录下跨对话共享轮换，已有观看记录的剧不作为新剧再次推荐。
+- 切到下一集、恢复后期分页中的分集或重建播放器时，保持原始会话与点击意图，过期点击不能开播。
+- 进度写入失败必须向用户说明；不能把内存降级存储说成已保存。卸载和来源迁移不清理观看数据。
+- 主缓存 `media/` 的 40 集/1 GiB 策略不包含 `panel-media/` 临时分片。分片按活动状态与空闲时间独立回收，不能把主缓存上限描述成整个数据目录的大小上限。
+- 不把媒体密钥、源媒体地址或面板能力值写入日志。媒体解密信息通过内存与 FFmpeg 标准输入传递，不放进进程参数。
+- Hook 只保存 `session_id`、`turn_id`、`hook_event_name` 对应状态，不保存原始输入、提示词或回复。异常时返回 `{}`，不阻断宿主任务。
+- Setup 只回读当前插件和当前安装路径的公开 Hook 状态；安装与启用不等于信任，不自动写入信任记录。诊断只输出必要元数据，不转发完整环境、进程参数或宿主原始日志。
 
-当前 0.0.9 已通过 41 项自动回归、真实 npm/npx 隔离安装、0.0.8 ZIP 迁移、进度保留和 app-server 片库检查。本次安装验证未观测桌面视频画面及自然回合自动暂停；macOS 为本机验收平台，Linux 实机及 Windows 启动器仍待完成。完整发布流程及边界见 [npm 分发说明](docs/npm-distribution.md)。
+## 版本号
 
-完成测试、打包和安装验证后运行 `npm run release:publish`；该脚本只发布回执绑定的 tgz，回读 registry 完整性后才更新索引。首次发布需要 npm 登录，后续可配置受信任发布者并运行手动 Publish workflow。
+```sh
+npm run version:patch
+```
 
-## 参考规范与上游链接
+版本格式为三段 0–999 的整数。此命令只递增第三位，并同步 `package.json`、lockfile、`plugin.json` 和 `.codex-plugin/plugin.json`。第三位达到 999 后停止自动递增，调整前两位由维护者明确指定。手工修改后可用 `node scripts/version.mjs --sync` 同步清单。
+
+构建和打包不会递增版本。已发布的 npm 版本不能被覆盖；修改已发布内容需使用新版本。市场索引在发布并核实 registry 完整性之后更新，不由版本递增命令提前推进。
+
+## 运行环境与诊断
+
+| 环境变量 | 读取方与用途 |
+| --- | --- |
+| `HONGGUO_DATA_DIR` | 服务、Hooks、Setup：指定包含 SQLite、整集、面板分片和匿名设备档案的数据目录。 |
+| `HONGGUO_NODE` | `bin/run-node` / `run-node.exe`：指定 Node >=22.16 的绝对路径（Windows 需 x64）。它不改变 npx 自身使用的 Node。 |
+| `HONGGUO_FFMPEG` | 服务、安装检查、Setup：指定 FFmpeg 程序。 |
+| `HONGGUO_CODEX` | 安装和 Setup：指定 Codex CLI。 |
+| `HONGGUO_PROFILE_PATH` | Catalog：指定匿名 SDK 设备档案位置。 |
+
+覆盖项必须在实际启动服务、Hook 或 Setup 的进程环境中可见。只在运行 npx 的终端里设置，不代表桌面宿主或其子进程继承了这些值；安装器不会把它们写进发布包。
+
+构建后可运行 `node bin/codex-hongguo.mjs --help` 查看命令，`doctor` 输出环境与 Hook 检查元数据。检查与安装相关的 `--dry-run` 仍会检查 Node、npm、Codex 和 FFmpeg。Hook 检查严格匹配执行检查的副本；从源码、解压目录或 npx 缓存运行 `doctor` 得到 `unknown`，不代表宿主安装副本的 Hooks 未信任，应从插件详情页运行 Setup。
+
+需要桌面调试项目时，先打包，再运行 `node scripts/prepare-inline-trial.mjs`，从 Codex 打开生成的 `release/桌面对话试用`。这个项目使用独立数据目录和项目 Hooks，并在该项目内禁用全局红果实例；首次仍需审查项目 Hooks。
+
+## 参考
 
 - [OpenAI 插件扩展](https://developers.openai.com/plugins/build/extensions)
 - [插件打包与分发](https://developers.openai.com/plugins/build/plugins)

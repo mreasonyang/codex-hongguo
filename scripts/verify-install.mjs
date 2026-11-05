@@ -1,8 +1,10 @@
 // Exercise the installed copy in a disposable CLI profile, including paths with spaces.
-import { mkdtemp, mkdir, rm, readFile, writeFile, access } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, readFile, writeFile, access, chmod } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
-import { spawnSync, spawn, fork } from 'node:child_process'
+import { basename, dirname, join, resolve } from 'node:path'
+import { fork } from 'node:child_process'
+import { spawnSync, spawn, findExecutable, stopChild } from '../src/runtime/executables.mjs'
+import { dataRoot } from '../src/server/paths.mjs'
 import { createInterface } from 'node:readline'
 import assert from 'node:assert/strict'
 import { unzipSync } from 'fflate'
@@ -24,13 +26,21 @@ const env = {
   LOCALAPPDATA: tmp,
   CODEX_HOME: profile,
   HONGGUO_DATA_DIR: join(tmp, 'data'),
-  PATH: process.env.PATH,
+  PATH: process.env.PATH || process.env.Path,
+  ...Object.fromEntries(['SystemRoot', 'WINDIR', 'ComSpec', 'PATHEXT', 'ProgramFiles', 'ProgramW6432'].filter(key => process.env[key]).map(key => [key, process.env[key]])),
+  TEMP: tmp,
+  TMP: tmp,
+  HONGGUO_NODE: process.execPath,
+  HONGGUO_FFMPEG: commands.ffmpeg,
+  HONGGUO_CODEX: commands.codex,
   npm_config_cafile: join(tmp, 'registry.crt'),
   npm_config_cache: join(tmp, 'npm-cache'),
+  // Preview-only qualification: published npm metadata stays gated until Windows desktop acceptance.
+  ...(process.platform === 'win32' ? { npm_config_force: 'true' } : {}),
   NODE_EXTRA_CA_CERTS: join(tmp, 'registry.crt'),
 }
 function run(bin, args) {
-  const r = spawnSync(bin, args, { cwd: root, env, stdio: 'ignore', timeout: 20000 })
+  const r = spawnSync(commands[bin] || bin, args, { cwd: root, env, stdio: 'ignore', timeout: 120000, windowsHide: true })
   assert.equal(r.status, 0, '隔离安装步骤失败 ' + args.slice(0, 2).join(' '))
 }
 let child, registry
@@ -38,7 +48,7 @@ try {
   await mkdir(profile)
   const previousIndex = process.argv.indexOf('--previous-zip')
   const previousZip = previousIndex >= 0 ? resolve(process.argv[previousIndex + 1]) : null
-  const folder = previousZip ? previousZip.split('/').at(-1).replace(/\.zip$/, '') : 'codex-hongguo-' + version
+  const folder = previousZip ? basename(previousZip).replace(/\.zip$/, '') : 'codex-hongguo-' + version
   assert.match(folder, /^codex-hongguo-\d+\.\d+\.\d+$/)
   const archive = unzipSync(await readFile(previousZip || resolve('release', folder + '.zip')))
   for (const [entry, bytes] of Object.entries(archive)) {
@@ -49,6 +59,7 @@ try {
     const file = join(root, relative)
     await mkdir(dirname(file), { recursive: true })
     await writeFile(file, bytes)
+    if (relative === 'plugins/codex-hongguo/bin/run-node') await chmod(file, 0o755)
   }
   // The MCP subprocess receives an allowlist of environment variables from Codex.
   const mcpPath = join(root, 'plugins/codex-hongguo/.mcp.json')
@@ -62,7 +73,7 @@ try {
   seeded.setPreferences({ autoPrompt: true, searchTerms: ['总裁', '重生', '逆袭'] })
   seeded.setSetupDismissed(true)
   seeded.close()
-  const cert = spawnSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+  const cert = spawnSync(commands.openssl, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-keyout', join(tmp, 'registry.key'), '-out', join(tmp, 'registry.crt'),
     '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1'], { stdio: 'ignore', timeout: 15000 })
   assert.equal(cert.status, 0, '无法生成临时测试仓库证书')
@@ -77,7 +88,7 @@ try {
   await writeFile(join(npmMarket, '.agents/plugins/marketplace.json'), JSON.stringify(marketplace(version, { source: 'npm', package: 'codex-hongguo', version, registry: origin })))
   // Inject only the dedicated test-data path into the tarball's config through the host policy later.
   // Data isolation also applies to npm payloads via their HOME-specific default data directory.
-  const defaultData = process.platform === 'darwin' ? join(tmp, 'Library/Application Support/CodexHongguo') : join(tmp, '.local/share/codex-hongguo')
+  const defaultData = dataRoot({ env: { ...env, HONGGUO_DATA_DIR: undefined }, home: tmp })
   await mkdir(dirname(defaultData), { recursive: true })
   const { cp } = await import('node:fs/promises')
   await cp(env.HONGGUO_DATA_DIR, defaultData, { recursive: true })
@@ -85,7 +96,7 @@ try {
   run('npm', ['exec', '--yes', '--registry', origin, '--package', 'codex-hongguo@' + version, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
   run('npm', ['exec', '--yes', '--registry', origin, '--package', 'codex-hongguo@' + version, '--', 'codex-hongguo', 'update', '--marketplace', npmMarket])
   console.log('真实 npm exec/npx 安装入口、原生 npm 源下载、旧市场迁移与重复更新通过')
-  child = spawn('codex', ['app-server'], { cwd: root, env, stdio: ['pipe', 'pipe', 'ignore'] })
+  child = spawn(commands.codex, ['app-server'], { cwd: root, env, stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true })
   const requests = new Map()
   createInterface({ input: child.stdout }).on('line', (line) => {
     let msg
@@ -130,6 +141,7 @@ try {
   assert.equal(detail.onboardingSkill.enabled, true)
   const installedRoot = resolve(dirname(detail.onboardingSkill.path), '../..')
   await access(join(installedRoot, 'bin/run-node'))
+  await access(join(installedRoot, 'bin/run-node.exe'))
   await access(join(installedRoot, 'dist/vendor/openhongguo/dist/openhongguo.wasm'))
   await assert.rejects(access(join(installedRoot, 'node_modules')))
   const checked = spawnSync(process.execPath, [join(installedRoot, 'dist/setup/check.mjs')], {
@@ -180,7 +192,8 @@ try {
   const hostCall = (tool, args, timeoutMs) =>
     rpc('mcpServer/tool/call', { threadId: thread.thread.id, server: server.name, tool, arguments: args }, timeoutMs)
   const event = (name, turnId) => {
-    const result = spawnSync(process.execPath, [join(installedRoot, 'dist/hooks/write.mjs')], {
+    const launcher = join(installedRoot, 'bin', process.platform === 'win32' ? 'run-node.exe' : 'run-node')
+    const result = spawnSync(launcher, ['hook'], {
       cwd: root, env, encoding: 'utf8', timeout: 2000, stdio: ['pipe', 'pipe', 'ignore'],
       input: JSON.stringify({ session_id: thread.thread.id, turn_id: turnId, hook_event_name: name }),
     })
@@ -207,6 +220,9 @@ try {
   assert.equal((await cardCall('activate_waiting_player'))._meta?.data?.play, false)
   assert.deepEqual(event('Stop', turnId), {})
   assert.equal((await cardCall('get_run_state'))._meta?.data?.state, 'stopped')
+  event('UserPromptSubmit', 'installation-interrupt')
+  assert.deepEqual(event('Interrupt', 'installation-interrupt'), {})
+  assert.equal((await hostCall('get_run_state', { panel: card._meta.panel, observeSession: true }))._meta?.data?.state, 'interrupted')
   const waiting = await rpc('mcpServer/resource/read', { threadId: thread.thread.id, server: server.name, uri: waitingUri })
   assert.deepEqual(waiting.contents[0]._meta.ui.csp, { connectDomains: [], resourceDomains: ['blob:'] })
   assert.equal(waiting.contents?.[0]?._meta?.['openai/ui']?.preferredDisplayMode, 'inline')
@@ -266,7 +282,7 @@ try {
     }
     const fragment = join(tmp, 'first-fragment.mp4')
     await writeFile(fragment, Buffer.concat(buffers))
-    const decoded = spawnSync('ffmpeg', ['-v', 'error', '-i', fragment, '-f', 'null', '-'], { stdio: 'ignore', timeout: 20000 })
+    const decoded = spawnSync(commands.ffmpeg, ['-v', 'error', '-i', fragment, '-f', 'null', '-'], { stdio: 'ignore', timeout: 20000 })
     assert.equal(decoded.status, 0, '真实 npm 安装副本的音视频分段无法解码')
     console.log('真实分集经 npm 安装副本准备、MCP 分段传输与 FFmpeg 解码通过')
   }
@@ -290,16 +306,22 @@ try {
     '插件 hooks 未全部发现',
   )
   console.log('已发现三个待审查事件')
-  child.kill()
+  stopChild(child)
   child = undefined
   run('codex', ['plugin', 'remove', 'codex-hongguo@hongguo-local'])
   console.log('隔离卸载通过')
   const progress = new Store(defaultData)
   try { assert.equal(progress.history().find(row => row.seriesId === 'hg-987654321').positionMs, 12345) } finally { progress.close() }
   const sha256 = createHash('sha256').update(await readFile(archivePath)).digest('hex')
-  await writeFile(resolve('release/verification.json'), JSON.stringify({ version, previousVersion: folder.replace('codex-hongguo-', ''), sha256, checkedAt: new Date().toISOString(), checks: ['npx-setup', 'repeat-update', 'native-npm-source', 'offline-migration', 'progress-preserved', 'hook-review-required', 'host-mcp', 'live-catalog', 'uninstall-preserves-data'], desktopPlaybackObserved: false }, null, 2) + '\n')
+  await writeFile(resolve('release/verification.json'), JSON.stringify({
+    version, previousVersion: folder.replace('codex-hongguo-', ''), sha256,
+    platform: process.platform, arch: process.arch, windowsPreview: process.platform === 'win32',
+    checkedAt: new Date().toISOString(),
+    checks: ['npx-setup', 'repeat-update', 'native-npm-source', 'offline-migration', 'progress-preserved', 'hook-review-required', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'uninstall-preserves-data'],
+    mediaDecoded: process.argv.includes('--playback'), desktopPlaybackObserved: false,
+  }, null, 2) + '\n')
 } finally {
-  child?.kill()
-  registry?.kill()
-  await rm(tmp, { force: true, recursive: true })
+  stopChild(child)
+  stopChild(registry)
+  await rm(tmp, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 })
 }

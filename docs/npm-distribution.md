@@ -1,18 +1,40 @@
-# npm 分发
+# npm 分发与发布
 
-实现版本：0.0.9。首次公开 npm 发布仍需完成 npm 登录或配置受信任发布者。仓库当前 npm 包名为 `codex-hongguo`，GitHub 市场目标为 `mreasonyang/codex-hongguo`。
+面向维护者。版本以源码根目录 `package.json` 为准；包名配置为 `codex-hongguo`，默认 GitHub 市场为 `mreasonyang/codex-hongguo`。实际发布状态见 README 的发布提示，并以 npm registry 回读为准。
 
-## 安装链路
+## 安装与更新
 
-`npx codex-hongguo@latest setup` 检查 Node、Codex CLI 和 FFmpeg，再调用原生 `codex plugin marketplace add` 与 `codex plugin add`。Git 仓库的 `.agents/plugins/marketplace.json` 只指向 npm 的确定版本，不存放构建产物。升级通过原生市场刷新完成。`update` 是相同流程的便捷入口。
+首发完成后的用户入口：
 
-完整 npm 包包含 `.codex-plugin/plugin.json`、`.mcp.json`、Hooks、Skills、预构建 MCP/CLI、播放器、上游 SDK/WASM 和许可声明。开发仓库保持 private package，公开包在 `release/npm/codex-hongguo` 单独生成；安装不运行生命周期脚本、不安装依赖树。项目未授予开源许可证，沿用 `UNLICENSED`，第三方依赖随附许可声明。
+```sh
+npx codex-hongguo@latest setup
+npx codex-hongguo@latest update
+```
 
-macOS/Linux 的 MCP 与 Hooks 通过包内 POSIX 启动器自动寻找 Node >=22.16，包括 PATH、Homebrew、Volta、nvm、mise、fnm 的常见安装位置；FFmpeg 与 Codex 只查已知程序目录或显式覆盖。当前 npm 包限制 `os` 为 darwin/linux；Windows 启动器与实机验证尚未完成。Linux 仅有程序逻辑覆盖，本次本机验收为 macOS。
+命令先检查 Node、npm、Codex CLI 和 FFmpeg，再通过 Codex 原生市场安装插件。Git 仓库的 `.agents/plugins/marketplace.json` 指向 npm 的确定版本；CLI 沿用 `codex-hongguo@hongguo-local` 标识。`setup` 注册来源并安装，`update` 对已经登记的同一 Git 来源先刷新市场，再安装。
 
-向导沿用 `codex-hongguo@hongguo-local` ID。若之前来自本地 ZIP，只替换这个市场来源并重新安装；失败会尝试恢复原来源。它不清理观看数据、不修改认证配置，不写 Hook 信任。关闭旧面板后迁移，再打开新对话审查 Hooks。特殊运行时可使用 HONGGUO_NODE、HONGGUO_FFMPEG、HONGGUO_CODEX 指定程序。诊断只输出就绪元数据，宿主原始 stdout/stderr 不会转发到安装器日志。
+两个命令均支持 `--dry-run` 和 `--marketplace owner/repo|本地目录`。预览仍会检查依赖，但不调用 Codex 修改注册。来源参数只接受仓库 slug 或现有本地目录。后续操作省略该参数时会选择默认 GitHub 来源，因此自定义和离线来源每次都应显式提供。
 
-## 构建与验收
+如果旧安装来自 ZIP，向导只替换同名市场并重新安装；失败会尝试恢复旧来源和插件注册。观看数据不移动、不清理。迁移前关闭播放器，完成后打开新对话并审查 Hooks。安装器不收集或输出账号凭据，认证由现有 Codex/npm 客户端处理；它不写入 Hook 信任，也不转发宿主原始诊断输出。
+
+`doctor` 输出环境检查元数据，但 Hook 状态严格绑定执行检查的插件路径。从 npx 缓存或解压目录检查时可能是 `unknown`；信任状态应通过宿主安装副本的 Setup 或 Codex「设置 → Hooks」核对。
+
+## 运行环境与包内容
+
+当前 npm 包的 `os` 仍为 darwin/linux。Windows x64 原生启动器已随包构建，可通过离线 ZIP 试用；完整桌面验收通过前不开放 Windows npm 安装，见 [Windows 支持](windows-support.md)。本机验收平台为 macOS；Linux 实机仍待验证。需要外部 Node.js >=22.16（含 npm）及 FFmpeg，包内提供的是 JavaScript 依赖、播放器和 SDK/WASM。
+
+MCP 使用同名的 `bin/run-node` / Windows `bin/run-node.exe` 入口，Hooks 按平台调用同一启动器。两者都检查 Node 版本及 `node:sqlite`；POSIX 保留 PATH、Homebrew、Volta、nvm、mise、fnm 查找，Windows 支持 PATH、常见 Node、Volta、nvm-windows 和 Scoop 位置。源码构建需 Go >=1.25，发行包使用者无需安装 Go。FFmpeg/Codex 通过 `src/runtime/executables.mjs` 查找，显式覆盖项见 [CONTRIBUTING](../CONTRIBUTING.md#运行环境与诊断)。覆盖值必须在实际宿主子进程的环境中可见。
+
+源码根目录 `package.json` 的 `private: true` 用于阻止误发开发目录，公开包在 `release/npm/codex-hongguo/` 单独生成，包含：
+
+- `.codex-plugin/plugin.json`、`.mcp.json`、`hooks/` 和 `skills/`。
+- `bin/`、预构建的 `dist/cli/`、`dist/server/`、`dist/hooks/`、`dist/setup/` 和 `dist/ui/`。
+- `dist/vendor/openhongguo/`，包括 WASM。
+- 截取后的中英文 README 和 `licenses/` 第三方许可声明。
+
+包不声明安装依赖或生命周期脚本，也不包含本机绝对路径、观看媒体、设备档案、测试数据和凭据。便携清单保留在源码，安装包采用已验证的兼容清单。项目尚未指定许可证，npm 元数据使用 `UNLICENSED`；第三方依赖仍按各自许可分发。
+
+## 产物与验收
 
 ```sh
 npm ci
@@ -21,25 +43,47 @@ npm run package
 npm run verify:install
 ```
 
-打包输出：
+| 产物 | 用途 |
+| --- | --- |
+| `release/codex-hongguo-<版本>.tgz` | 待发布的完整 npm 包，发布脚本直接上传此文件。 |
+| `release/codex-hongguo-<版本>.zip` | 相同插件产物组成的离线本地市场。 |
+| `release/marketplace/.agents/plugins/marketplace.json` | 待采用的版本索引，npm 发布核实成功后复制到仓库。 |
+| `release/package-metadata.json` | 包名文件、版本和大小等打包元数据。 |
+| `release/verification.json` | 成功的安装回执，包含版本、迁移基线、检查项和 tgz 的 SHA-256。 |
 
-- `release/codex-hongguo-<版本>.tgz`：准备发布的不可变 npm 包。
-- `release/codex-hongguo-<版本>.zip`：同产物离线市场。
-- `release/marketplace/.agents/plugins/marketplace.json`：发布成功后采用的版本索引。
-- `release/verification.json`：真实安装回执，绑定 npm 包 SHA-256。
+隔离验证创建本地 HTTPS npm 测试仓库及临时 CA，在临时 HOME/Codex 配置下执行真实 npm exec/npx 和 Codex 原生 npm 下载；生产 TLS 策略不变。默认从本版 ZIP 迁移，检查进度、设置、宿主工具、两个 UI 资源、真实片库/分集、三个待信任 Hooks，以及卸载保留数据。
 
-安装验证在临时 HOME/独立 Codex 配置中创建 HTTPS npm 测试仓库，用临时 CA 让原生 npm 下载校验证书，生产 registry 和 TLS 策略保持不变。它从离线市场迁移到 npm，检查观看进度和引导设置保留、待信任 Hooks、真实 app-server 的 MCP 工具/播放器资源、片库/分集和卸载后数据保留。可用 `node scripts/verify-install.mjs --previous-zip <旧版.zip>` 验证真实旧发行包到新版的迁移。
-
-`npm test` 验证解密、HEVC/ALAC 转码、HLS/DASH、缓存及回合停止状态。以上不等同于真实桌面播放器的视频画面或自然回合自动暂停观测；回执中的 `desktopPlaybackObserved` 会明确保留为 false，不能把未信任 Hook 的隔离验证说成桌面端验收。
-
-## 发布
-
-先完成验收，在已登录且拥有包发布权限的终端运行：
+验证旧版升级并额外解码真实分集时运行：
 
 ```sh
-npm run release:publish
+node scripts/verify-install.mjs --previous-zip "/absolute/path/codex-hongguo-0.0.8.zip" --playback
 ```
 
-脚本只发布回执绑定的 tgz，回读 npm registry 的 SHA-512 完整性后才更新仓库索引和 README 发布状态。首次发布可能需要 npm 的交互式双重认证；可在自己的终端直接发布已验收 tgz，再运行 `npm run release:publish -- --index-only` 完成完整性核验与索引更新。不要向聊天或仓库粘贴令牌。
+将路径替换为实际旧发行包。`--playback` 取回安装副本提供的初始化段与媒体段，用 FFmpeg 解码。它不等同于桌面视频控件实播；回执的 `desktopPlaybackObserved` 固定为 false。公开 npm/GitHub 的真实安装链路、桌面画面与自然回合自动暂停、Linux 实机需分别验收，不能从本地测试仓库的成功推导为已上线。
 
-后续通过 GitHub Actions 的手动 Publish workflow 发布。为 `codex-hongguo` 配置 npm 受信任发布者（仓库 `mreasonyang/codex-hongguo`，workflow `publish.yml`），CI 使用 OIDC，不保存 npm 长期令牌。版本升级使用 `npm run version:patch`，测试及打包仍沿用该版本。索引在 npm 发布成功后自动提交。
+重新打包会使旧回执失效，需要重新安装验证。已发布的 npm 名称/版本不能覆盖，修改已发布内容应递增版本；见 [npm publish 文档](https://docs.npmjs.com/cli/v11/commands/npm-publish/)。
+
+## 首次上线
+
+1. 确认默认 GitHub 仓库与 `src/cli/main.mjs`、打包元数据一致，将 `main` 推送到用户可访问的仓库，确认其中的市场清单可读取。
+2. 在自己的终端完成 `npm login --registry=https://registry.npmjs.org`，确认有目标包发布权限。账户认证在本机或 npm 网页完成，不把令牌和验证码写进聊天、证据文件或仓库。
+3. 完成上面的测试、打包和安装验证。发布对象是回执绑定的 tgz。
+4. 非交互环境可运行 `npm run release:publish`。脚本隐藏 npm 原始输出，不能代为完成交互式登录或双重认证。需要交互认证时，在自己的终端运行下方命令，将版本占位替换为实际版本：
+
+   ```sh
+   npm publish "./release/codex-hongguo-<版本>.tgz" --access public --registry=https://registry.npmjs.org
+   npm run release:publish -- --index-only
+   ```
+
+5. 脚本回读 registry 中该版本的 SHA-512 完整性，与同一 tgz 比对后才更新仓库索引及中英文 README 的发布提示。发布和 `--index-only` 之间保留原 tgz，不重新打包。
+6. 将更新后的索引和 README 提交并推送到 `main`，再在干净环境实际执行公开 `npx ... setup`。公开入口验证完成后再调整 README 中对应的验收状态。
+
+发布中断后，若 npm 已有同版本，用原 tgz 与回执执行 `--index-only` 核验并更新索引。若完整性不同，保留现场核对版本与产物；此时脚本不会推进市场索引。
+
+## 后续 CI 发布
+
+发布 workflow 为 `.github/workflows/publish.yml`，由维护者手动触发并检出 `main`。先按项目版本规则运行 `npm run version:patch` 并提交源码变更；版本递增不会提前更新发布索引。
+
+在 npm 包设置中为 `mreasonyang/codex-hongguo` 的 `publish.yml` 配置受信任发布者，并明确允许直接 `npm publish`，与现有 workflow 的命令一致。npm 要求 CLI >=11.5.1 和 Node >=22.14；当前 workflow 使用 Node 24、npm 11、GitHub 托管 runner 以及 `id-token: write`，通过 OIDC 发布而不保存 npm 长期令牌。配置字段与权限以 [npm 受信任发布者文档](https://docs.npmjs.com/trusted-publishers/) 为准。
+
+发布前先通过 `ci.yml` 的 macOS/Linux/Windows 三平台构建、回归、打包和隔离安装。Windows 自动化在临时环境中允许安装试用产物，不改变公开 npm 平台限制。发布 job 再测试、打包、隔离安装并上传验收产物，然后发布带 provenance 的 tgz；registry 完整性回读通过后提交并推送索引和 README。workflow 文件已提供，实际 Actions 执行及 npm 受信任发布者配置仍需上线时验证。

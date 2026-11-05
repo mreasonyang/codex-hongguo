@@ -3,9 +3,8 @@
   "mcpServers": {
     "codex-hongguo": {
       "type": "stdio",
-      "command": "sh",
+      "command": "./bin/run-node",
       "args": [
-        "bin/run-node",
         "server"
       ],
       "cwd": "./"

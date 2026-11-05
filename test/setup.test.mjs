@@ -1,8 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { inspectHooks } from '../src/server/setup.mjs'
 import { Store } from '../src/server/store.mjs'
 import { Service } from '../src/server/service.mjs'
@@ -56,6 +57,20 @@ test('unavailable, failed or timed-out host checks stay unverified', async t => 
   assert.deepEqual(await inspectHooks(fixture(t, [], true)), unknown)
   assert.deepEqual(await inspectHooks({ command: join(tmpdir(), 'hongguo-absent-executable'), timeoutMs: 500 }), unknown)
   assert.deepEqual(await inspectHooks({ command: process.execPath, args: ['-e', 'setInterval(()=>{},1000)'], timeoutMs: 100 }), unknown)
+})
+
+test('Windows setup reads the host protocol through a .cmd CLI shim', { skip: process.platform !== 'win32' }, async t => {
+  const options = fixture(t, hooks('trusted'))
+  const pidFile = join(options.cwd, 'host-pid.json')
+  const entry = join(options.cwd, 'host-entry.mjs')
+  writeFileSync(entry, `import {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(pidFile)},String(process.pid));await import(${JSON.stringify(pathToFileURL(options.args[0]).href)});`)
+  const command = join(options.cwd, 'Codex 入口.cmd')
+  writeFileSync(command, `@echo off\r\n"${process.execPath}" "${entry}" %*\r\n`)
+  const result = await inspectHooks({ ...options, command, args: ['app-server'] })
+  assert.equal(result.status, 'ready')
+  assert.ok(result.events.every(event => event.status === 'ready'))
+  const pid = Number(readFileSync(pidFile, 'utf8'))
+  assert.throws(() => process.kill(pid, 0), error => error.code === 'ESRCH', 'the .cmd host process must not outlive the check')
 })
 
 test('dismissing the guide persists independently of viewing progress, preferences and hook readiness', async t => {

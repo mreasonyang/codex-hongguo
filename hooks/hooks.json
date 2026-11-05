@@ -6,7 +6,7 @@
           {
             "type": "command",
             "command": "sh \"${PLUGIN_ROOT}/bin/run-node\" hook",
-            "commandWindows": "node \"%PLUGIN_ROOT%\\dist\\hooks\\write.mjs\"",
+            "commandWindows": "\"%PLUGIN_ROOT%\\bin\\run-node.exe\" hook",
             "timeout": 2
           }
         ]
@@ -18,7 +18,7 @@
           {
             "type": "command",
             "command": "sh \"${PLUGIN_ROOT}/bin/run-node\" hook",
-            "commandWindows": "node \"%PLUGIN_ROOT%\\dist\\hooks\\write.mjs\"",
+            "commandWindows": "\"%PLUGIN_ROOT%\\bin\\run-node.exe\" hook",
             "timeout": 2
           }
         ]
@@ -30,7 +30,7 @@
           {
             "type": "command",
             "command": "sh \"${PLUGIN_ROOT}/bin/run-node\" hook",
-            "commandWindows": "node \"%PLUGIN_ROOT%\\dist\\hooks\\write.mjs\"",
+            "commandWindows": "\"%PLUGIN_ROOT%\\bin\\run-node.exe\" hook",
             "timeout": 2
           }
         ]

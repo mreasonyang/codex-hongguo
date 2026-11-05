@@ -20,6 +20,7 @@
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "1.7.5",
     "@modelcontextprotocol/sdk": "1.32.2",
+    "cross-spawn": "7.0.6",
     "hls.js": "1.7.4",
     "m3u8-parser": "7.2.1",
     "mpd-parser": "1.4.1",

@@ -12,8 +12,8 @@ const en: Record<string, string> = {
   待确认: 'Unverified',
   待配置: 'Needs setup',
   '进度暂时无法保存，请检查红果的数据目录权限。': 'Progress cannot be saved. Check permissions for Hongguo’s data folder.',
-  '尚未找到 FFmpeg。安装后重新运行安装包里的 configure.mjs，并更新插件。':
-    'FFmpeg is missing. Install it, rerun configure.mjs from the release folder, then update the plugin.',
+  '尚未找到 FFmpeg。安装后重启 Codex，再从「设置 → 使用指南」重新检查。':
+    'FFmpeg is missing. Install it, restart Codex, then check again in Settings → Getting started.',
   '回合联动已就绪。当前对话的任务结束时，视频会自动暂停。':
     'Playback will pause automatically when a task ends in this chat.',
   '暂时无法读取 Hooks 状态，请在宿主设置中核对。现在可以先手动观看。':

@@ -1,7 +1,7 @@
 // Publish only the exact artifact qualified by the isolated native npm installation.
 import { readFile, copyFile, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
-import { spawnSync } from 'node:child_process'
+import { spawnSync, findExecutable } from '../src/runtime/executables.mjs'
 import { resolve } from 'node:path'
 
 const pkg = JSON.parse(await readFile('package.json', 'utf8'))
@@ -11,7 +11,7 @@ const bytes = await readFile(archive)
 const digest = createHash('sha256').update(bytes).digest('hex')
 if (receipt.version !== pkg.version || receipt.sha256 !== digest || !receipt.checks.includes('native-npm-source') || !receipt.checks.includes('progress-preserved'))
   throw Error('发行包与隔离安装验收回执不匹配，请重新打包并运行 verify:install。')
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+const npm = findExecutable('npm')
 const args = ['publish', archive, '--access', 'public', '--registry', 'https://registry.npmjs.org']
 if (process.argv.includes('--provenance')) args.push('--provenance')
 if (!process.argv.includes('--index-only')) {

@@ -5,7 +5,7 @@ description: 配置红果短剧插件，检查本机播放环境和回合自动�
 
 帮助用户在当前安装环境完成红果短剧配置。该插件用于本机执行的 Codex 对话，不需要红果账号、API Key 或浏览器自动化权限。
 
-从此 SKILL.md 的实际位置向上两级确定插件根目录。在 macOS/Linux 用 `sh "<插件根目录>/bin/run-node" check` 检查，启动器自动寻找 Node。正确引用包含空格的路径。脚本只输出 Node、进度库、FFmpeg 和本插件三个 Hooks 的检查元数据，不发送模型请求。当前 npm 发行包仅支持 macOS/Linux，Windows 尚待启动器适配与实机验收。
+从此 SKILL.md 的实际位置向上两级确定插件根目录。在 macOS/Linux 用 `sh "<插件根目录>/bin/run-node" check` 检查；Windows x64 试用版在 PowerShell 用 `& "<插件根目录>\bin\run-node.exe" check`。启动器自动寻找 Node，并检查版本及 SQLite。正确引用包含空格的路径。脚本只输出 Node、进度库、FFmpeg 和本插件三个 Hooks 的检查元数据，不发送模型请求。当前 npm 发行包仅开放 macOS/Linux；Windows 原生启动器随离线包提供，完整桌面验收通过前仍为试用。
 
 - 播放环境缺失时，按当前操作系统说明缺少什么。需要 Node.js >=22.16 和 FFmpeg（建议 >=8）。安装依赖后重开 Codex 并重新检查，启动器会重新发现程序。特殊安装可使用 HONGGUO_NODE、HONGGUO_FFMPEG、HONGGUO_CODEX 指定程序；不要修改用户其他插件、认证或网络配置。
 - Hooks 的 `ready` 才表示本次回读已信任且启用。`needs_review` 或 `disabled` 时，说明在桌面 Settings → Hooks 找到「红果短剧」，审查并信任或启用 UserPromptSubmit、Stop、Interrupt。用户完成后重新检查。不要自动写入信任记录、绕过审查或把收到过回合事件当成三个 Hooks 都已配置。

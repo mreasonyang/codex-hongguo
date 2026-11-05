@@ -1,0 +1,55 @@
+name: Cross-platform qualification
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  qualify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - name: Install CLI
+        run: npm install --global @openai/codex@0.157.1
+      - name: Install Linux media tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg openssl
+      - name: Install macOS media tools
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg openssl@3
+      - name: Install Windows media tools
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg openssl.light --no-progress --yes
+      - name: Locate Windows OpenSSL
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          @("$env:ProgramFiles\OpenSSL\bin", "$env:ProgramFiles\OpenSSL-Win64\bin", "$env:ProgramFiles\Git\usr\bin") | ForEach-Object {
+            if (Test-Path "$_\openssl.exe") { $_ >> $env:GITHUB_PATH }
+          }
+      - run: npm ci
+      - run: npm test
+      - run: npm run package
+      - run: npm run verify:install
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qualification-${{ matrix.os }}
+          path: |
+            release/*.tgz
+            release/*.zip
+            release/verification.json

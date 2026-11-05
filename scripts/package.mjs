@@ -1,6 +1,6 @@
 import { mkdir, cp, readFile, writeFile, readdir, rm, chmod } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
-import { spawnSync } from 'node:child_process'
+import { spawnSync, findExecutable } from '../src/runtime/executables.mjs'
 import { zipSync } from 'fflate'
 import { marketplace } from './distribution.mjs'
 
@@ -19,6 +19,8 @@ for (const file of ['.codex-plugin/plugin.json', '.mcp.json', 'hooks/hooks.json'
 }
 await chmod(join(npmRoot, 'bin/codex-hongguo.mjs'), 0o755)
 await chmod(join(npmRoot, 'bin/run-node'), 0o755)
+await cp('dist/launcher/run-node.exe', join(npmRoot, 'bin/run-node.exe'))
+await rm(join(npmRoot, 'dist/launcher'), { recursive: true })
 // Keep the tested compatibility manifest canonical until portable hook discovery is qualified.
 await writeFile(join(npmRoot, 'package.json'), JSON.stringify({
   name: pkg.name, version: pkg.version, description: '在 Codex 桌面对话中观看红果短剧并跟随回合暂停。',
@@ -37,6 +39,7 @@ for (const name of ['README.md', 'README.en.md']) {
     .replace(/^首次 npm\/GitHub 发布尚未完成.*\n/m, '')
     .replace(/^First npm\/GitHub publication is pending.*\n/m, '')
     .replaceAll('(docs/npm-distribution.md)', '(https://github.com/mreasonyang/codex-hongguo/blob/main/docs/npm-distribution.md)')
+    .replaceAll('(docs/windows-support.md)', '(https://github.com/mreasonyang/codex-hongguo/blob/main/docs/windows-support.md)')
     .trimEnd() + '\n'
   await writeFile(join(npmRoot, name), guides[name])
 }
@@ -50,7 +53,7 @@ for (const [path, dependency] of Object.entries(lock.packages)) {
     await cp(join(path, file), join(notices, path.replaceAll('node_modules/', '').replaceAll('/', '-') + '-' + file))
 }
 await writeFile(join(notices, 'PROJECT-NOTICE.txt'), '本项目尚未授予开源许可证。第三方运行时依赖按此目录各自的许可分发；短剧媒体版权归原权利人所有。\n')
-const packed = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', release], {
+const packed = spawnSync(findExecutable('npm'), ['pack', '--ignore-scripts', '--json', '--pack-destination', release], {
   cwd: npmRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000,
 })
 if (packed.status !== 0) throw Error('npm 打包失败；未执行发布。')
@@ -65,7 +68,11 @@ async function collect(dir, base) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name), name = base + '/' + entry.name
     if (entry.isDirectory()) await collect(path, name)
-    else entries[name] = new Uint8Array(await readFile(path))
+    else {
+      // Native unzip must retain the POSIX launcher's executable bit too, including Windows-built ZIPs.
+      const executable = /\/bin\/(?:run-node(?:\.exe)?|codex-hongguo\.mjs)$/.test(name)
+      entries[name] = [new Uint8Array(await readFile(path)), { os: 3, attrs: ((executable ? 0o100755 : 0o100644) << 16) >>> 0 }]
+    }
   }
 }
 await collect(offline, folder)

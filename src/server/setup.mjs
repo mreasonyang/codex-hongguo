@@ -1,8 +1,7 @@
-import { spawn } from 'node:child_process'
 import { realpathSync } from 'node:fs'
 import { relative, resolve as resolvePath, isAbsolute } from 'node:path'
 import { projectRoot } from './paths.mjs'
-import { findExecutable } from '../runtime/executables.mjs'
+import { findExecutable, spawn, stopChild } from '../runtime/executables.mjs'
 
 const events = ['userPromptSubmit', 'stop', 'interrupt']
 export const unknownHooks = () => ({ status: 'unknown', events: events.map(event => ({ event, status: 'unknown' })) })
@@ -17,7 +16,7 @@ export function inspectHooks({ command = findExecutable('codex', process.env.HON
       if (finished) return
       finished = true
       clearTimeout(timer)
-      child?.kill()
+      stopChild(child)
       resolve(value)
     }
     const timer = setTimeout(() => finish(unknownHooks()), timeoutMs)

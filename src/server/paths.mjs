@@ -1,12 +1,12 @@
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { posix, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const projectRoot = fileURLToPath(new URL('../../', import.meta.url))
-export function dataRoot() {
-  if (process.env.HONGGUO_DATA_DIR) return process.env.HONGGUO_DATA_DIR
-  if (process.platform === 'darwin') return join(homedir(), 'Library', 'Application Support', 'CodexHongguo')
-  if (process.platform === 'win32')
-    return join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'CodexHongguo')
-  return join(process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), 'codex-hongguo')
+export function dataRoot({ env = process.env, home = homedir(), platform = process.platform } = {}) {
+  const { join } = platform === 'win32' ? win32 : posix
+  if (env.HONGGUO_DATA_DIR) return env.HONGGUO_DATA_DIR
+  if (platform === 'darwin') return join(home, 'Library', 'Application Support', 'CodexHongguo')
+  if (platform === 'win32') return join(env.LOCALAPPDATA || join(home, 'AppData', 'Local'), 'CodexHongguo')
+  return join(env.XDG_DATA_HOME || join(home, '.local', 'share'), 'codex-hongguo')
 }
