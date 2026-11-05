@@ -341,7 +341,7 @@ test('self-created CENC sample decrypts from stdin and decodes video and audio',
   await remux(raw, out, 'h264', fixtureKey)
   const decode = (path) =>
     spawnSync(
-      'ffmpeg',
+      ffmpeg,
       ['-nostdin', '-v', 'error', '-xerror', '-i', path, '-map', '0:v', '-map', '0:a', '-f', 'null', '-'],
       { stdio: 'ignore', timeout: 5000 },
     ).status
@@ -617,7 +617,7 @@ for (const kind of ['hls', 'dash'])
     if (!hasFfmpeg()) return t.skip('FFmpeg unavailable')
     const filename = kind === 'hls' ? 'test.m3u8' : 'test.mpd'
     const pack = spawnSync(
-      'ffmpeg',
+      ffmpeg,
       [
         '-nostdin',
         '-v',
@@ -654,7 +654,7 @@ for (const kind of ['hls', 'dash'])
     assert.equal(r.status, 'ready', r.reason)
     assert.equal(
       spawnSync(
-        'ffmpeg',
+        ffmpeg,
         [
           '-nostdin',
           '-v',

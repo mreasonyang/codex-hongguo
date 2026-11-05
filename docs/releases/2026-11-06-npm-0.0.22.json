@@ -8,7 +8,7 @@
   "size": 13059730,
   "publishedAt": "2026-11-05T18:59:38.182Z",
   "publicationOrder": "Published after build checks, before full installation and playback acceptance, at the user request.",
-  "verificationStatus": "local-and-isolated-installation-passed; public-installation-in-progress",
+  "verificationStatus": "passed-on-macos-arm64",
   "checks": [
     "build",
     "registry-integrity",
@@ -16,7 +16,15 @@
     "fresh-isolated-npm-installation",
     "managed-ffmpeg-without-system-install",
     "live-catalog",
-    "real-episode-mcp-transfer-and-decoding"
+    "real-episode-mcp-transfer-and-decoding",
+    "anonymous-public-npx-fresh-install",
+    "no-system-ffmpeg-on-path",
+    "published-native-plugin-self-check",
+    "hook-trust-remains-manual",
+    "isolated-uninstall",
+    "linux-arm64-managed-extraction-execution-and-h264-aac-transcode",
+    "core-tests-with-system-ffmpeg-blocked",
+    "linux-arm64-core-tests-without-system-ffmpeg"
   ],
   "tests": {
     "total": 71,
@@ -40,5 +48,18 @@
     "uninstall-preserves-data"
   ],
   "mediaDecoded": true,
-  "desktopPlaybackObserved": false
+  "desktopPlaybackObserved": false,
+  "verifiedAt": "2026-11-05T19:09:57.531542+00:00",
+  "systemFfmpegUsed": false,
+  "linuxArm64Media": {
+    "environment": "node:24-bookworm-slim; network disabled; no system FFmpeg",
+    "archiveSha256": "6cad88ae5bcec356cfc5d7979a036cc4007128201928a0cf243df3db483276cc",
+    "downloadSource": "Original vendor archive downloaded on the host; same pinned archive as installer",
+    "extraction": true,
+    "nativeExecution": true,
+    "h264AacTranscoding": true,
+    "decoding": true,
+    "coreTestsPassed": true
+  },
+  "testHarnessFix": "Replaced remaining PATH ffmpeg invocations in core tests with the managed executable; macOS and Linux ARM64 core tests pass without system FFmpeg."
 }
