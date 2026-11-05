@@ -6,6 +6,12 @@ Watch Hongguo short dramas in the right-hand panel while Codex works on a task. 
 
 After installation and Hook review, continue working normally. The optional **Watch while you wait** card offers up to three shows per turn. It prioritizes **Continue watching**, or **Watch next** when the saved episode is complete and another episode is available. Other slots rotate unwatched shows. Clicking a title opens the player in that chat and starts muted playback.
 
+**Show catalog**: Browse recommendations, search for shows, or continue where you left off.
+
+![Hongguo show catalog with recommendations, search, Continue watching, and watch history](docs/images/codex-hongguo-catalog.png)
+
+**Player**: Watch beside your chat, choose episodes, adjust the volume, and autoplay the next episode.
+
 ![Watching Hongguo short dramas in the side panel while Codex works on a task](docs/images/codex-hongguo-player.png)
 
 ## Usage
