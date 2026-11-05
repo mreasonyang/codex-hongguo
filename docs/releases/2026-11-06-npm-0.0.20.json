@@ -1,0 +1,37 @@
+{
+  "name": "@kyun.si/codex-hongguo",
+  "version": "0.0.20",
+  "url": "https://www.npmjs.com/package/@kyun.si/codex-hongguo",
+  "tarball": "https://registry.npmjs.org/@kyun.si/codex-hongguo/-/codex-hongguo-0.0.20.tgz",
+  "sha256": "53f908a099e75602070aead52e216bad819b46b8f2e23e909725d2d5a6945452",
+  "integrity": "sha512-urCuxiEHy6p2OBhxVWZ4+XrWz5kf/uPuAYFCXu2bZKtGyfkEMGU83oGcFP9+EwYWOkH1KGfQ1NlkQvioVJXUEw==",
+  "size": 8033895,
+  "checkedAt": "2026-11-05T17:56:59.941Z",
+  "platform": "darwin",
+  "arch": "arm64",
+  "checks": [
+    "registry-latest",
+    "registry-integrity",
+    "fresh-profile-public-npx-setup",
+    "github-default-marketplace",
+    "native-npm-cache",
+    "public-npx-update",
+    "isolated-uninstall",
+    "brave-package-page-0.0.20-public-mit"
+  ],
+  "localInstallationChecks": [
+    "npx-setup",
+    "repeat-update",
+    "native-npm-source",
+    "offline-migration",
+    "progress-preserved",
+    "hook-review-required",
+    "launcher-stdin",
+    "hook-stop",
+    "hook-interrupt",
+    "host-mcp",
+    "live-catalog",
+    "uninstall-preserves-data"
+  ],
+  "desktopPlaybackObserved": false
+}

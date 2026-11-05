@@ -127,7 +127,7 @@ npx @kyun.si/codex-hongguo@latest update
 | 进度保存 | 播放期间每约 5 秒自动保存一次进度，暂停、拖动、换集或隐藏面板时也会立即保存。 |
 | 回合联动与连播 | 任务开始自动播放、任务结束自动暂停均默认开启，详见「全局播放设置」。连播默认开启，当前集播完自动播放下一集；关闭后也会记住。 |
 | 外观与语言 | 选剧页与播放器跟随 Codex 浅色/深色外观及中英文界面；窄侧栏在画面下方显示选集栏，宽面板将选集栏置于画面右侧。 |
-| 验证范围 | macOS 本地回归、隔离 npm/npx 安装与旧来源迁移、真实宿主片库/分集及分片解码已验证。跨平台 CI 状态见 [GitHub Actions](https://github.com/mreasonyang/codex-hongguo/actions)。Windows/Linux 桌面实机与自然任务联动的完整验收仍待完成；GitHub Releases 安装包尚未发布。 |
+| 验证范围 | macOS 本地回归、隔离 npm/npx 安装与旧来源迁移、真实宿主片库/分集及分片解码，以及公网 npm 安装与更新已验证。跨平台 CI 状态见 [GitHub Actions](https://github.com/mreasonyang/codex-hongguo/actions)。Windows/Linux 桌面实机与自然任务联动的完整验收仍待完成；GitHub Releases 安装包尚未发布。 |
 
 <!-- development -->
 

@@ -128,7 +128,7 @@ Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn s
 | Progress persistence | Saves playback position locally every ~5 seconds while playing, as well as on pause, seek, episode change, or panel hide. |
 | Turn linkage & autoplay | Task-start autoplay and task-end automatic pausing both default to on; see Global playback settings above. Autoplay next is enabled by default and remembers changes. |
 | Appearance & locale | Adapts to narrow sidebars (episodes below video) and wide panels (episodes beside video), following Codex light/dark themes and Chinese/English UI locales. |
-| Verification status | macOS local regression, isolated npm/npx installation and source migration, live host catalog/episode access, and fragment decoding have been verified. See [GitHub Actions](https://github.com/mreasonyang/codex-hongguo/actions) for cross-platform CI status. Full Windows/Linux desktop and natural task-playback acceptance remain pending. GitHub Releases installers have not been published. |
+| Verification status | macOS local regression, isolated npm/npx installation and source migration, live host catalog/episode access, fragment decoding, and public npm installation and updates have been verified. See [GitHub Actions](https://github.com/mreasonyang/codex-hongguo/actions) for cross-platform CI status. Full Windows/Linux desktop and natural task-playback acceptance remain pending. GitHub Releases installers have not been published. |
 
 <!-- development -->
 
