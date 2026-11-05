@@ -2,6 +2,7 @@ import { accessSync, constants, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { posix, win32 } from 'node:path'
 import crossSpawn from 'cross-spawn'
+import { ffmpegPath } from './ffmpeg-runtime.mjs'
 
 // Keep callers on an argv API; cross-spawn escapes Windows command shims.
 export const spawn = crossSpawn
@@ -17,8 +18,9 @@ export function stopChild(child) {
   } else child.kill()
 }
 
-export function findExecutable(name, override, { env = process.env, home = homedir(), platform = process.platform } = {}) {
+export function findExecutable(name, override, { env = process.env, home = homedir(), platform = process.platform, arch = process.arch } = {}) {
   if (override) return override
+  if (name === 'ffmpeg') return ffmpegPath({ env, home, platform, arch })
   const { delimiter, dirname, join, isAbsolute, extname } = platform === 'win32' ? win32 : posix
   const pathKey = Object.keys(env).find(key => key.toUpperCase() === 'PATH') || 'PATH'
   const directories = [dirname(process.execPath), ...(env[pathKey] || '').split(delimiter).filter(Boolean).map(dir => dir.replace(/^"(.*)"$/, '$1'))]
@@ -41,6 +43,5 @@ export function prepareRuntime() {
   const { delimiter, dirname } = process.platform === 'win32' ? win32 : posix
   const pathKey = Object.keys(process.env).find(key => key.toUpperCase() === 'PATH') || 'PATH'
   process.env[pathKey] = [...new Set([dirname(process.execPath), ...(process.env[pathKey] || '').split(delimiter).filter(Boolean)])].join(delimiter)
-  process.env.HONGGUO_FFMPEG = findExecutable('ffmpeg', process.env.HONGGUO_FFMPEG)
   process.env.HONGGUO_CODEX = findExecutable('codex', process.env.HONGGUO_CODEX)
 }

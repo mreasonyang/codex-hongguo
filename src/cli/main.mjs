@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { prepareRuntime, findExecutable, spawnSync } from '../runtime/executables.mjs'
 import { inspectHooks } from '../server/setup.mjs'
+import { ensureFfmpeg } from '../runtime/ffmpeg-runtime.mjs'
 
 export const marketplaceName = 'hongguo-local'
 export const pluginId = 'codex-hongguo@' + marketplaceName
@@ -62,7 +63,7 @@ export async function main(argv = process.argv.slice(2)) {
       return
     }
     if (['help', '--help', '-h'].includes(action)) {
-      console.log('红果短剧\n  codex-hongguo setup [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo update [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo doctor\n需要 Node.js >=22.16、Codex CLI 和 FFmpeg。')
+      console.log('红果短剧\n  codex-hongguo setup [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo update [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo doctor\n需要 Node.js >=22.16 和 Codex CLI；播放组件由插件自动准备。')
       return
     }
     if (!['setup', 'update', 'doctor'].includes(action)) throw Error('未知命令；运行 codex-hongguo --help 查看用法。')
@@ -84,9 +85,13 @@ export async function main(argv = process.argv.slice(2)) {
     }
     // Resolve everything before changing the host's marketplace registration.
     const codex = findExecutable('codex', process.env.HONGGUO_CODEX)
-    for (const [name, command] of [['Codex CLI', codex], ['npm', findExecutable('npm')], ['FFmpeg', process.env.HONGGUO_FFMPEG]]) {
-      if (spawnSync(command, [name === 'FFmpeg' ? '-version' : '--version'], { stdio: 'ignore', timeout: 3000 }).status !== 0)
+    for (const [name, command] of [['Codex CLI', codex], ['npm', findExecutable('npm')]]) {
+      if (spawnSync(command, ['--version'], { stdio: 'ignore', timeout: 3000 }).status !== 0)
         throw Error('未找到可运行的 ' + name + '。安装后重新运行 setup；已有插件与观看进度保持原样。')
+    }
+    if (!dryRun) {
+      console.log('正在准备播放组件，首次使用需要联网下载…')
+      await ensureFfmpeg()
     }
     install({ run: codexRunner(codex), source, update: action === 'update', dryRun })
     if (!dryRun) {

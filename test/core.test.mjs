@@ -16,6 +16,8 @@ import { finishedTurn } from '../src/ui/playback-turn.ts'
 import { ffmpeg, hasFfmpeg, MediaCache, runFfmpeg } from '../src/server/media.mjs'
 import { PanelMedia } from '../src/server/panel-media.mjs'
 import { projectRoot } from '../src/server/paths.mjs'
+import { ensureFfmpeg } from '../src/runtime/ffmpeg-runtime.mjs'
+await ensureFfmpeg()
 const avcFixture = join(projectRoot, 'test/fixtures/avc-aac.mp4')
 
 test('the first snapshot, running turns and repeated terminal snapshots leave Play alone', () => {

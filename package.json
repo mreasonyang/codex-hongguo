@@ -1,6 +1,6 @@
 {
   "name": "@kyun.si/codex-hongguo",
-  "version": "0.0.21",
+  "version": "0.0.22",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -13,7 +13,7 @@
     "version": "node scripts/version.mjs --sync",
     "prebuild": "node scripts/version.mjs",
     "build": "node scripts/build.mjs",
-    "test": "npm run build && node --test test/*.test.mjs",
+    "test": "npm run build && node scripts/prepare-media.mjs && node --test test/*.test.mjs",
     "package": "npm run build && node scripts/package.mjs",
     "verify:install": "node scripts/verify-install.mjs",
     "release:publish": "node scripts/publish.mjs"
@@ -22,16 +22,17 @@
     "@modelcontextprotocol/ext-apps": "1.7.5",
     "@modelcontextprotocol/sdk": "1.32.2",
     "cross-spawn": "7.0.6",
+    "fflate": "0.8.3",
     "hls.js": "1.7.4",
     "m3u8-parser": "7.2.1",
     "mpd-parser": "1.4.1",
     "openhongguo": "0.2.0",
+    "xz-decompress": "0.2.3",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
     "esbuild": "0.28.2",
-    "fflate": "0.8.3",
     "typescript": "5.9.3"
   }
 }

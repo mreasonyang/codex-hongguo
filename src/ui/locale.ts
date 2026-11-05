@@ -12,8 +12,10 @@ const en: Record<string, string> = {
   待确认: 'Unverified',
   待配置: 'Needs setup',
   '进度暂时无法保存，请检查红果的数据目录权限。': 'Progress cannot be saved. Check permissions for Hongguo’s data folder.',
-  '尚未找到 FFmpeg。安装后重启 Codex，再从「设置 → 使用指南」重新检查。':
-    'FFmpeg is missing. Install it, restart Codex, then check again in Settings → Getting started.',
+  '播放组件': 'Playback component',
+  '准备中': 'Preparing',
+  '播放组件尚未就绪。请检查网络后点击「重新检查」，插件会自动准备。':
+    'The playback component is not ready. Check your connection and click Check again to prepare it automatically.',
   '回合联动已就绪。可在设置中配置任务开始自动播放和任务结束自动暂停。':
     'Task hooks are ready. Configure automatic play and pause in Settings.',
   '暂时无法读取 Hooks 状态，请在宿主设置中核对。现在可以先手动观看。':

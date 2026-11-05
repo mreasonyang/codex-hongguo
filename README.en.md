@@ -8,7 +8,7 @@ After installation and Hook review, continue working normally. The optional **Wa
 
 ## Installation & Setup
 
-Supports macOS and Linux. Requires Node.js >=22.16 with npm, a Codex CLI supporting npm plugin sources, and FFmpeg (>=8 recommended). On macOS, install dependencies with `brew install node ffmpeg`.
+Supports macOS and Linux (x64/arm64). Requires Node.js >=22.16 with npm and a Codex CLI supporting npm plugin sources. The plugin prepares its playback component automatically; no separate FFmpeg installation is needed.
 
 Install with npm:
 
@@ -16,11 +16,11 @@ Install with npm:
 npx @kyun.si/codex-hongguo@latest setup
 ```
 
-The setup command checks dependencies and installs a pinned package version through Codex's native marketplace. The package includes JavaScript dependencies, the player and WASM; Node, npm and FFmpeg remain local prerequisites. The launcher discovers them automatically. Open a new local chat after installing, run plugin Setup, and review the Hooks.
+The command checks the environment, downloads and verifies the playback component, then installs the plugin through Codex's native marketplace. The first installation requires a network connection; later runs reuse the local cache. Open a new local chat after installing, run plugin Setup, and review the Hooks.
 
 ### Post-Install Setup
 
-- **Run the Setup guide**: Run **Setup** from the plugin details view (which invokes `hongguo-setup`), or say `配置红果短剧` in a local conversation. The setup check verifies Node, the progress database, FFmpeg, and whether all three plugin Hooks are trusted and enabled.
+- **Run the Setup guide**: Run **Setup** from the plugin details view (which invokes `hongguo-setup`), or say `配置红果短剧` in a local conversation. The setup check verifies Node, the progress database, the playback component, and whether all three plugin Hooks are trusted and enabled.
 - **In-player getting started guide**: The player shows a getting started guide (`使用指南`) the first time it opens. Clicking **Browse shows** (`开始选剧`) dismisses the guide. It appears again if an update requires hook review. You can reopen it anytime from **Settings → Getting started** (`设置 → 使用指南`) and click **Check again** (`重新检查`), or run **Diagnostics** (`自检`) in Settings.
 - **Review and trust Hooks**: For task-start and task-end playback control, open Codex Desktop **Settings → Hooks** (`设置 → Hooks`), review and trust Hongguo's `UserPromptSubmit`, `Stop`, and `Interrupt` hooks, and then run the check again. Installation and Setup never trust Hooks automatically on your behalf and never treat past turn records as proof that Hooks are configured; if host trust status cannot be read, it is shown as **Unverified** (`待确认`). You can watch manually before completing Hook setup.
 - **No extra accounts or permissions**: Normal browsing and playback do not require a Hongguo account, API key, or browser automation permissions.
@@ -64,7 +64,7 @@ The switches are independent, saved across restarts, and shared by all chats. Ot
 ## Troubleshooting
 
 - **No task suggestions**: Enable suggestions, trust all three Hooks, and retry in a new local turn with no visible player. If the catalog returns no candidates or the host does not display the card, use the right-side **＋** to open the player.
-- **FFmpeg missing**: Install it, restart Codex, then check again in **Settings → Getting started**.
+- **Playback component preparation failed**: Check your connection and run the installation command again, or click **Check again** in **Settings → Getting started**. The plugin retries preparation automatically.
 - **Turn linkage is unverified**: Check all three events in Codex **Settings → Hooks**. A passing environment check does not establish that automatic pausing works; manual playback remains available.
 
 - **Playback pauses too often**: Turn off **Pause automatically when a task ends** in the player's Settings and save to keep watching continuously.
@@ -102,7 +102,6 @@ Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn s
 | Progress persistence | Saves playback position locally every ~5 seconds while playing, as well as on pause, seek, episode change, or panel hide. |
 | Turn linkage & autoplay | Task-start autoplay and task-end automatic pausing both default to on; see Global playback settings above. Autoplay next is enabled by default and remembers changes. |
 | Appearance & locale | Adapts to narrow sidebars (episodes below video) and wide panels (episodes beside video), following Codex light/dark themes and Chinese/English UI locales. |
-| Verification status | macOS local regression, isolated npm/npx installation and source migration, live host catalog/episode access, fragment decoding, and public npm installation and updates have been verified. See [GitHub Actions](https://github.com/mreasonyang/codex-hongguo/actions) for cross-platform CI status. Full Linux desktop and natural task-playback acceptance remain pending. |
 
 <!-- development -->
 

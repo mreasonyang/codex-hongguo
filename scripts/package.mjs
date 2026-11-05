@@ -24,7 +24,7 @@ await rm(join(npmRoot, 'dist/launcher'), { recursive: true })
 // Keep the tested compatibility manifest canonical until portable hook discovery is qualified.
 await writeFile(join(npmRoot, 'package.json'), JSON.stringify({
   name: pkg.name, version: pkg.version, description: '在 Codex 桌面对话中观看红果短剧并跟随回合暂停。',
-  type: 'module', license: pkg.license, engines: pkg.engines, os: ['darwin', 'linux'],
+  type: 'module', license: pkg.license, engines: pkg.engines, os: ['darwin', 'linux'], cpu: ['x64', 'arm64'],
   repository: { type: 'git', url: 'git+https://github.com/mreasonyang/codex-hongguo.git' },
   homepage: 'https://github.com/mreasonyang/codex-hongguo#readme',
   bin: { 'codex-hongguo': './bin/codex-hongguo.mjs' },
@@ -47,6 +47,8 @@ for (const name of ['README.md', 'README.en.md']) {
 }
 const notices = join(npmRoot, 'licenses')
 await mkdir(notices)
+await cp('third_party/ffmpeg', join(notices, 'ffmpeg'), { recursive: true })
+await cp('src/runtime/ffmpeg-artifacts.json', join(notices, 'ffmpeg/ffmpeg-artifacts.json'))
 const lock = JSON.parse(await readFile('package-lock.json', 'utf8'))
 for (const [path, dependency] of Object.entries(lock.packages)) {
   if (!path || dependency.dev) continue

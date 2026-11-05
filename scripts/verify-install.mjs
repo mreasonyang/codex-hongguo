@@ -18,7 +18,7 @@ const root = join(tmp, '本地 市场'),
 const npmMarket = join(tmp, 'npm 市场')
 const version = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version
 const playerUri = 'ui://hongguo/v14/player', waitingUri = 'ui://hongguo/v14/waiting'
-const commands = Object.fromEntries(['npm', 'codex', 'ffmpeg', 'openssl'].map(name => [name, findExecutable(name)]))
+const commands = Object.fromEntries(['npm', 'codex', 'openssl'].map(name => [name, findExecutable(name)]))
 const env = {
   HOME: tmp,
   USERPROFILE: tmp,
@@ -31,7 +31,6 @@ const env = {
   TEMP: tmp,
   TMP: tmp,
   HONGGUO_NODE: process.execPath,
-  HONGGUO_FFMPEG: commands.ffmpeg,
   HONGGUO_CODEX: commands.codex,
   npm_config_cafile: join(tmp, 'registry.crt'),
   npm_config_cache: join(tmp, 'npm-cache'),
@@ -40,7 +39,7 @@ const env = {
   NODE_EXTRA_CA_CERTS: join(tmp, 'registry.crt'),
 }
 function run(bin, args) {
-  const r = spawnSync(commands[bin] || bin, args, { cwd: root, env, stdio: 'ignore', timeout: 120000, windowsHide: true })
+  const r = spawnSync(commands[bin] || bin, args, { cwd: root, env, stdio: 'ignore', timeout: bin === 'npm' ? 420000 : 120000, windowsHide: true })
   assert.equal(r.status, 0, '隔离安装步骤失败 ' + args.slice(0, 2).join(' '))
 }
 let child, registry
@@ -100,6 +99,7 @@ try {
   env.HONGGUO_DATA_DIR = defaultData
   run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
   run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'update', '--marketplace', npmMarket])
+  commands.ffmpeg = findExecutable('ffmpeg', undefined, { env, home: tmp })
   console.log('真实 npm exec/npx 安装入口、原生 npm 源下载、旧市场迁移与重复更新通过')
   child = spawn(commands.codex, ['app-server'], { cwd: root, env, stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true })
   const requests = new Map()
@@ -322,7 +322,7 @@ try {
     name: npmPackageName, version, previousVersion: folder.replace('codex-hongguo-', ''), sha256,
     platform: process.platform, arch: process.arch, windowsPreview: process.platform === 'win32',
     checkedAt: new Date().toISOString(),
-    checks: ['npx-setup', 'repeat-update', 'native-npm-source', 'offline-migration', 'progress-preserved', 'hook-review-required', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'uninstall-preserves-data'],
+    checks: ['npx-setup', 'repeat-update', 'native-npm-source', 'offline-migration', 'progress-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'uninstall-preserves-data'],
     mediaDecoded: process.argv.includes('--playback'), desktopPlaybackObserved: false,
   }, null, 2) + '\n')
 } finally {

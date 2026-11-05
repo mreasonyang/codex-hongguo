@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import pkg from '../package.json' with { type: 'json' }
 import { findExecutable } from '../src/runtime/executables.mjs'
+import { ensureFfmpeg } from '../src/runtime/ffmpeg-runtime.mjs'
 
 const release = resolve('release')
 const trial = join(release, '桌面对话试用')
@@ -15,7 +16,7 @@ const server = join(plugin, 'dist/server/index.mjs')
 const hook = join(plugin, 'dist/hooks/write.mjs')
 accessSync(server)
 accessSync(hook)
-const ffmpeg = findExecutable('ffmpeg', process.env.HONGGUO_FFMPEG)
+const ffmpeg = await ensureFfmpeg()
 execFileSync(ffmpeg, ['-version'], { stdio: 'ignore', timeout: 3000 })
 const data = process.platform === 'darwin'
   ? join(homedir(), 'Library', 'Caches', 'CodexHongguoInlineTrial', pkg.version)

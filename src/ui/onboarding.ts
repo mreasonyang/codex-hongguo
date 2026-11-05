@@ -19,7 +19,7 @@ function render(data: Setup) {
   const rows: Array<[string, string, boolean]> = [
     ['Node', data.runtime, true],
     ['进度库', data.database ? '可写' : '不可用', data.database],
-    ['FFmpeg', data.ffmpeg ? '就绪' : '缺失', data.ffmpeg],
+    ['播放组件', data.ffmpeg ? '就绪' : '准备中', data.ffmpeg],
     ['回合联动', ready ? '已配置' : data.hooks.status === 'unknown' ? '待确认' : '待配置', ready],
   ]
   el('setupRows').replaceChildren(...rows.map(([name, value, ok]) => {
@@ -31,7 +31,7 @@ function render(data: Setup) {
     return row
   }))
   const help = !data.database ? '进度暂时无法保存，请检查红果的数据目录权限。'
-    : !data.ffmpeg ? '尚未找到 FFmpeg。安装后重启 Codex，再从「设置 → 使用指南」重新检查。'
+    : !data.ffmpeg ? '播放组件尚未就绪。请检查网络后点击「重新检查」，插件会自动准备。'
     : ready ? '回合联动已就绪。可在设置中配置任务开始自动播放和任务结束自动暂停。'
     : data.hooks.status === 'unknown' ? '暂时无法读取 Hooks 状态，请在宿主设置中核对。现在可以先手动观看。'
     : data.hooks.events.some(event => event.status === 'missing') ? '尚未发现完整的回合事件。请检查插件已启用，并在新的本地对话中重试。'

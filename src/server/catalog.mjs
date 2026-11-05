@@ -5,6 +5,7 @@ import { pipeline } from 'node:stream/promises'
 import { projectRoot } from './paths.mjs'
 import { PlayerError } from './errors.mjs'
 import { cdn, hasFfmpeg, MediaCache, runFfmpeg } from './media.mjs'
+import { ensureFfmpeg } from '../runtime/ffmpeg-runtime.mjs'
 
 import { PanelMedia } from './panel-media.mjs'
 
@@ -25,6 +26,14 @@ export class Catalog {
     this.coverLookups = new Map()
     this.episodePages = new Map()
     this.coverJobs = 0
+    void this.prepareMediaRuntime().catch(() => {})
+  }
+  prepareMediaRuntime() {
+    this.preparingRuntime ??= ensureFfmpeg().then(() => { this.ffmpeg = true }).catch(error => {
+      this.ffmpeg = false
+      throw error
+    }).finally(() => { this.preparingRuntime = null })
+    return this.preparingRuntime
   }
   async sdk() {
     this.client ??= import(pathToFileURL(join(projectRoot, 'dist/vendor/openhongguo/index.js')).href)
@@ -262,7 +271,10 @@ export class Catalog {
     return null
   }
   prepare(id, browser, retry) {
-    if (!this.ffmpeg) throw new PlayerError('红果整集需要 FFmpeg，请安装后重启播放器')
+    if (!this.ffmpeg) {
+      void this.prepareMediaRuntime().catch(() => {})
+      return { status: 'preparing' }
+    }
     this.cache ??= new MediaCache(this.store, (ep) => this.sdkCall('resolvePlayback', ep))
     const result = this.cache.prepare(id, retry)
     if (result.status !== 'ready') return result

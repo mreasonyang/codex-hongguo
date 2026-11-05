@@ -291,12 +291,14 @@ export class Service {
         return settings
       }
       case 'get_health':
+        if (!this.catalog.ffmpeg) void this.catalog.prepareMediaRuntime?.().catch(() => {})
         return {
           runtime: process.version,
           database: this.store.writable(),
           ffmpeg: this.catalog.ffmpeg,
         }
       case 'get_setup_status': {
+        if (!this.catalog.ffmpeg) void this.catalog.prepareMediaRuntime?.().catch(() => {})
         this.checkingHooks ??= this.checkHooks().finally(() => { this.checkingHooks = null })
         return {
           runtime: process.version,

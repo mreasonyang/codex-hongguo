@@ -28,13 +28,13 @@ jobs:
         run: npm install --global @openai/codex@0.157.1
       - name: Install Linux media tools
         if: runner.os == 'Linux'
-        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg openssl
+        run: sudo apt-get update -qq && sudo apt-get install -y openssl
       - name: Install macOS media tools
         if: runner.os == 'macOS'
-        run: brew install ffmpeg openssl@3
+        run: brew install openssl@3
       - name: Install Windows media tools
         if: runner.os == 'Windows'
-        run: choco install ffmpeg openssl.light --no-progress --yes
+        run: choco install openssl.light --no-progress --yes
       - name: Locate Windows OpenSSL
         if: runner.os == 'Windows'
         shell: pwsh

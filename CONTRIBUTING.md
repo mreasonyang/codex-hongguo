@@ -5,7 +5,7 @@
 ## 开发环境
 
 - Node.js >=22.16，包含 `node:sqlite`，并有 npm 可执行程序。
-- FFmpeg，建议 >=8；测试需要 H.264、HEVC、AAC 和 ALAC 相关编解码能力。
+- 播放组件由插件自动下载并校验，无需全局 FFmpeg。首次运行测试需要联网。
 - Codex CLI：需要 `plugin` 和 `app-server` 子命令及 npm 插件源支持。本机隔离验收与发布 workflow 使用 0.157.1；这不是对所有其他版本的兼容性保证。
 - Go >=1.25：构建时交叉编译 Windows x64 原生启动器，无 CGO；使用发行包不需要 Go。
 - OpenSSL：隔离安装脚本用它生成本地 HTTPS 测试仓库的临时证书。
@@ -87,13 +87,13 @@ npm run version:patch
 | --- | --- |
 | `HONGGUO_DATA_DIR` | 服务、Hooks、Setup：指定包含 SQLite、整集、面板分片和匿名设备档案的数据目录。 |
 | `HONGGUO_NODE` | `bin/run-node` / `run-node.exe`：指定 Node >=22.16 的绝对路径（Windows 需 x64）。它不改变 npx 自身使用的 Node。 |
-| `HONGGUO_FFMPEG` | 服务、安装检查、Setup：指定 FFmpeg 程序。 |
+| `HONGGUO_FFMPEG` | 高级覆盖项：指定 FFmpeg 可执行文件的绝对路径，省略时使用插件自动准备的组件。 |
 | `HONGGUO_CODEX` | 安装和 Setup：指定 Codex CLI。 |
 | `HONGGUO_PROFILE_PATH` | Catalog：指定匿名 SDK 设备档案位置。 |
 
 覆盖项必须在实际启动服务、Hook 或 Setup 的进程环境中可见。只在运行 npx 的终端里设置，不代表桌面宿主或其子进程继承了这些值；安装器不会把它们写进发布包。
 
-构建后可运行 `node bin/codex-hongguo.mjs --help` 查看命令，`doctor` 输出环境与 Hook 检查元数据。检查与安装相关的 `--dry-run` 仍会检查 Node、npm、Codex 和 FFmpeg。Hook 检查严格匹配执行检查的副本；从源码、解压目录或 npx 缓存运行 `doctor` 得到 `unknown`，不代表宿主安装副本的 Hooks 未信任，应从插件详情页运行 Setup。
+构建后可运行 `node bin/codex-hongguo.mjs --help` 查看命令，`doctor` 输出环境与 Hook 检查元数据。检查与安装相关的 `--dry-run` 仍会检查 Node、npm 和 Codex，但不会下载播放组件。Hook 检查严格匹配执行检查的副本；从源码、解压目录或 npx 缓存运行 `doctor` 得到 `unknown`，不代表宿主安装副本的 Hooks 未信任，应从插件详情页运行 Setup。
 
 需要桌面调试项目时，先打包，再运行 `node scripts/prepare-inline-trial.mjs`，从 Codex 打开生成的 `release/桌面对话试用`。这个项目使用独立数据目录和项目 Hooks，并在该项目内禁用全局红果实例；首次仍需审查项目 Hooks。
 

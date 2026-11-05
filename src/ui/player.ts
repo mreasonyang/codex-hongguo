@@ -977,7 +977,7 @@ el('health').onclick = async () => {
     const rows: Array<[string, string, boolean]> = [
       ['Node', h.runtime, true],
       ['进度库', h.database ? '可写' : '不可用', h.database],
-      ['FFmpeg', h.ffmpeg ? '就绪' : '缺失', h.ffmpeg],
+      ['播放组件', h.ffmpeg ? '就绪' : '准备中', h.ffmpeg],
     ]
     box.replaceChildren(
       ...rows.map(([name, value, ok]) => {

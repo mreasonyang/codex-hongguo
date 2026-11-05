@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { findExecutable } from '../runtime/executables.mjs'
+import { ensureFfmpeg, isFfmpegReady } from '../runtime/ffmpeg-runtime.mjs'
 import { createWriteStream, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -63,9 +64,10 @@ export async function cdn(url, budget, timeout, redirects = 0, range) {
 }
 export const ffmpeg = findExecutable('ffmpeg', process.env.HONGGUO_FFMPEG)
 export function hasFfmpeg() {
-  return spawnSync(ffmpeg, ['-version'], { stdio: 'ignore', timeout: 2500, windowsHide: true }).status === 0
+  return isFfmpegReady()
 }
-export function runFfmpeg(args, input = null, capture = false, cwd = undefined) {
+export async function runFfmpeg(args, input = null, capture = false, cwd = undefined) {
+  await ensureFfmpeg()
   return new Promise((resolve, reject) => {
     const child = spawn(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-nostdin', ...args], {
       cwd,
