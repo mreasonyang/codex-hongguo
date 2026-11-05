@@ -88,7 +88,7 @@ test('global playback switches default for older settings, synchronize across ch
   f.store.preferences()
   f.store.db.prepare('INSERT OR REPLACE INTO player_preferences VALUES(1,?)').run(JSON.stringify({ autoPrompt: false }))
   assert.equal(f.peer.preferences().autoPauseOnFinish, true)
-  assert.equal(f.peer.preferences().autoPlayOnStart, false)
+  assert.equal(f.peer.preferences().autoPlayOnStart, true)
   await f.settings({ autoPauseOnFinish: false, autoPlayOnStart: true })
   const snapshot = await f.service.call(f.panel, 'get_run_state', { observeSession: true })
   assert.equal(snapshot.preferences.autoPauseOnFinish, false)
@@ -99,6 +99,10 @@ test('global playback switches default for older settings, synchronize across ch
     assert.equal(reopened.preferences().autoPlayOnStart, true)
     assert.equal(reopened.preferences().autoPrompt, false)
   } finally { reopened.close() }
+  await f.settings({ autoPlayOnStart: false })
+  const explicitlyDisabled = new Store(f.store.root)
+  try { assert.equal(explicitlyDisabled.preferences().autoPlayOnStart, false) }
+  finally { explicitlyDisabled.close() }
   await assert.rejects(f.settings({ autoPlayOnStart: 'yes' }), /参数无效/)
 })
 
@@ -107,13 +111,13 @@ test('the two settings controls load and save through the player form', async t 
   f.event('one'); await f.poll()
   f.elements.get('prefs').onclick()
   assert.equal(f.elements.get('autoPauseOnFinish').checked, true)
-  assert.equal(f.elements.get('autoPlayOnStart').checked, false)
+  assert.equal(f.elements.get('autoPlayOnStart').checked, true)
   f.elements.get('autoPauseOnFinish').checked = false
-  f.elements.get('autoPlayOnStart').checked = true
+  f.elements.get('autoPlayOnStart').checked = false
   f.elements.get('settings').onsubmit({ preventDefault() {} })
   await flush()
   assert.equal(f.peer.preferences().autoPauseOnFinish, false)
-  assert.equal(f.peer.preferences().autoPlayOnStart, true)
+  assert.equal(f.peer.preferences().autoPlayOnStart, false)
   assert.equal(f.elements.get('settings').hidden, true)
 })
 
@@ -157,6 +161,7 @@ test('task-start autoplay requires a new owning turn and preserves manual pause 
 
 test('changing a global switch takes effect in an already-open player without replaying the current turn', async t => {
   const f = setup(t)
+  await f.settings({ autoPlayOnStart: false })
   f.event('one'); await f.poll()
   await f.settings({ autoPlayOnStart: true, autoPauseOnFinish: false })
   await f.poll()

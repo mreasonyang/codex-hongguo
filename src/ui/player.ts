@@ -68,7 +68,7 @@ let lastSave = 0,
   saved = Promise.resolve()
 
 let prefs: Preferences = {
-  autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: false,
+  autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
   searchTerms: ['总裁', '重生', '逆袭'],
 }
 let playback: 'idle' | 'playing' | 'finished' = 'idle'

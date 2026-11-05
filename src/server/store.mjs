@@ -65,7 +65,7 @@ export class Store {
     this.db.exec('CREATE TABLE IF NOT EXISTS player_preferences(id INTEGER PRIMARY KEY, body TEXT NOT NULL)')
     const row = this.db.prepare('SELECT body FROM player_preferences WHERE id=1').get()
     const defaults = {
-      autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: false,
+      autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
       searchTerms: ['总裁', '重生', '逆袭'],
     }
     return row ? { ...defaults, ...JSON.parse(row.body) } : defaults
