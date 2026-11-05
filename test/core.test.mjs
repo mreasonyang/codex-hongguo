@@ -284,7 +284,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   })
   assert.equal(data.isError, true)
   const resources = (await client.listResources()).resources
-  const playerUri = 'ui://hongguo/v13/player', waitingUri = 'ui://hongguo/v13/waiting'
+  const playerUri = 'ui://hongguo/v14/player', waitingUri = 'ui://hongguo/v14/waiting'
   assert.equal(tools.find(t => t.name === 'show_waiting_picks')._meta.ui.resourceUri, waitingUri)
   assert.equal(tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri, playerUri)
   assert.deepEqual(resources.map(r => r.uri).sort(), [playerUri, waitingUri])
@@ -301,6 +301,8 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
     assert.equal(read._meta['openai/widgetShowCodexWidgetInline'], uri.endsWith('/waiting') ? true : undefined)
   }
   const widget = (await client.readResource({ uri: waitingUri })).contents[0]
+  assert.equal(widget._meta['openai/widgetHeightHint'], 96)
+  assert.equal(widget._meta['openai/widgetMinFrameHeight'], 1)
   assert.doesNotMatch(widget.text, /id="mode"|Switch to manual playback to watch/)
   assert.deepEqual(widget._meta['openai/ui'], { availableDisplayModes: ['inline', 'fullscreen'], preferredDisplayMode: 'inline' })
   assert.match(widget.text, /<html[^>]*data-surface="waiting"/)

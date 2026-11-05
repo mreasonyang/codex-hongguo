@@ -1,6 +1,6 @@
 {
   "name": "codex-hongguo",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "description": "在 Codex 会话侧栏观看红果短剧，回合停止时保存进度。",
   "hooks": "./hooks/hooks.json",
   "skills": "./skills/",

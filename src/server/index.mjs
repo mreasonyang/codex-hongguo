@@ -23,7 +23,7 @@ const catalog = new Catalog(store),
 const browser = new BrowserServer(service)
 service.pair = (scope) => browser.pair(scope)
 const server = new McpServer({ name: 'codex-hongguo', version: pkg.version })
-const uri = 'ui://hongguo/v13/player', waitingUri = 'ui://hongguo/v13/waiting',
+const uri = 'ui://hongguo/v14/player', waitingUri = 'ui://hongguo/v14/waiting',
   mimeType = 'text/html;profile=mcp-app'
 const ui = { visibility: ['app'] }
 // Both resources can become the player. hls.js attaches its in-memory MediaSource via a blob URL.
@@ -34,6 +34,8 @@ for (const [resourceUri, name] of [[uri, '红果短剧'], [waitingUri, '等待�
     ...scopeMeta,
     // Codex controls whether the conversation shows the titles separately from the display mode.
     'openai/widgetShowCodexWidgetInline': true,
+    'openai/widgetHeightHint': 96,
+    'openai/widgetMinFrameHeight': 1,
     'openai/ui': { availableDisplayModes: ['inline', 'fullscreen'], preferredDisplayMode: 'inline' },
   } : scopeMeta
   const read = (requested) => {
@@ -43,7 +45,7 @@ for (const [resourceUri, name] of [[uri, '红果短剧'], [waitingUri, '等待�
   }
   server.registerResource(name, resourceUri, { mimeType, _meta: meta }, read)
   // Older conversations can reopen their original URI without advertising a second entry.
-  for (const prefix of ['ui://hongguo/', 'ui://hongguo/v2/', 'ui://hongguo/v3/', 'ui://hongguo/v4/', 'ui://hongguo/v5/', 'ui://hongguo/v6/', 'ui://hongguo/v7/', 'ui://hongguo/v8/', 'ui://hongguo/v9/', 'ui://hongguo/v10/', 'ui://hongguo/v11/', 'ui://hongguo/v12/']) {
+  for (const prefix of ['ui://hongguo/', 'ui://hongguo/v2/', 'ui://hongguo/v3/', 'ui://hongguo/v4/', 'ui://hongguo/v5/', 'ui://hongguo/v6/', 'ui://hongguo/v7/', 'ui://hongguo/v8/', 'ui://hongguo/v9/', 'ui://hongguo/v10/', 'ui://hongguo/v11/', 'ui://hongguo/v12/', 'ui://hongguo/v13/']) {
     const oldUri = prefix + (waiting ? 'waiting' : 'player')
     if (oldUri === resourceUri) continue
     const legacy = new ResourceTemplate(oldUri, { list: undefined })

@@ -1,4 +1,5 @@
 import { App, applyDocumentTheme, applyHostStyleVariables } from '@modelcontextprotocol/ext-apps'
+import { trackInlineSize } from './inline-size'
 import pkg from '../../package.json' with { type: 'json' }
 export type Context = {
   identified: boolean
@@ -20,8 +21,10 @@ export type State = {
   preferences?: Preferences
 }
 export const browser = document.documentElement.dataset.host === 'browser'
+const waitingSurface = document.documentElement.dataset.surface === 'waiting'
 let panel = ''
-const app = browser ? null : new App({ name: '红果短剧', version: pkg.version }, {}, { autoResize: true })
+const app = browser ? null : new App({ name: '红果短剧', version: pkg.version }, {}, { autoResize: !waitingSurface })
+let inlineSizing: ReturnType<typeof trackInlineSize> | undefined
 export const hostLocale = () => app?.getHostContext()?.locale || navigator.language
 export const displayMode = () => app?.getHostContext()?.displayMode
 export async function requestPlayerTab() {
@@ -49,15 +52,24 @@ export async function connect(ready: (c: Context) => void, teardown: () => Promi
     ready({ identified: !!r.structuredContent?.identified || !!waitingTurn, waitingTurn })
   }
   app!.onteardown = async () => {
+    inlineSizing?.dispose()
     await teardown()
     return {}
   }
   app!.onhostcontextchanged = (ctx) => {
     syncHostLook(ctx)
-    if (ctx.displayMode !== undefined) modeChanged()
+    if (ctx.displayMode !== undefined) {
+      modeChanged()
+      inlineSizing?.refresh()
+    }
   }
   await app!.connect()
   syncHostLook(app!.getHostContext())
+  if (waitingSurface) inlineSizing = trackInlineSize(
+    document.getElementById('waitingCard')!,
+    () => (displayMode() || 'inline') === 'inline',
+    height => { void app!.sendSizeChanged({ height }).catch(() => {}) },
+  )
   modeChanged()
 }
 export async function call<T>(name: string, args: Record<string, unknown> = {}, timeout = 15000): Promise<T> {
