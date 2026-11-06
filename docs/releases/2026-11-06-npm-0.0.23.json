@@ -1,0 +1,70 @@
+{
+  "name": "@kyun.si/codex-hongguo",
+  "version": "0.0.23",
+  "url": "https://www.npmjs.com/package/@kyun.si/codex-hongguo",
+  "sourceCommit": "7b0208ffc717e56228a9c22f6ddef9e98e3bae0b",
+  "sha256": "4394c494419c5854e1988d59c315c43c7102861e6b54c28761360ffdbf726c22",
+  "integrity": "sha512-/qxKmPCnf3JPoo2qPlmVfJXTAggZs6Jr5Xpx7gUu7o/sAH6ZujBfEskf5S6IwjBggizBlApJL1X1AyTvHFg/Tw==",
+  "size": 13060436,
+  "publishedAt": "2026-11-06T01:55:34.950Z",
+  "verifiedAt": "2026-11-06T02:01:38.879Z",
+  "verificationStatus": "passed-on-macos-arm64",
+  "tests": {
+    "total": 84,
+    "passed": 81,
+    "skipped": 3
+  },
+  "linuxArm64ComponentTests": {
+    "total": 19,
+    "passed": 19,
+    "failed": 0
+  },
+  "installation": "fresh; no previous-version compatibility acceptance",
+  "checks": [
+    "build",
+    "registry-integrity",
+    "full-local-tests",
+    "linux-arm64-component-tests",
+    "npx-setup",
+    "fresh-install",
+    "repeat-setup",
+    "native-npm-source",
+    "progress-preserved",
+    "managed-ffmpeg-without-system-install",
+    "hook-review-required",
+    "launcher-stdin",
+    "hook-stop",
+    "hook-interrupt",
+    "host-mcp",
+    "live-catalog",
+    "npx-uninstall",
+    "uninstall-dry-run",
+    "repeat-uninstall",
+    "uninstall-without-media-runtime",
+    "uninstall-cleans-component-directory-and-partial-downloads",
+    "uninstall-preserves-external-executables",
+    "uninstall-preserves-data-and-video-caches",
+    "anonymous-public-npx-latest-version",
+    "anonymous-public-npx-uninstall",
+    "public-uninstall-dry-run",
+    "public-repeat-uninstall"
+  ],
+  "managedComponentCleanup": "Entire plugin-exclusive component namespace, including corrupt executables, missing receipts, unknown versions and partial downloads. Symlinks are removed without deleting external targets.",
+  "preserved": [
+    "external executables",
+    "viewing progress",
+    "settings",
+    "video caches",
+    "custom runtime cache root"
+  ],
+  "systemFfmpegUsed": false,
+  "fixtureMediaDecoded": true,
+  "realEpisodeMediaDecoded": false,
+  "desktopPlaybackObserved": false,
+  "ci": {
+    "url": "https://github.com/mreasonyang/codex-hongguo/actions/runs/42146639273",
+    "macos": "passed",
+    "linux": "passed",
+    "windowsPreview": "in_progress_at_verification"
+  }
+}

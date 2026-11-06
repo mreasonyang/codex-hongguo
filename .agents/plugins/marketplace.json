@@ -9,7 +9,7 @@
       "source": {
         "source": "npm",
         "package": "@kyun.si/codex-hongguo",
-        "version": "0.0.22"
+        "version": "0.0.23"
       },
       "policy": {
         "installation": "AVAILABLE",
