@@ -1,0 +1,41 @@
+name: Windows uninstall regression
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-uninstall:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            arch: x64
+          - os: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          architecture: ${{ matrix.arch }}
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - run: npm ci
+      - name: Install pinned Codex CLI for isolated native uninstall
+        run: npm install --global @openai/codex@0.157.1
+      - name: Confirm native Node architecture
+        env:
+          HONGGUO_EXPECT_ARCH: ${{ matrix.arch }}
+        run: node -e "if(process.arch!==process.env.HONGGUO_EXPECT_ARCH)process.exit(1);console.log('Node architecture:',process.arch)"
+      - name: Build native launchers and plugin runtime
+        run: npm run build
+      - name: Verify uninstall ordering, safe diagnostics and data protection
+        run: node --test --test-timeout=120000 test/uninstall.test.mjs test/uninstall-data.test.mjs
+      - name: Verify running uninstall, root-only market deregistration and repeated uninstall without Git
+        run: node --test --test-timeout=180000 test/windows-uninstall.test.mjs

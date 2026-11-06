@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { realpathSync } from 'node:fs'
 import { dataRoot } from '../server/paths.mjs'
 import { marketplace, packageVersion } from '../runtime/distribution.mjs'
 
@@ -9,8 +10,16 @@ export const managedMarketplaceRoot = resolve(dataRoot(), 'managed-marketplace')
 // new registration path, so upgrades refresh the host's marketplace snapshot.
 export const defaultSource = join(managedMarketplaceRoot, packageVersion)
 
-export function isManagedMarketplace(source) {
-  return typeof source === 'string' && /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(relative(managedMarketplaceRoot, resolve(source)))
+export function marketplaceSource(registration) {
+  const source = registration?.marketplaceSource?.source
+  return typeof source === 'string' && source.length ? source : registration?.root
+}
+
+export function isManagedMarketplace(source, managedRoot = managedMarketplaceRoot) {
+  if (typeof source !== 'string') return false
+  const version = /^\d{1,3}\.\d{1,3}\.\d{1,3}$/
+  if (version.test(relative(managedRoot, resolve(source)))) return true
+  try { return version.test(relative(realpathSync.native(managedRoot), realpathSync.native(source))) } catch { return false }
 }
 
 export async function prepareLocalMarketplace() {

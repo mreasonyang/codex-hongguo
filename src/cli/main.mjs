@@ -4,8 +4,9 @@ import { prepareRuntime, findExecutable, spawnSync } from '../runtime/executable
 import { hookAuthorizationHint } from '../server/setup.mjs'
 import { ensureFfmpeg, removeManagedFfmpeg } from '../runtime/ffmpeg-runtime.mjs'
 import { removeUserData } from '../runtime/uninstall-data.mjs'
+import { assertWindowsPluginIdle } from '../runtime/windows-processes.mjs'
 import { marketplaceName } from '../runtime/distribution.mjs'
-import { defaultSource, prepareLocalMarketplace, isManagedMarketplace } from './local-marketplace.mjs'
+import { defaultSource, prepareLocalMarketplace, isManagedMarketplace, marketplaceSource } from './local-marketplace.mjs'
 
 export { marketplaceName, defaultSource }
 export const pluginId = 'codex-hongguo@' + marketplaceName
@@ -15,9 +16,44 @@ export function codexRunner(command, env = process.env) {
   return args => {
     const result = spawnSync(command, [...args, '--json'], { env, encoding: 'utf8', timeout: 120000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 })
     // Host diagnostics may contain credentials. Only return parsed protocol data and fixed errors.
-    if (result.status !== 0) throw Error('Codex 步骤失败：' + args.slice(0, 3).join(' ') + '。请在 Codex 插件设置中检查状态后重试。')
+    if (result.status !== 0) {
+      if (args[0] === 'plugin' && args[1] === 'remove') {
+        const occupied = /os error 5|access is denied|permission denied|拒绝访问|EBUSY|EPERM|being used by another process/i.test((result.stderr || '') + '\n' + (result.stdout || ''))
+        const error = Error(occupied
+          ? '无法删除红果插件缓存：文件仍被占用或权限不足。请关闭红果播放器及使用该插件的 Codex 会话，再重新运行 uninstall；尚未清理观看数据。'
+          : '红果插件卸载失败，尚未清理观看数据。请关闭红果播放器及使用该插件的 Codex 会话，检查缓存目录权限后重试。')
+        error.code = occupied ? 'PLUGIN_CACHE_IN_USE' : 'PLUGIN_REMOVE_FAILED'
+        throw error
+      }
+      const text = (result.stderr || '') + '\n' + (result.stdout || '')
+      const reason = /no such file|does not exist|cannot find|not found/i.test(text) ? 'not_found' : /access is denied|os error 5|permission denied/i.test(text) ? 'access_denied' : /git/i.test(text) ? 'git' : 'unknown'
+      throw Object.assign(Error('Codex 步骤失败：' + args.slice(0, 3).join(' ') + '。请在 Codex 插件设置中检查状态后重试。'), { diagnostic: { step: args.slice(0, 3).join(' '), reason, status: result.status } })
+    }
     try { return JSON.parse(result.stdout) } catch { throw Error('Codex 返回了无法识别的结果，请更新 Codex 后重试。') }
   }
+}
+
+export async function uninstall({ run, assertIdle = assertWindowsPluginIdle, removeFfmpeg = removeManagedFfmpeg, removeData = removeUserData, managedRoot }) {
+  await assertIdle()
+  const registrations = run(['plugin', 'marketplace', 'list']).marketplaces
+  if (!Array.isArray(registrations)) throw Error('无法确认插件市场状态，请更新 Codex 后重试。')
+  const registered = registrations.find(row => row.name === marketplaceName)
+  const source = marketplaceSource(registered)
+  if (registered && (typeof source !== 'string' || !source.length)) throw Error('无法确认红果市场的位置，尚未清理数据。请更新 Codex CLI 后重新运行 uninstall。')
+  const installed = run(['plugin', 'list', '--marketplace', marketplaceName]).installed
+  if (!Array.isArray(installed)) throw Error('无法确认插件安装状态，请更新 Codex 后重试。')
+  if (installed.some(plugin => plugin.pluginId === pluginId)) run(['plugin', 'remove', pluginId])
+  if (registered && isManagedMarketplace(source, managedRoot)) {
+    run(['plugin', 'marketplace', 'remove', marketplaceName])
+    const remaining = run(['plugin', 'marketplace', 'list']).marketplaces
+    if (!Array.isArray(remaining) || remaining.some(row => row.name === marketplaceName))
+      throw Error('红果市场尚未注销，已保留本地数据。请重新运行 uninstall。')
+  }
+  const failures = []
+  for (const cleanup of [removeFfmpeg, removeData]) {
+    try { await cleanup() } catch (error) { failures.push(error.message) }
+  }
+  if (failures.length) throw Error(failures.join('\n'))
 }
 
 export function validateSource(source) {
@@ -34,7 +70,7 @@ export function install({ run, source = defaultSource, dryRun = false, log = con
     return
   }
   const existing = run(['plugin', 'marketplace', 'list']).marketplaces?.find(row => row.name === marketplaceName)
-  const previous = existing?.marketplaceSource?.source
+  const previous = marketplaceSource(existing)
   const replacing = !!existing && canonicalSource(previous) !== canonicalSource(source)
   // Migrate Git/ZIP/older managed indexes under one ID, retaining the old source
   // until the new plugin installs so rollback never clears viewing progress.
@@ -104,20 +140,7 @@ export async function main(argv = process.argv.slice(2)) {
       if (dryRun) console.log('将卸载 ' + pluginId + '，删除播放组件、观看进度、设置、视频缓存和设备档案。')
       else {
         const run = codexRunner(codex)
-        const registrations = run(['plugin', 'marketplace', 'list']).marketplaces
-        if (!Array.isArray(registrations)) throw Error('无法确认插件市场状态，请更新 Codex 后重试。')
-        const registered = registrations.find(row => row.name === marketplaceName)
-        if (registered) {
-          const installed = run(['plugin', 'list', '--marketplace', marketplaceName]).installed
-          if (!Array.isArray(installed)) throw Error('无法确认插件安装状态，请更新 Codex 后重试。')
-          if (installed.some(plugin => plugin.pluginId === pluginId)) run(['plugin', 'remove', pluginId])
-          if (isManagedMarketplace(registered.marketplaceSource?.source)) run(['plugin', 'marketplace', 'remove', marketplaceName])
-        }
-        const failures = []
-        for (const cleanup of [removeManagedFfmpeg, removeUserData]) {
-          try { await cleanup() } catch (error) { failures.push(error.message) }
-        }
-        if (failures.length) throw Error(failures.join('\n'))
+        await uninstall({ run })
         console.log('红果短剧已卸载，播放组件、观看进度、设置、视频缓存和设备档案已删除。请打开新聊天。')
       }
       return
