@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { prepareRuntime, findExecutable, spawnSync } from '../runtime/executables.mjs'
 import { inspectHooks } from '../server/setup.mjs'
-import { ensureFfmpeg } from '../runtime/ffmpeg-runtime.mjs'
+import { ensureFfmpeg, removeManagedFfmpeg } from '../runtime/ffmpeg-runtime.mjs'
 
 export const marketplaceName = 'hongguo-local'
 export const pluginId = 'codex-hongguo@' + marketplaceName
@@ -92,10 +92,12 @@ export async function main(argv = process.argv.slice(2)) {
         throw Error('未找到可运行的 ' + name + '。安装后重新运行 ' + action + '；已有插件与观看进度保持原样。')
     }
     if (action === 'uninstall') {
-      if (dryRun) console.log('将卸载 ' + pluginId + '，保留观看进度、设置和本地缓存。')
+      if (dryRun) console.log('将卸载 ' + pluginId + ' 并清理可确认归属的播放组件，保留观看进度、设置和视频缓存。')
       else {
         codexRunner(codex)(['plugin', 'remove', pluginId])
-        console.log('红果短剧已卸载，观看进度、设置和本地缓存已保留。请打开新聊天。')
+        const cleaned = await removeManagedFfmpeg()
+        console.log('红果短剧已卸载，已清理 ' + cleaned.removed + ' 个本插件下载的播放组件；观看进度、设置和视频缓存已保留。请打开新聊天。')
+        if (cleaned.retained) console.log('部分播放组件无法确认归属或暂时无法清理，已保留。')
       }
       return
     }

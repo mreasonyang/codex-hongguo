@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { mkdir, lstat, open, readFile, writeFile, rename, rm, chmod, stat } from 'node:fs/promises'
-import { lstatSync } from 'node:fs'
+import { mkdir, lstat, open, readFile, writeFile, rename, rm, chmod, stat, readdir, unlink, rmdir, realpath } from 'node:fs/promises'
+import { lstatSync, constants } from 'node:fs'
 import { homedir } from 'node:os'
 import { posix, win32 } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -10,6 +10,7 @@ import xz from 'xz-decompress'
 import artifacts from './ffmpeg-artifacts.json' with { type: 'json' }
 
 const verified = new Map(), pending = new Map()
+const runtimeOwner = '@kyun.si/codex-hongguo'
 const failure = () => Error('播放组件自动准备失败，请检查网络和缓存目录权限后重试安装。')
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -22,13 +23,16 @@ function settings(options = {}) {
   }
   const artifact = (options.artifacts || artifacts)[platform + '-' + arch]
   if (!artifact) throw Error('当前系统架构暂不支持自动准备播放组件。')
-  const cache = env.HONGGUO_RUNTIME_DIR || (platform === 'darwin'
+  const cache = cacheDirectory({ env, home, platform, paths })
+  const directory = paths.join(cache, 'runtime', 'ffmpeg', artifact.archiveSha256.slice(0, 16), platform + '-' + arch)
+  return { ...options, env, platform, artifact, directory, target: paths.join(directory, platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg') }
+}
+function cacheDirectory({ env, home, platform, paths }) {
+  return env.HONGGUO_RUNTIME_DIR || (platform === 'darwin'
     ? paths.join(home, 'Library', 'Caches', 'CodexHongguo')
     : platform === 'win32'
       ? paths.join(env.LOCALAPPDATA || paths.join(home, 'AppData', 'Local'), 'CodexHongguo', 'Cache')
       : paths.join(env.XDG_CACHE_HOME || paths.join(home, '.cache'), 'codex-hongguo'))
-  const directory = paths.join(cache, 'runtime', 'ffmpeg', artifact.archiveSha256.slice(0, 16), platform + '-' + arch)
-  return { ...options, env, platform, artifact, directory, target: paths.join(directory, platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg') }
 }
 
 export function ffmpegPath(options) { return settings(options).target }
@@ -153,6 +157,89 @@ export async function ensureFfmpeg(options = {}) {
   pending.set(config.target, operation)
   return operation
 }
+
+async function plainDirectory(path, paths) {
+  for (let current = path; ; current = paths.dirname(current)) {
+    const info = await lstat(current)
+    if (!info.isDirectory() || info.isSymbolicLink()) return false
+    if (paths.dirname(current) === current) return true
+  }
+}
+const sameFile = (a, b) => b.isFile() && !b.isSymbolicLink() && ['dev', 'ino', 'size', 'mtimeMs', 'ctimeMs'].every(key => a[key] === b[key])
+
+// Remove only known, receipt-backed components. Never execute a binary or recursively delete a cache directory.
+export async function removeManagedFfmpeg(options = {}) {
+  const { env = process.env, home = homedir(), platform = process.platform } = options
+  const paths = platform === 'win32' ? win32 : posix
+  const cache = cacheDirectory({ env, home, platform, paths })
+  const result = { removed: 0, retained: 0 }
+  if (!paths.isAbsolute(cache)) return { ...result, retained: 1 }
+  const root = paths.join(cache, 'runtime', 'ffmpeg')
+  const normalize = path => platform === 'win32' ? paths.resolve(path).toLowerCase() : paths.resolve(path)
+  const protectedTargets = new Set()
+  if (env.HONGGUO_FFMPEG) {
+    protectedTargets.add(normalize(env.HONGGUO_FFMPEG))
+    try { protectedTargets.add(normalize(await realpath(env.HONGGUO_FFMPEG))) } catch { /* An unavailable override must not block uninstall. */ }
+  }
+  let groups
+  try {
+    if (!await plainDirectory(root, paths)) return { ...result, retained: 1 }
+    groups = await readdir(root, { withFileTypes: true })
+  } catch (error) { return error.code === 'ENOENT' ? result : { ...result, retained: 1 } }
+  const known = Object.entries(options.artifacts || artifacts)
+  for (const group of groups) {
+    if (!/^[a-f0-9]{16}$/.test(group.name)) continue
+    const groupPath = paths.join(root, group.name)
+    const candidates = known.filter(([, artifact]) => artifact.archiveSha256.slice(0, 16) === group.name)
+    if (!group.isDirectory() || group.isSymbolicLink() || !candidates.length) { result.retained++; continue }
+    let entries
+    try { entries = await readdir(groupPath, { withFileTypes: true }) } catch { result.retained++; continue }
+    const removedBeforeGroup = result.removed
+    for (const entry of entries) {
+      const artifact = candidates.find(([key]) => key === entry.name)?.[1]
+      if (!artifact || !entry.isDirectory() || entry.isSymbolicLink()) { result.retained++; continue }
+      const directory = paths.join(groupPath, entry.name), lock = directory + '.lock'
+      const target = paths.join(directory, entry.name.startsWith('win32-') ? 'ffmpeg.exe' : 'ffmpeg')
+      if (protectedTargets.has(normalize(target))) { result.retained++; continue }
+      let locked = false, removed = false, binary, receiptFile
+      try {
+        if (!await plainDirectory(directory, paths)) throw Error('unowned directory')
+        await mkdir(lock, { mode: 0o700 }); locked = true
+        const binaryInfo = await lstat(target), receiptInfo = await lstat(target + '.json')
+        if (!binaryInfo.isFile() || binaryInfo.isSymbolicLink() || !receiptInfo.isFile() || receiptInfo.isSymbolicLink()) throw Error('invalid files')
+        const flags = constants.O_RDONLY | (constants.O_NOFOLLOW || 0)
+        binary = await open(target, flags)
+        receiptFile = await open(target + '.json', flags)
+        const before = await binary.stat(), receiptBefore = await receiptFile.stat()
+        if (!sameFile(binaryInfo, before) || !sameFile(receiptInfo, receiptBefore) || receiptBefore.size > 4096) throw Error('invalid files')
+        const receipt = JSON.parse(await receiptFile.readFile('utf8'))
+        if (receipt.owner !== runtimeOwner || receipt.schema !== 1 || receipt.archiveSha256 !== artifact.archiveSha256 || receipt.version !== artifact.version || !/^[a-f0-9]{64}$/.test(receipt.binarySha256)) throw Error('unowned receipt')
+        if (before.size <= 0 || before.size > 256 * 1024 * 1024 || before.size !== receipt.binaryBytes || (artifact.binaryBytes && before.size !== artifact.binaryBytes)) throw Error('invalid binary size')
+        const hash = createHash('sha256')
+        for await (const bytes of binary.createReadStream({ autoClose: false })) hash.update(bytes)
+        const binaryHash = hash.digest('hex')
+        if (binaryHash !== receipt.binarySha256 || (artifact.binarySha256 && binaryHash !== artifact.binarySha256)) throw Error('invalid binary digest')
+        if (!sameFile(before, await lstat(target)) || !sameFile(receiptBefore, await lstat(target + '.json')) || !await plainDirectory(directory, paths)) throw Error('files changed')
+        await binary.close(); binary = undefined
+        await receiptFile.close(); receiptFile = undefined
+        await unlink(target)
+        verified.delete(target)
+        await unlink(target + '.json')
+        result.removed++
+        removed = true
+      } catch { result.retained++ }
+      finally {
+        await binary?.close().catch(() => {})
+        await receiptFile?.close().catch(() => {})
+        if (locked) await rmdir(lock).catch(() => {})
+      }
+      if (removed) await rmdir(directory).catch(() => {})
+    }
+    if (result.removed > removedBeforeGroup) await rmdir(groupPath).catch(() => {})
+  }
+  if (result.removed) await rmdir(root).catch(() => {})
+  return result
+}
 async function install(config) {
   const { directory, target, artifact } = config
   const lock = directory + '.lock', deadline = Date.now() + 420000
@@ -179,7 +266,7 @@ async function install(config) {
     if (!probe(output, config)) throw failure()
     if (config.platform === 'win32') await rm(target, { force: true })
     await rename(output, target)
-    await writeFile(target + '.json', JSON.stringify({ archiveSha256: artifact.archiveSha256, binarySha256, binaryBytes: (await stat(target)).size, version: artifact.version }) + '\n', { mode: 0o600 })
+    await writeFile(target + '.json', JSON.stringify({ owner: runtimeOwner, schema: 1, archiveSha256: artifact.archiveSha256, binarySha256, binaryBytes: (await stat(target)).size, version: artifact.version }) + '\n', { mode: 0o600 })
     verified.set(target, signature(target))
     return target
   } catch { throw failure() }

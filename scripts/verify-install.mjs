@@ -1,5 +1,5 @@
 // Exercise the installed copy in a disposable CLI profile, including paths with spaces.
-import { mkdtemp, mkdir, rm, readFile, writeFile, access } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, readFile, writeFile, access, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fork } from 'node:child_process'
@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto'
 import { Store } from '../src/server/store.mjs'
 import { marketplace, npmPackageName } from './distribution.mjs'
 
-const tmp = await mkdtemp(join(tmpdir(), '红果 安装 '))
+const tmp = await realpath(await mkdtemp(join(tmpdir(), '红果 安装 ')))
 const root = join(tmp, '本地 市场'),
   profile = join(tmp, '独立配置')
 const npmMarket = join(tmp, 'npm 市场')
@@ -301,6 +301,7 @@ try {
   env.HONGGUO_FFMPEG = join(tmp, 'missing-ffmpeg')
   const uninstall = ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'uninstall']
   run('npm', [...uninstall, '--dry-run'])
+  await access(commands.ffmpeg)
   const installed = () => {
     const result = spawnSync(commands.codex, ['plugin', 'list', '--marketplace', 'hongguo-local', '--json'], { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 })
     assert.equal(result.status, 0, '无法检查隔离插件注册')
@@ -310,8 +311,9 @@ try {
   run('npm', uninstall)
   assert.equal(installed(), false, 'npx 卸载后插件不应仍在已安装列表中')
   assert.equal(await readFile(cachedMedia, 'utf8'), 'uninstall-cache-sentinel')
-  await access(commands.ffmpeg)
-  console.log('npx 卸载及预览通过；播放组件不可用不影响卸载，缓存已保留')
+  await assert.rejects(access(commands.ffmpeg), 'npx 卸载后应清理本插件下载的 FFmpeg')
+  await assert.rejects(access(commands.ffmpeg + '.json'), '应同时清理已验证的安装回执')
+  console.log('npx 卸载及预览通过；已清理本插件下载的播放组件，视频缓存已保留')
   const progress = new Store(defaultData)
   try {
     assert.equal(progress.history().find(row => row.seriesId === 'hg-987654321').positionMs, 12345)
@@ -324,7 +326,7 @@ try {
     name: npmPackageName, version, installation: 'fresh', sha256,
     platform: process.platform, arch: process.arch, windowsPreview: process.platform === 'win32',
     checkedAt: new Date().toISOString(),
-    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'progress-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'npx-uninstall', 'uninstall-dry-run', 'uninstall-without-media-runtime', 'uninstall-preserves-data-and-caches'],
+    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'progress-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'npx-uninstall', 'uninstall-dry-run', 'uninstall-without-media-runtime', 'uninstall-cleans-managed-ffmpeg', 'uninstall-preserves-data-and-video-caches'],
     mediaDecoded: process.argv.includes('--playback'), desktopPlaybackObserved: false,
   }, null, 2) + '\n')
 } finally {
