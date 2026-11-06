@@ -37,6 +37,10 @@ export class Store {
         session_id TEXT NOT NULL, turn_id TEXT NOT NULL, PRIMARY KEY(session_id,turn_id));
       CREATE TABLE IF NOT EXISTS recommendation_feed (
         id INTEGER PRIMARY KEY CHECK(id=1), items TEXT NOT NULL, updated_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS catalog_cache (
+        key TEXT PRIMARY KEY, value TEXT, updated_at INTEGER NOT NULL DEFAULT 0,
+        retry_at INTEGER NOT NULL DEFAULT 0, failures INTEGER NOT NULL DEFAULT 0,
+        lease_owner TEXT, lease_until INTEGER NOT NULL DEFAULT 0, touched_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS turn_picks (
         session_id TEXT NOT NULL, turn_id TEXT NOT NULL, items TEXT NOT NULL,
         reserved_at INTEGER, shown INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(session_id,turn_id));
@@ -82,8 +86,10 @@ export class Store {
       const previous = this.preferences()
       const updated = { ...previous, ...settings }
       this.db.prepare('INSERT OR REPLACE INTO player_preferences VALUES(1,?)').run(JSON.stringify(updated))
-      if (JSON.stringify(previous.searchTerms) !== JSON.stringify(updated.searchTerms))
+      if (JSON.stringify(previous.searchTerms) !== JSON.stringify(updated.searchTerms)) {
         this.db.exec('DELETE FROM recommendation_feed')
+        this.db.exec("DELETE FROM catalog_cache WHERE key LIKE 'feed:%'")
+      }
       return updated
     })
   }
@@ -165,10 +171,60 @@ export class Store {
     if (row && !includeExpired && row.updated_at <= Date.now() - 15 * 60000) return []
     return row ? JSON.parse(row.items) : []
   }
-  saveWaitingFeed(rows) {
+  catalogCache(key) {
+    const row = this.db.prepare('SELECT * FROM catalog_cache WHERE key=?').get(key)
+    if (!row) return null
+    let value
+    try { if (row.value !== null) value = JSON.parse(row.value) } catch { /* Reload invalid metadata. */ }
+    return { value, updatedAt: row.updated_at, retryAt: row.retry_at, failures: row.failures,
+      owner: row.lease_owner, leaseUntil: row.lease_until }
+  }
+  claimCatalogCache(key, owner, now, ttl, lease) {
+    return this.transaction(() => {
+      this.db.prepare('INSERT OR IGNORE INTO catalog_cache(key,touched_at) VALUES(?,?)').run(key, now)
+      const claimed = this.db.prepare(`UPDATE catalog_cache SET lease_owner=?,lease_until=?,touched_at=?
+        WHERE key=? AND lease_until<=? AND retry_at<=?
+        AND (value IS NULL OR json_valid(value)=0 OR updated_at<=? OR updated_at>?)`)
+        .run(owner, now + lease, now, key, now, now, now - ttl, now).changes === 1
+      if (claimed) this.pruneCatalogCache(key, now)
+      return claimed
+    })
+  }
+  renewCatalogCache(key, owner, now, lease) {
+    return this.db.prepare('UPDATE catalog_cache SET lease_until=? WHERE key=? AND lease_owner=? AND lease_until>?')
+      .run(now + lease, key, owner, now).changes === 1
+  }
+  completeCatalogCache(key, owner, value, now, feed = false) {
+    return this.transaction(() => {
+      const saved = this.db.prepare(`UPDATE catalog_cache SET value=?,updated_at=?,retry_at=0,failures=0,
+        lease_owner=NULL,lease_until=0,touched_at=? WHERE key=? AND lease_owner=? AND lease_until>?`)
+        .run(JSON.stringify(value), now, now, key, owner, now).changes === 1
+      if (saved && feed) this.saveWaitingFeed(value.titles, now)
+      if (saved) this.pruneCatalogCache(key, now)
+      return saved
+    })
+  }
+  failCatalogCache(key, owner, now) {
+    return this.transaction(() => {
+      const row = this.db.prepare('SELECT failures FROM catalog_cache WHERE key=? AND lease_owner=? AND lease_until>?')
+        .get(key, owner, now)
+      if (!row) return false
+      const failures = row.failures + 1
+      const delay = Math.min(15 * 60000, 30000 * 2 ** Math.min(failures - 1, 5))
+      this.db.prepare(`UPDATE catalog_cache SET failures=?,retry_at=?,lease_owner=NULL,lease_until=0,touched_at=? WHERE key=?`)
+        .run(failures, now + delay, now, key)
+      return true
+    })
+  }
+  pruneCatalogCache(keep, now) {
+    this.db.prepare(`DELETE FROM catalog_cache WHERE key IN (
+      SELECT key FROM catalog_cache WHERE key<>? AND lease_until<=? ORDER BY touched_at DESC,key LIMIT -1 OFFSET 127)`)
+      .run(keep, now)
+  }
+  saveWaitingFeed(rows, now = Date.now()) {
     const items = rankedTitles(rows)
     if (items.length) this.db.prepare('INSERT OR REPLACE INTO recommendation_feed VALUES(1,?,?)')
-      .run(JSON.stringify(items), Date.now())
+      .run(JSON.stringify(items), now)
     return items
   }
   turnPicks(sessionId, turnId) {

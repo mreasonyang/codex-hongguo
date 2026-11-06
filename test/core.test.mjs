@@ -481,15 +481,23 @@ test('search posters reuse known covers and lazily resolve missing details once 
   assert.equal(details, 1); assert.equal(downloads, 1)
 })
 
-test('an empty provider feed can be retried immediately and a provider failure never becomes a local show', async (t) => {
+test('empty or failed provider feeds cool down before retrying and never become a local show', async (t) => {
   const { store } = setup(t)
   const catalog = new Catalog(store)
+  let now = 1000000
+  catalog.metadata.now = () => now
   t.mock.method(catalog, 'sdkCall', async () => ({ items: [] }))
-  assert.deepEqual((await catalog.list()).items, [])
+  await assert.rejects(catalog.list(), { status: 503 })
+  const requests = catalog.sdkCall.mock.callCount()
+  await assert.rejects(catalog.list(), { status: 503 })
+  assert.equal(catalog.sdkCall.mock.callCount(), requests)
+  now = store.db.prepare('SELECT retry_at FROM catalog_cache').get().retry_at
   catalog.sdkCall.mock.mockImplementation(async () => {
     throw Error('provider unavailable')
   })
-  await assert.rejects(catalog.list(), /provider unavailable/)
+  await assert.rejects(catalog.list(), { status: 503 })
+  assert.deepEqual(store.waitingFeed(true), [])
+  now = store.db.prepare('SELECT retry_at FROM catalog_cache').get().retry_at
   catalog.sdkCall.mock.mockImplementation(async () => ({ items: [{ id: '17', title: '返回的剧名' }] }))
   assert.deepEqual((await catalog.list()).items.map((s) => s.id), ['hg-17'])
 })

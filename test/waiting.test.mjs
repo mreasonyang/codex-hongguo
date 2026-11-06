@@ -209,7 +209,11 @@ test('cold cards share multi-page discovery and cache ranked public titles acros
   assert.deepEqual(await next.waitingRecommendations(), expected)
   store.db.exec('UPDATE recommendation_feed SET updated_at=0')
   assert.deepEqual(peer.waitingFeed(), [])
-  assert.deepEqual((await next.list({ preview: true })).items, expected)
+  const warmPreview = (await next.list({ preview: true })).items
+  assert.equal(warmPreview.length, 28)
+  assert.equal(warmPreview[0].id, 'hg-2')
+  assert.equal(warmPreview[0].hasCover, true)
+  assert.deepEqual(peer.waitingFeed(true), expected)
 })
 
 test('only first display advances rotation, shared across chats and pinned across remounts and feed changes', async t => {

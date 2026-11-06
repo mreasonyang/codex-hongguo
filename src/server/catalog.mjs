@@ -6,6 +6,8 @@ import { projectRoot } from './paths.mjs'
 import { PlayerError } from './errors.mjs'
 import { cdn, hasFfmpeg, MediaCache, runFfmpeg } from './media.mjs'
 import { ensureFfmpeg } from '../runtime/ffmpeg-runtime.mjs'
+import { createHash } from 'node:crypto'
+import { SharedCatalogCache } from './catalog-cache.mjs'
 
 import { PanelMedia } from './panel-media.mjs'
 
@@ -24,7 +26,8 @@ export class Catalog {
     this.ffmpeg = hasFfmpeg()
     this.covers = new Map()
     this.coverLookups = new Map()
-    this.episodePages = new Map()
+    this.metadata = new SharedCatalogCache(store)
+    this.firstPages = new Map()
     this.coverJobs = 0
     void this.prepareMediaRuntime().catch(() => {})
   }
@@ -68,46 +71,49 @@ export class Catalog {
     return { items: this.rows(page, true), cursor: page.has_more ? page.cursor || null : null }
   }
   async recommendations(preview = false) {
-    if (preview) {
-      const cached = this.feed?.items ?? this.store.waitingFeed(true)
-      if (cached.length) return cached
-    }
-    if (this.feed && Date.now() - this.feed.at < 15 * 60000) return this.feed.items
-    if (!this.refresh) {
+    const terms = this.store.preferences().searchTerms
+    const key = 'feed:' + createHash('sha256').update(JSON.stringify(terms)).digest('hex')
+    const cached = this.store.catalogCache(key)?.value
+    const titles = preview && !cached ? this.store.waitingFeed(true) : []
+    const refresh = this.metadata.get(key, async () => {
       const firstPage = Promise.withResolvers()
-      this.firstPage = firstPage.promise
-      const job = this.collectFeed(firstPage.resolve)
-        .then((rows) => {
-          const covered = rows.filter(row => row.hasCover)
-          const items = (covered.length >= 12 ? covered : rows).slice(0, 48)
-          if (rows.length && this.refresh === job) {
-            const titles = this.store.saveWaitingFeed(rows)
-            this.feed = { items, titles, at: Date.now() }
-          }
-          return items
-        })
-        .finally(() => {
-          if (this.refresh === job) {
-            this.refresh = null
-            this.firstPage = null
-          }
-        })
-      this.refresh = job
+      this.firstPages.set(key, firstPage.promise)
+      try {
+        const rows = await this.collectFeed(firstPage.resolve, terms)
+        if (!rows.length) throw new PlayerError('红果片源暂时不可达，请稍后重试', 503)
+        const covered = rows.filter(row => row.hasCover)
+        return { items: (covered.length >= 12 ? covered : rows).slice(0, 48),
+          titles: rows.map(({ id, title }) => ({ id, title })),
+          covers: rows.flatMap(({ id }) => this.covers.get(id)?.url ? [[id, this.covers.get(id).url]] : []) }
+      } finally { this.firstPages.delete(key) }
+    }, { feed: true }).then(value => this.feedItems(value))
+    if (preview && (cached || titles.length)) {
+      void refresh.catch(() => {})
+      return cached ? this.feedItems(cached) : titles
     }
-    return preview ? Promise.race([this.firstPage, this.refresh]) : this.refresh
+    const first = this.firstPages.get(key)
+    return preview && first ? Promise.race([first, refresh]) : refresh
+  }
+  feedItems(value) {
+    for (const [id, url] of value.covers) {
+      if (this.covers.get(id)?.url !== url) this.covers.set(id, { url })
+    }
+    while (this.covers.size > 160) this.covers.delete(this.covers.keys().next().value)
+    return value.items
   }
   async waitingRecommendations() {
     const cached = this.store.waitingFeed()
     if (cached.length) return cached
+    const previous = this.store.waitingFeed(true)
     const refresh = this.recommendations()
-    if (this.feed) {
+    if (previous.length) {
       void refresh.catch(() => {})
-      return this.feed.titles
+      return previous
     }
     await refresh
-    return this.feed?.titles ?? []
+    return this.store.waitingFeed(true)
   }
-  async collectFeed(onFirstPage) {
+  async collectFeed(onFirstPage, terms = this.store.preferences().searchTerms) {
     const rows = new Map(),
       seen = new Set()
     const merge = (page) => {
@@ -129,7 +135,7 @@ export class Catalog {
         break
       }
     }
-    for (const term of this.store.preferences().searchTerms) {
+    for (const term of terms) {
       if (rows.size >= 24) break
       try {
         merge(await this.sdkCall('search', term, { filters: ['content_type_short_play'] }))
@@ -220,19 +226,9 @@ export class Catalog {
     return { cover: entry.cover }
   }
   async episodes({ seriesId, cursor }) {
-    const key = JSON.stringify([seriesId, cursor])
-    const cached = this.episodePages.get(key)
-    if (cached && Date.now() - cached.at < 15 * 60000) return cached.page
-    const page = this.loadEpisodes(seriesId, cursor)
-    this.episodePages.delete(key)
-    this.episodePages.set(key, { at: Date.now(), page })
-    if (this.episodePages.size > 64) this.episodePages.delete(this.episodePages.keys().next().value)
-    try {
-      return await page
-    } catch (error) {
-      if (this.episodePages.get(key)?.page === page) this.episodePages.delete(key)
-      throw error
-    }
+    const key = 'episodes:' + JSON.stringify([seriesId, cursor ?? null])
+    const page = await this.metadata.get(key, () => this.loadEpisodes(seriesId, cursor))
+    return { ...page, items: page.items.map(ep => ({ ...ep, playable: ep.playable && this.ffmpeg })) }
   }
   async loadEpisodes(seriesId, cursor) {
     const page = await this.sdkCall('listEpisodes', seriesId.slice(3), { cursor, pageSize: 120 })
@@ -244,7 +240,7 @@ export class Catalog {
           number: ep.number,
           label: ep.title || '第 ' + ep.number + ' 集',
           codec: '',
-          playable: ep.playable !== false && this.ffmpeg,
+          playable: ep.playable !== false,
         })),
       cursor: page.has_more ? page.cursor || null : null,
     }

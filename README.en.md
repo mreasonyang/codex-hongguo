@@ -98,7 +98,7 @@ The default user data directories below are removed automatically during uninsta
 | macOS | `~/Library/Application Support/CodexHongguo/` |
 | Linux | `codex-hongguo` under `XDG_DATA_HOME` (defaults to `~/.local/share/codex-hongguo/`) |
 
-Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn state, recommendation rotation and settings. `media/` holds prepared full episodes, capped at 40 episodes and 1 GiB with protection for active files. `panel-media/` contains temporary panel fragments with separate cleanup; its size is outside that 1 GiB limit. `device/` holds the upstream SDK's anonymous device profile. Raw hook payloads, prompts and assistant replies are not written to disk. Third-party runtime dependency notices are under `licenses/` in the plugin root.
+Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn state, recommendation rotation, catalog and episode metadata, refresh state and settings. `media/` holds prepared full episodes, capped at 40 episodes and 1 GiB with protection for active files. `panel-media/` contains temporary panel fragments with separate cleanup; its size is outside that 1 GiB limit. `device/` holds the upstream SDK's anonymous device profile. Raw hook payloads, prompts and assistant replies are not written to disk. Third-party runtime dependency notices are under `licenses/` in the plugin root.
 
 ## Features & Limitations
 
@@ -106,7 +106,7 @@ Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn s
 | --- | --- |
 | Host scope | Supports only Codex Desktop conversations running on the local executor; does not support cloud/remote executors or other host applications. |
 | Content source & streams | Connects to the Hongguo catalog only (no multi-provider source switcher); when an episode offers multiple streams, the player selects a playable stream automatically without a manual quality selector. |
-| Recommendations & search | Catalog browsing and search rely on the anonymous upstream SDK; the home view prioritizes unwatched shows in batches of up to 12 (cached for 15 minutes) and falls back to configurable search keywords when recommendations are sparse. |
+| Recommendations & search | Catalog browsing and search rely on the anonymous upstream SDK; the home view prioritizes unwatched shows in batches of up to 12 (recommendations and episode pages share a persistent 15-minute cache across chats, serve stale data while refreshing, and back off after failures) and falls back to configurable search keywords when recommendations are sparse. |
 | Anonymous rate-limit recovery | When an anonymous device is rejected or streams come back empty, the SDK performs bounded retries and device resets before surfacing the failure reason with a retry action. |
 | Progress persistence | Saves playback position locally every ~5 seconds while playing, as well as on pause, seek, episode change, or panel hide. |
 | Turn linkage & autoplay | Task-start autoplay and task-end automatic pausing both default to on; see Global playback settings above. Autoplay next is enabled by default and remembers changes. |
