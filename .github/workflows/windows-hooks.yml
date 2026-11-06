@@ -34,4 +34,29 @@ jobs:
       - name: Build native launchers and hook program
         run: npm run build
       - name: Verify hooks through CMD and both PowerShell versions
-        run: node --test --test-timeout=120000 test/windows.test.mjs test/windows-hooks-shell.test.mjs
+        run: node --test --test-timeout=120000 test/windows-hooks-shell.test.mjs
+      - name: Verify a single Node process per hook
+        run: node --test --test-timeout=120000 --test-name-pattern="Windows turn-start hook" test/windows.test.mjs
+  baseline-mcp:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: b5ab142
+          path: baseline
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          architecture: x64
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - run: npm ci
+        working-directory: baseline
+      - run: npm run build
+        working-directory: baseline
+      - name: Identify whether MCP shutdown failure predates this patch
+        run: node scripts/check-windows-mcp-baseline.mjs baseline
