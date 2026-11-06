@@ -36,12 +36,23 @@ test('native updates keep the same marketplace registration and dry-run never in
   install({ run(args) {
     calls.push(args)
     return args[2] === 'list' ? { marketplaces: [{ name: 'hongguo-local', marketplaceSource: { sourceType: 'git', source: 'https://github.com/' + defaultSource + '.git' } }] } : {}
-  }, update: true, log() {} })
+  }, log() {} })
   assert.ok(!calls.some(args => args.includes('remove')))
   assert.ok(calls.some(args => args[2] === 'upgrade'))
   assert.deepEqual(calls.at(-1), ['plugin', 'add', pluginId])
   install({ run() { assert.fail('dry-run must not touch Codex') }, dryRun: true, log() {} })
   assert.throws(() => install({ run() { assert.fail() }, source: 'https://user:password@example.test/private' }), /只接受/)
+})
+
+test('setup also refreshes a registered Git marketplace before installing, so reinstall cannot use a stale index', () => {
+  let refreshed=false
+  install({ run(args) {
+    if (args[2]==='list') return {marketplaces:[{name:'hongguo-local',marketplaceSource:{sourceType:'git',source:defaultSource}}]}
+    if (args[2]==='upgrade') refreshed=true
+    if (args[1]==='add') assert.equal(refreshed,true,'plugin add must use a refreshed marketplace snapshot')
+    return {}
+  },log(){} })
+  assert.equal(refreshed,true)
 })
 
 test('launcher works from another directory with a minimal GUI PATH and preserves hook stdin', t => {

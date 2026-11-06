@@ -25,7 +25,7 @@ export function validateSource(source) {
   throw Error('--marketplace 只接受 owner/repo 或现有本地市场目录。')
 }
 
-export function install({ run, source = defaultSource, update = false, dryRun = false, log = console.log }) {
+export function install({ run, source = defaultSource, dryRun = false, log = console.log }) {
   validateSource(source)
   if (dryRun) {
     log('将使用 Codex 原生市场安装 ' + pluginId + '；市场来源：' + source)
@@ -39,7 +39,7 @@ export function install({ run, source = defaultSource, update = false, dryRun = 
   if (replacing) run(['plugin', 'marketplace', 'remove', marketplaceName])
   try {
     run(['plugin', 'marketplace', 'add', source])
-    if (update && !replacing && existing?.marketplaceSource?.sourceType === 'git') run(['plugin', 'marketplace', 'upgrade', marketplaceName])
+    if (!replacing && existing?.marketplaceSource?.sourceType === 'git') run(['plugin', 'marketplace', 'upgrade', marketplaceName])
     run(['plugin', 'add', pluginId])
   } catch (error) {
     if (replacing && previous) {
@@ -112,7 +112,7 @@ export async function main(argv = process.argv.slice(2)) {
       console.log('正在准备播放组件，首次使用需要联网下载…')
       await ensureFfmpeg()
     }
-    install({ run: codexRunner(codex), source, update: action === 'update', dryRun })
+    install({ run: codexRunner(codex), source, dryRun })
     if (!dryRun) {
       console.log('回合联动需要手动授权：打开 Codex 设置 → Hooks → 红果短剧，审查、信任并启用 UserPromptSubmit、Stop、Interrupt。')
       const hooks = await inspectHooks({ command: codex, installedId: pluginId })

@@ -12,7 +12,7 @@ npx @kyun.si/codex-hongguo@latest update
 npx @kyun.si/codex-hongguo@latest uninstall
 ```
 
-命令检查 Node、npm 和 Codex CLI，自动准备播放组件，再通过 Codex 原生市场安装插件。Git 仓库的 `.agents/plugins/marketplace.json` 指向 npm 的确定版本；CLI 沿用 `codex-hongguo@hongguo-local` 标识。`setup` 注册来源并安装，`update` 对已经登记的同一 Git 来源先刷新市场，再安装。
+命令检查 Node、npm 和 Codex CLI，自动准备播放组件，再通过 Codex 原生市场安装插件。Git 仓库的 `.agents/plugins/marketplace.json` 指向 npm 的确定版本；CLI 沿用 `codex-hongguo@hongguo-local` 标识。`setup` 和 `update` 均会注册来源，对已经登记的同一 Git 来源先刷新市场，再安装，避免重装时沿用旧索引。
 
 两个命令均支持 `--dry-run` 和 `--marketplace owner/repo|本地目录`。预览仍会检查依赖，但不调用 Codex 修改注册。来源参数只接受仓库 slug 或现有本地目录。后续操作省略该参数时会选择默认 GitHub 来源，因此自定义和离线来源每次都应显式提供。
 
