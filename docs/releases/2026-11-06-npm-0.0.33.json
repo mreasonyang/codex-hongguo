@@ -1,0 +1,58 @@
+{
+  "name": "@kyun.si/codex-hongguo",
+  "version": "0.0.33",
+  "sourceCommit": "097c9bd783dbe37bb6e7b1694b8101d0155f800f",
+  "sha256": "81d503b8548cfc244d7d7c683c9377b3b05fb121d3d722f7395ad75f58a37572",
+  "installationChecks": [
+    "npx-setup",
+    "fresh-install",
+    "repeat-setup",
+    "native-npm-source",
+    "progress-preserved",
+    "managed-ffmpeg-without-system-install",
+    "hook-review-required",
+    "installation-trust-instructions",
+    "minimal-player-ui",
+    "launcher-stdin",
+    "hook-stop",
+    "hook-interrupt",
+    "host-mcp",
+    "live-catalog",
+    "npx-uninstall",
+    "uninstall-dry-run",
+    "repeat-uninstall",
+    "uninstall-without-media-runtime",
+    "uninstall-cleans-component-directory-and-partial-downloads",
+    "uninstall-preserves-external-executables",
+    "uninstall-deletes-all-local-data"
+  ],
+  "qualification": {
+    "runId": 42212480355,
+    "url": "https://github.com/mreasonyang/codex-hongguo/actions/runs/42212480355",
+    "conclusion": "success",
+    "platforms": [
+      "macos",
+      "linux",
+      "windows-x64"
+    ]
+  },
+  "windowsUninstallQualification": {
+    "runId": 42212475367,
+    "url": "https://github.com/mreasonyang/codex-hongguo/actions/runs/42212475367",
+    "conclusion": "success",
+    "architectures": [
+      "x64",
+      "arm64"
+    ]
+  },
+  "defaultInstallationRequiresGit": false,
+  "preflightTerminatesProcesses": false,
+  "desktopPlaybackObserved": false,
+  "integrity": "sha512-5xgJRR3j6eABMIky8UYlHs8hK75b3i5MYqZc/17ogjjuzesQmLpK6Yy17AdRNYTVsKYWPeoakxs2kcwUwaWEqQ==",
+  "publishedAt": "2026-11-06T11:55:08.266Z",
+  "publicationConfirmedAt": "2026-11-06T12:00:36.336Z",
+  "publicationMethod": "local npm web authentication; one-time authorization completed by user",
+  "latestVerified": true,
+  "publicTarballMatches": true,
+  "url": "https://www.npmjs.com/package/@kyun.si/codex-hongguo/v/0.0.33"
+}

@@ -2,7 +2,7 @@
 
 ## 版本与范围
 
-- 复现问题的 npm 版本为 `0.0.32`。整理补丁时确认，现有 `main` 已因独立的图标更新升至源码版本 `0.0.33`；本次保留该版本号，未执行 npm 发布。
+- 复现问题的 npm 版本为 `0.0.32`。整理补丁时确认，现有 `main` 已因独立的图标更新升至源码版本 `0.0.33`；本次保留该版本号并发布 npm，公网版本与安装包完整性已核实。
 - 补丁基于 `main` 的 `8abe684`，保留默认本机 npm 市场索引、不依赖 Git 的设计。
 - 按用户确认的方案，卸载器只做运行检测，不自动结束进程。
 
@@ -22,7 +22,9 @@ npm run build
 node --test --test-timeout=30000 test/uninstall.test.mjs test/uninstall-data.test.mjs test/distribution.test.mjs test/setup.test.mjs
 ```
 
-原生 Windows x64 与 Windows 11 ARM64 均通过隔离测试，使用各自原生 Node.js 24、Go 1.25 和固定 Codex CLI `0.157.1`。实际执行的源码提交为 `b243afd5a6f9b4ff411fe0eb118a3ccfeb1ca394`，结果见 [GitHub Actions 42209848875](https://github.com/mreasonyang/codex-hongguo/actions/runs/42209848875)。测试代码和运行时代码在整理独立 workflow 时未修改。
+发布源码提交为 `097c9bd783dbe37bb6e7b1694b8101d0155f800f`。macOS、Linux、Windows 的完整回归、打包及隔离 npm 安装均通过，结果见 [三平台发布验收](https://github.com/mreasonyang/codex-hongguo/actions/runs/42212480355)。
+
+原生 Windows x64 与 Windows 11 ARM64 均通过卸载专项隔离测试，使用各自原生 Node.js 24、Go 1.25 和固定 Codex CLI `0.157.1`，结果见 [Windows 卸载回归](https://github.com/mreasonyang/codex-hongguo/actions/runs/42212475367)。回归包含精简安装环境中的空闲检测；隔离环境保留 Windows PowerShell 所需的系统变量，HOME、npm、Codex 配置与观看数据仍位于临时目录。
 
 覆盖内容：
 
