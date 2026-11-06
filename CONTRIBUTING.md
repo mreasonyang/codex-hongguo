@@ -28,7 +28,7 @@ npm run verify:install
 | `npm run build` | 校验版本与前端类型，打包 MCP、Hooks、Setup、CLI，复制上游 SDK/WASM，并内联生成播放器 HTML。 |
 | `npm test` | 先构建，再运行 `test/*.test.mjs`；覆盖回合状态、推荐轮换、安装迁移和恢复、持久化、解密、转码与媒体传输。测试数量以当次输出为准。 |
 | `npm run package` | 生成完整 npm tgz、同产物离线 ZIP、待发布索引和包元数据。源码根目录的 package 保持 `private: true`，实际发布包单独生成。 |
-| `npm run verify:install` | 从空白配置安装原生 npm 源，验证真实 npm exec/npx 安装和重复安装、宿主工具与 UI 资源、片库/分集、进度保留、待信任 Hooks、npx 卸载及预览、清理已确认归属的播放组件、保留观看数据和视频缓存；成功后写入绑定 tgz 哈希的回执。需要联网。 |
+| `npm run verify:install` | 从空白配置安装原生 npm 源，验证真实 npm exec/npx 安装和重复安装、宿主工具与 UI 资源、片库/分集、进度保留、待信任 Hooks、npx 卸载及预览、损坏组件与残片清理、重复卸载、保留观看数据和视频缓存；成功后写入绑定 tgz 哈希的回执。需要联网。 |
 
 安装验证从空白配置开始，不验证旧版兼容。额外验证真实分集解码时运行：
 
@@ -88,6 +88,7 @@ npm run version:patch
 | `HONGGUO_DATA_DIR` | 服务、Hooks、Setup：指定包含 SQLite、整集、面板分片和匿名设备档案的数据目录。 |
 | `HONGGUO_NODE` | `bin/run-node` / `run-node.exe`：指定 Node >=22.16 的绝对路径（Windows 需 x64）。它不改变 npx 自身使用的 Node。 |
 | `HONGGUO_FFMPEG` | 高级覆盖项：指定 FFmpeg 可执行文件的绝对路径，省略时使用插件自动准备的组件。 |
+| `HONGGUO_RUNTIME_DIR` | 指定播放组件缓存根目录，插件使用其下的 `codex-hongguo/` 专属命名空间。 |
 | `HONGGUO_CODEX` | 安装和 Setup：指定 Codex CLI。 |
 | `HONGGUO_PROFILE_PATH` | Catalog：指定匿名 SDK 设备档案位置。 |
 
@@ -95,7 +96,7 @@ npm run version:patch
 
 构建后可运行 `node bin/codex-hongguo.mjs --help` 查看命令，`doctor` 输出环境与 Hook 检查元数据。检查与安装相关的 `--dry-run` 仍会检查 Node、npm 和 Codex，但不会下载播放组件。Hook 检查严格匹配执行检查的副本；从源码、解压目录或 npx 缓存运行 `doctor` 得到 `unknown`，不代表宿主安装副本的 Hooks 未信任，应从插件详情页运行 Setup。
 
-`uninstall [--dry-run]` 只检查 Node 和 Codex，不依赖播放组件或 npm 可执行程序；调用原生插件移除后，按专用目录、带 owner/schema 的安装回执、组件清单和实际文件校验清理 FFmpeg。保留市场注册、观看进度、设置和视频缓存，不跟随符号链接，不递归删除缓存目录。无法确认归属或暂时无法清理的组件保留并提示。
+`uninstall [--dry-run]` 只检查 Node 和 Codex，不依赖播放组件或 npm 可执行程序；移除插件后清理整个组件专属目录，包括损坏文件、历史版本和下载残片。保留市场注册、观看进度、设置和视频缓存，不跟随符号链接，不删除自定义缓存根目录。清理失败时返回失败，重复运行可重试清理。自定义缓存位置使用 `<HONGGUO_RUNTIME_DIR>/codex-hongguo/` 命名空间。
 
 需要桌面调试项目时，先打包，再运行 `node scripts/prepare-inline-trial.mjs`，从 Codex 打开生成的 `release/桌面对话试用`。这个项目使用独立数据目录和项目 Hooks，并在该项目内禁用全局红果实例；首次仍需审查项目 Hooks。
 

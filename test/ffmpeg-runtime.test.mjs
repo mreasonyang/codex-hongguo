@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, writeFile, rm, readdir, realpath, mkdir, symlink, lstat } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile, rm, readdir, realpath, mkdir, symlink, lstat, rename } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { createHash } from 'node:crypto'
@@ -29,7 +29,7 @@ test('a cold installation downloads once, verifies bytes, and remains usable wit
   assert.deepEqual(await readFile(first), f.binary)
   assert.equal(isFfmpegReady(options), true)
   await ensureFfmpeg({ ...options, fetchImpl: () => assert.fail('a warm cache must not use the network') })
-  assert.deepEqual(await readdir(f.directory), ['runtime'])
+  assert.deepEqual(await readdir(f.directory), ['codex-hongguo'])
   await assert.rejects(readFile(join(f.directory, 'escape')), { code: 'ENOENT' })
 })
 
@@ -97,72 +97,67 @@ test('independent plugin processes share one atomic cold installation', async t 
   assert.deepEqual(await readFile(ffmpegPath(f.options)), f.binary)
 })
 
-test('uninstall removes verified managed binaries while preserving the custom cache root and unrelated files', async t => {
+test('uninstall clears the whole component namespace and preserves external executables and the custom cache root', async t => {
   const f = await fixture(t)
   const target = await ensureFfmpeg({ ...f.options, fetchImpl: async () => new Response(f.archive) })
+  const root = join(f.directory, 'codex-hongguo', 'runtime', 'ffmpeg')
   await writeFile(join(f.directory, 'user-file'), 'keep')
-  await writeFile(join(dirname(target), 'user-file'), 'keep')
+  await writeFile(join(f.directory, 'external-ffmpeg'), 'external executable')
+  await mkdir(join(f.directory, 'runtime', 'ffmpeg'), { recursive: true })
+  await writeFile(join(f.directory, 'runtime', 'ffmpeg', 'other-app'), 'keep')
+  await writeFile(join(dirname(target), 'unfinished.archive'), 'partial')
   const result = await removeManagedFfmpeg({ ...f.options, env: { ...f.options.env, HONGGUO_FFMPEG: join(f.directory, 'external-ffmpeg') }, probe: () => assert.fail('uninstall must not execute media'), fetchImpl: () => assert.fail('uninstall must not download') })
   assert.equal(result.removed, 1)
   assert.equal(isFfmpegReady(f.options), false)
-  await assert.rejects(lstat(target), { code: 'ENOENT' })
-  await assert.rejects(lstat(target + '.json'), { code: 'ENOENT' })
+  await assert.rejects(lstat(root), { code: 'ENOENT' })
   assert.equal(await readFile(join(f.directory, 'user-file'), 'utf8'), 'keep')
-  assert.equal(await readFile(join(dirname(target), 'user-file'), 'utf8'), 'keep')
+  assert.equal(await readFile(join(f.directory, 'external-ffmpeg'), 'utf8'), 'external executable')
+  assert.equal(await readFile(join(f.directory, 'runtime', 'ffmpeg', 'other-app'), 'utf8'), 'keep')
   assert.equal((await removeManagedFfmpeg(f.options)).removed, 0)
 })
 
-test('uninstall preserves overridden, modified, unknown, locked and unowned components', async t => {
-  for (const reason of ['override', 'modified', 'unknown', 'locked', 'unowned', 'receipt-mismatch']) {
+test('uninstall leaves no corrupt binary, unknown version, installation lock or missing receipt inside its namespace', async t => {
+  for (const reason of ['modified', 'unknown', 'locked', 'missing-receipt', 'receipt-mismatch']) {
     await t.test(reason, async t => {
       const f = await fixture(t)
-      let target = await ensureFfmpeg({ ...f.options, fetchImpl: async () => new Response(f.archive) })
-      const options = { ...f.options }
-      if (reason === 'override') options.env = { ...options.env, HONGGUO_FFMPEG: target }
+      const target = await ensureFfmpeg({ ...f.options, fetchImpl: async () => new Response(f.archive) })
+      const root = join(f.directory, 'codex-hongguo', 'runtime', 'ffmpeg')
       if (reason === 'modified') await writeFile(target, 'other-binary')
-      if (reason === 'unknown') options.artifacts = {}
+      if (reason === 'unknown') { await mkdir(join(root, 'old-version')); await writeFile(join(root, 'old-version', 'ffmpeg'), 'old component') }
       if (reason === 'locked') await mkdir(dirname(target) + '.lock')
-      if (reason === 'unowned') await writeFile(target + '.json', '{}')
-      if (reason === 'receipt-mismatch') {
-        const receipt = JSON.parse(await readFile(target + '.json', 'utf8'))
-        await writeFile(target + '.json', JSON.stringify({ ...receipt, archiveSha256: '0'.repeat(64) }))
-      }
-      const result = await removeManagedFfmpeg(options)
-      assert.equal(result.removed, 0)
-      assert.ok(result.retained > 0)
-      assert.equal((await lstat(target)).isFile(), true)
-      assert.equal((await lstat(target + '.json')).isFile(), true)
+      if (reason === 'missing-receipt') await rm(target + '.json')
+      if (reason === 'receipt-mismatch') await writeFile(target + '.json', '{}')
+      assert.equal((await removeManagedFfmpeg(f.options)).removed, 1)
+      await assert.rejects(lstat(root), { code: 'ENOENT' })
     })
   }
 })
 
-test('uninstall does not traverse symlinks in the managed directory, binary or receipt', { skip: process.platform === 'win32' }, async t => {
-  for (const item of ['directory', 'binary', 'receipt', 'ancestor']) {
+test('uninstall deletes links inside its namespace and leaves every external link target intact', { skip: process.platform === 'win32' }, async t => {
+  for (const item of ['root', 'directory', 'binary', 'receipt']) {
     await t.test(item, async t => {
       const f = await fixture(t)
       const target = await ensureFfmpeg({ ...f.options, fetchImpl: async () => new Response(f.archive) })
-      const source = item === 'directory' ? dirname(target) : item === 'binary' ? target : item === 'receipt' ? target + '.json' : join(f.directory, 'runtime')
-      const moved = source + '.external'
-      const { rename } = await import('node:fs/promises')
+      const root = join(f.directory, 'codex-hongguo', 'runtime', 'ffmpeg')
+      const source = item === 'root' ? root : item === 'directory' ? dirname(target) : item === 'binary' ? target : target + '.json'
+      const moved = join(f.directory, 'external-copy')
       await rename(source, moved)
       await symlink(moved, source)
-      const before = item === 'directory' ? await readFile(join(moved, 'ffmpeg')) : item === 'ancestor' ? await readFile(target.replace('runtime/', 'runtime.external/')) : await readFile(moved)
-      const result = await removeManagedFfmpeg(f.options)
-      assert.equal(result.removed, 0)
-      assert.ok(result.retained > 0)
-      assert.equal((await lstat(source)).isSymbolicLink(), true)
-      const after = item === 'directory' ? await readFile(join(moved, 'ffmpeg')) : item === 'ancestor' ? await readFile(target.replace('runtime/', 'runtime.external/')) : await readFile(moved)
-      assert.deepEqual(after, before)
+      const externalBinary = item === 'root' ? join(moved, f.artifact.archiveSha256.slice(0, 16), process.platform + '-' + process.arch, 'ffmpeg') : item === 'directory' ? join(moved, 'ffmpeg') : moved
+      const before = await readFile(externalBinary)
+      assert.equal((await removeManagedFfmpeg(f.options)).removed, 1)
+      await assert.rejects(lstat(root), { code: 'ENOENT' })
+      assert.deepEqual(await readFile(externalBinary), before)
     })
   }
 })
 
-test('an explicit executable override through a symlink protects the selected managed binary', { skip: process.platform === 'win32' }, async t => {
+test('a substituted ancestor outside the component namespace fails cleanup without touching the external tree', { skip: process.platform === 'win32' }, async t => {
   const f = await fixture(t)
   const target = await ensureFfmpeg({ ...f.options, fetchImpl: async () => new Response(f.archive) })
-  const override = join(f.directory, 'selected-ffmpeg')
-  await symlink(target, override)
-  const result = await removeManagedFfmpeg({ ...f.options, env: { ...f.options.env, HONGGUO_FFMPEG: override } })
-  assert.equal(result.removed, 0)
-  assert.deepEqual(await readFile(override), f.binary)
+  const parent = join(f.directory, 'codex-hongguo', 'runtime'), outside = join(f.directory, 'external-runtime')
+  await rename(parent, outside)
+  await symlink(outside, parent)
+  await assert.rejects(removeManagedFfmpeg(f.options), /清理失败/)
+  assert.deepEqual(await readFile(target), f.binary)
 })

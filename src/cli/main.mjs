@@ -92,12 +92,14 @@ export async function main(argv = process.argv.slice(2)) {
         throw Error('未找到可运行的 ' + name + '。安装后重新运行 ' + action + '；已有插件与观看进度保持原样。')
     }
     if (action === 'uninstall') {
-      if (dryRun) console.log('将卸载 ' + pluginId + ' 并清理可确认归属的播放组件，保留观看进度、设置和视频缓存。')
+      if (dryRun) console.log('将卸载 ' + pluginId + ' 并清理本插件的播放组件目录，保留观看进度、设置和视频缓存。')
       else {
-        codexRunner(codex)(['plugin', 'remove', pluginId])
-        const cleaned = await removeManagedFfmpeg()
-        console.log('红果短剧已卸载，已清理 ' + cleaned.removed + ' 个本插件下载的播放组件；观看进度、设置和视频缓存已保留。请打开新聊天。')
-        if (cleaned.retained) console.log('部分播放组件无法确认归属或暂时无法清理，已保留。')
+        const run = codexRunner(codex)
+        const installed = run(['plugin', 'list', '--marketplace', marketplaceName]).installed
+        if (!Array.isArray(installed)) throw Error('无法确认插件安装状态，请更新 Codex 后重试。')
+        if (installed.some(plugin => plugin.pluginId === pluginId)) run(['plugin', 'remove', pluginId])
+        await removeManagedFfmpeg()
+        console.log('红果短剧已卸载，播放组件目录已清理；观看进度、设置和视频缓存已保留。请打开新聊天。')
       }
       return
     }

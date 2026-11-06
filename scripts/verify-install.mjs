@@ -297,8 +297,9 @@ try {
   const cachedMedia = join(defaultData, 'media', 'uninstall-preserve.mp4')
   await mkdir(dirname(cachedMedia), { recursive: true })
   await writeFile(cachedMedia, 'uninstall-cache-sentinel')
-  // Removal must work even when the playback component is unavailable.
-  env.HONGGUO_FFMPEG = join(tmp, 'missing-ffmpeg')
+  // Removal must not execute or change an externally configured component.
+  env.HONGGUO_FFMPEG = join(tmp, 'external-ffmpeg')
+  await writeFile(env.HONGGUO_FFMPEG, 'external-executable-sentinel')
   const uninstall = ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'uninstall']
   run('npm', [...uninstall, '--dry-run'])
   await access(commands.ffmpeg)
@@ -308,12 +309,18 @@ try {
     return JSON.parse(result.stdout).installed.some(plugin => plugin.pluginId === 'codex-hongguo@hongguo-local')
   }
   assert.equal(installed(), true, '卸载预览不应移除插件')
+  const componentRoot = resolve(dirname(commands.ffmpeg), '../..')
+  await writeFile(commands.ffmpeg, 'broken-owned-component')
+  await rm(commands.ffmpeg + '.json')
+  await mkdir(join(componentRoot, 'old-version'), { recursive: true })
+  await writeFile(join(componentRoot, 'old-version', 'unfinished.archive'), 'partial download')
   run('npm', uninstall)
   assert.equal(installed(), false, 'npx 卸载后插件不应仍在已安装列表中')
   assert.equal(await readFile(cachedMedia, 'utf8'), 'uninstall-cache-sentinel')
-  await assert.rejects(access(commands.ffmpeg), 'npx 卸载后应清理本插件下载的 FFmpeg')
-  await assert.rejects(access(commands.ffmpeg + '.json'), '应同时清理已验证的安装回执')
-  console.log('npx 卸载及预览通过；已清理本插件下载的播放组件，视频缓存已保留')
+  await assert.rejects(access(componentRoot), '应清空组件专属目录，包括损坏文件、未知版本与下载残片')
+  assert.equal(await readFile(env.HONGGUO_FFMPEG, 'utf8'), 'external-executable-sentinel')
+  run('npm', uninstall)
+  console.log('npx 卸载、预览和重复卸载通过；组件目录及损坏文件、残片已清理，外部程序和视频缓存已保留')
   const progress = new Store(defaultData)
   try {
     assert.equal(progress.history().find(row => row.seriesId === 'hg-987654321').positionMs, 12345)
@@ -326,7 +333,7 @@ try {
     name: npmPackageName, version, installation: 'fresh', sha256,
     platform: process.platform, arch: process.arch, windowsPreview: process.platform === 'win32',
     checkedAt: new Date().toISOString(),
-    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'progress-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'npx-uninstall', 'uninstall-dry-run', 'uninstall-without-media-runtime', 'uninstall-cleans-managed-ffmpeg', 'uninstall-preserves-data-and-video-caches'],
+    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'progress-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'npx-uninstall', 'uninstall-dry-run', 'repeat-uninstall', 'uninstall-without-media-runtime', 'uninstall-cleans-component-directory-and-partial-downloads', 'uninstall-preserves-external-executables', 'uninstall-preserves-data-and-video-caches'],
     mediaDecoded: process.argv.includes('--playback'), desktopPlaybackObserved: false,
   }, null, 2) + '\n')
 } finally {
