@@ -26,6 +26,10 @@ npx.cmd "@kyun.si/codex-hongguo@latest" update
 npx.cmd "@kyun.si/codex-hongguo@latest" uninstall
 ```
 
+卸载前会根据本插件缓存目录中的可执行文件路径识别后台启动器，并在复核进程身份后停止；启动器自己的 Windows Job 会回收其 Node 与播放子进程。不会按进程名批量结束 Node 或 Codex。随后先删除插件缓存、注销本插件管理的本地市场，再清理观看数据。市场列表同时兼容 `marketplaceSource.source` 和只有 `root` 的格式。
+
+若缓存文件仍被占用或权限不足，卸载会给出明确提示并保留观看数据；请关闭红果播放器及使用插件的 Codex 会话后重试。外部自定义市场的注册和源文件会保留。已经卸载的插件可以重复运行卸载命令。
+
 若 npm 报 `EBADPLATFORM`，Windows x64 请使用 0.0.29 或更新版本，Windows ARM64 请使用 0.0.30 或更新版本。0.0.29 的安装器仍会拒绝 ARM64 Node；更新到新版即可，无需使用 `--force`。
 
 ### 插件已启用，但 Hooks 页面为空
