@@ -1,6 +1,6 @@
 # npm 分发与发布
 
-面向维护者。版本以源码根目录 `package.json` 为准；包名配置为 `@kyun.si/codex-hongguo`，默认 GitHub 市场为 `mreasonyang/codex-hongguo`。实际发布状态见 README 的发布提示，并以 npm registry 回读为准。
+面向维护者。版本以源码根目录 `package.json` 为准；包名配置为 `@kyun.si/codex-hongguo`。默认市场由安装器在本机生成，仓库市场 `mreasonyang/codex-hongguo` 仅用于显式指定的 Git 来源。实际发布状态见 README 的发布提示，并以 npm registry 回读为准。
 
 ## 安装、更新与卸载
 
@@ -12,15 +12,15 @@ npx "@kyun.si/codex-hongguo@latest" update
 npx "@kyun.si/codex-hongguo@latest" uninstall
 ```
 
-命令检查 Node、npm 和 Codex CLI，自动准备播放组件，再通过 Codex 原生市场安装插件。Git 仓库的 `.agents/plugins/marketplace.json` 指向 npm 的确定版本；CLI 沿用 `codex-hongguo@hongguo-local` 标识。`setup` 和 `update` 均会注册来源，对已经登记的同一 Git 来源先刷新市场，再安装，避免重装时沿用旧索引。
+命令检查 Node、npm 和 Codex CLI，自动准备播放组件，并将小型 npm 市场索引写入用户数据目录的 `managed-marketplace/<安装器版本>/.agents/plugins/marketplace.json`。Codex 用本机目录注册 `hongguo-local`，然后从 npm 下载插件，默认流程不调用 Git。索引固定为与安装器一致的 npm 版本；使用 `npx ...@latest update` 更新时，新版安装器会注册新目录和新版索引，避免沿用旧市场快照。索引放在持久数据目录，不依赖 npx 临时缓存。仓库中的 `.agents/plugins/marketplace.json` 继续为显式 Git 来源维护确定版本；插件标识始终是 `codex-hongguo@hongguo-local`。
 
-两个命令均支持 `--dry-run` 和 `--marketplace owner/repo|本地目录`。预览仍会检查依赖，但不调用 Codex 修改注册。来源参数只接受仓库 slug 或现有本地目录。后续操作省略该参数时会选择默认 GitHub 来源，因此自定义和离线来源每次都应显式提供。
+两个命令均支持 `--dry-run` 和 `--marketplace owner/repo|本地目录`。预览仍会检查依赖，但不调用 Codex 修改注册。来源参数只接受仓库 slug 或现有本地目录；显式 Git 来源需要 Git。后续操作省略该参数时会选择默认本机 npm 索引，因此自定义和离线来源每次都应显式提供。
 
-`uninstall` 自动查找 Codex CLI 并移除插件，删除播放组件、观看进度、设置、全部视频缓存和设备档案；不下载或运行播放组件，也不检查 npm。支持 `--dry-run` 预览，不接受 `--marketplace`。卸载前关闭播放器面板，完成后打开新聊天。
+`uninstall` 自动查找 Codex CLI 并移除插件；本机自管市场同时移除注册，随后删除播放组件、观看进度、设置、全部视频缓存、设备档案和 `managed-marketplace/` 索引。不下载或运行播放组件，也不检查 npm。支持 `--dry-run` 预览，不接受 `--marketplace`。卸载前关闭播放器面板，完成后打开新聊天。
 
 组件目录归属通过固定命名空间确定。默认使用插件专用缓存下的 `runtime/ffmpeg/`；自定义缓存时使用 `<HONGGUO_RUNTIME_DIR>/codex-hongguo/runtime/ffmpeg/`。卸载清空这个专属目录，包括损坏程序、缺失或损坏的回执、未知旧版本、安装锁和下载残片；同时删除默认用户数据目录。目录内及目录本身的符号链接只删除链接，不跟随目标；目录外的系统或自配 FFmpeg、自定义目录的无关内容不删除。自定义 `HONGGUO_DATA_DIR` 时删除插件的 SQLite 及附属文件、`media/`、`panel-media/`、`device/`。完整性校验用于安装和运行，不作为留下组件文件的理由。无法清理时返回失败并提示重试，重复卸载可以继续清理。
 
-如果旧安装来自 ZIP，向导只替换同名市场并重新安装；失败会尝试恢复旧来源和插件注册。观看数据不移动、不清理。迁移前关闭播放器，完成后打开新对话并审查 Hooks。安装器不收集或输出账号凭据，认证由现有 Codex/npm 客户端处理；它不写入 Hook 信任，也不转发宿主原始诊断输出。
+如果旧安装来自 ZIP，向导只替换同名市场并重新安装；失败会尝试恢复旧来源和插件注册。默认流程从旧 Git 来源迁移时，失败后提示重试本机安装，不重新拉取旧 Git 来源。观看数据不移动、不清理。迁移前关闭播放器，完成后打开新对话并审查 Hooks。安装器不收集或输出账号凭据，认证由现有 Codex/npm 客户端处理；它不写入 Hook 信任，也不转发宿主原始诊断输出。
 
 `doctor` 输出播放环境元数据和固定的 Hooks 人工核对提示，不读取或判断授权状态。授权由用户直接在 Codex「设置 → Hooks」核对。
 

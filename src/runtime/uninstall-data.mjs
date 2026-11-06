@@ -11,7 +11,7 @@ export async function removeUserData(options = {}) {
   // An explicit shared directory reserves these names for Hongguo, but its other files are not ours.
   const targets = root === defaultRoot ? [root] : [
     'player.sqlite', 'player.sqlite-wal', 'player.sqlite-shm', 'player.sqlite-journal',
-    'media', 'panel-media', 'device',
+    'media', 'panel-media', 'device', 'managed-marketplace',
   ].map(name => paths.join(root, name))
   let failed = false
   for (const target of targets) {

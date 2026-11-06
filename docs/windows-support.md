@@ -4,6 +4,8 @@
 
 ## PowerShell 安装
 
+从 0.0.31 起，默认安装和更新使用本机生成的 npm 市场索引，不再调用 Git 拉取索引；仍需要可运行的 Codex CLI。
+
 ```powershell
 npx.cmd "@kyun.si/codex-hongguo@latest" setup
 ```

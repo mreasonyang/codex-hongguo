@@ -3,9 +3,10 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, cpSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { install, codexRunner, defaultSource, pluginId } from '../src/cli/main.mjs'
+import { install, codexRunner, pluginId } from '../src/cli/main.mjs'
 import { findExecutable, spawnSync } from '../src/runtime/executables.mjs'
 import { Store } from '../src/server/store.mjs'
+const legacySource = 'mreasonyang/codex-hongguo'
 
 test('setup migrates one ZIP registration and restores its original source after an installation failure', t => {
   const dir = mkdtempSync(join(tmpdir(), '红果 migration '))
@@ -20,10 +21,10 @@ test('setup migrates one ZIP registration and restores its original source after
     if (args[1] === 'add' && calls.length < 7) throw Error('install failed')
     return {}
   }
-  assert.throws(() => install({ run, log() {} }), /install failed/)
+  assert.throws(() => install({ run, source: legacySource, log() {} }), /install failed/)
   assert.deepEqual(calls, [
     ['plugin', 'marketplace', 'list'], ['plugin', 'marketplace', 'remove', 'hongguo-local'],
-    ['plugin', 'marketplace', 'add', defaultSource], ['plugin', 'add', pluginId],
+    ['plugin', 'marketplace', 'add', legacySource], ['plugin', 'add', pluginId],
     ['plugin', 'marketplace', 'remove', 'hongguo-local'], ['plugin', 'marketplace', 'add', previous],
     ['plugin', 'add', pluginId],
   ])
@@ -33,9 +34,9 @@ test('setup migrates one ZIP registration and restores its original source after
 
 test('native updates keep the same marketplace registration and dry-run never invokes Codex', () => {
   const calls = []
-  install({ run(args) {
+  install({ source: legacySource, run(args) {
     calls.push(args)
-    return args[2] === 'list' ? { marketplaces: [{ name: 'hongguo-local', marketplaceSource: { sourceType: 'git', source: 'https://github.com/' + defaultSource + '.git' } }] } : {}
+    return args[2] === 'list' ? { marketplaces: [{ name: 'hongguo-local', marketplaceSource: { sourceType: 'git', source: 'https://github.com/' + legacySource + '.git' } }] } : {}
   }, log() {} })
   assert.ok(!calls.some(args => args.includes('remove')))
   assert.ok(calls.some(args => args[2] === 'upgrade'))
@@ -46,8 +47,8 @@ test('native updates keep the same marketplace registration and dry-run never in
 
 test('setup also refreshes a registered Git marketplace before installing, so reinstall cannot use a stale index', () => {
   let refreshed=false
-  install({ run(args) {
-    if (args[2]==='list') return {marketplaces:[{name:'hongguo-local',marketplaceSource:{sourceType:'git',source:defaultSource}}]}
+  install({ source: legacySource, run(args) {
+    if (args[2]==='list') return {marketplaces:[{name:'hongguo-local',marketplaceSource:{sourceType:'git',source:legacySource}}]}
     if (args[2]==='upgrade') refreshed=true
     if (args[1]==='add') assert.equal(refreshed,true,'plugin add must use a refreshed marketplace snapshot')
     return {}

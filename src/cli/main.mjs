@@ -4,10 +4,11 @@ import { prepareRuntime, findExecutable, spawnSync } from '../runtime/executable
 import { hookAuthorizationHint } from '../server/setup.mjs'
 import { ensureFfmpeg, removeManagedFfmpeg } from '../runtime/ffmpeg-runtime.mjs'
 import { removeUserData } from '../runtime/uninstall-data.mjs'
+import { marketplaceName } from '../runtime/distribution.mjs'
+import { defaultSource, prepareLocalMarketplace, isManagedMarketplace } from './local-marketplace.mjs'
 
-export const marketplaceName = 'hongguo-local'
+export { marketplaceName, defaultSource }
 export const pluginId = 'codex-hongguo@' + marketplaceName
-export const defaultSource = 'mreasonyang/codex-hongguo'
 const canonicalSource = source => typeof source === 'string' ? source.replace(/^https:\/\/github\.com\//, '').replace(/\.git$/, '').replace(/\/$/, '') : source
 
 export function codexRunner(command, env = process.env) {
@@ -26,7 +27,7 @@ export function validateSource(source) {
 }
 
 export function install({ run, source = defaultSource, dryRun = false, log = console.log }) {
-  validateSource(source)
+  if (!dryRun || source !== defaultSource) validateSource(source)
   if (dryRun) {
     log('将使用 Codex 原生市场安装 ' + pluginId + '；市场来源：' + source)
     log('观看进度保留在原数据目录。安装完成后需在 Codex 中审查并信任三个 Hooks。')
@@ -35,13 +36,17 @@ export function install({ run, source = defaultSource, dryRun = false, log = con
   const existing = run(['plugin', 'marketplace', 'list']).marketplaces?.find(row => row.name === marketplaceName)
   const previous = existing?.marketplaceSource?.source
   const replacing = !!existing && canonicalSource(previous) !== canonicalSource(source)
-  // A stale ZIP marketplace uses the same ID. Keep one registration and restore it if migration fails.
+  // Migrate Git/ZIP/older managed indexes under one ID, retaining the old source
+  // until the new plugin installs so rollback never clears viewing progress.
   if (replacing) run(['plugin', 'marketplace', 'remove', marketplaceName])
   try {
     run(['plugin', 'marketplace', 'add', source])
-    if (!replacing && existing?.marketplaceSource?.sourceType === 'git') run(['plugin', 'marketplace', 'upgrade', marketplaceName])
+    if (source !== defaultSource && !replacing && existing?.marketplaceSource?.sourceType === 'git') run(['plugin', 'marketplace', 'upgrade', marketplaceName])
     run(['plugin', 'add', pluginId])
   } catch (error) {
+    // A failed migration must not reintroduce the Git dependency we are removing.
+    if (source === defaultSource && existing?.marketplaceSource?.sourceType === 'git')
+      throw Error('本机 npm 市场安装未完成，请重新运行 setup；观看进度仍保留。')
     if (replacing && previous) {
       try {
         run(['plugin', 'marketplace', 'remove', marketplaceName])
@@ -89,16 +94,25 @@ export async function main(argv = process.argv.slice(2)) {
     const dependencies = [['Codex CLI', codex]]
     if (action !== 'uninstall') dependencies.push(['npm', findExecutable('npm')])
     for (const [name, command] of dependencies) {
-      if (spawnSync(command, ['--version'], { stdio: 'ignore', timeout: 3000 }).status !== 0)
-        throw Error('未找到可运行的 ' + name + '。安装后重新运行 ' + action + '；已有插件与观看进度保持原样。')
+      const checked = spawnSync(command, ['--version'], { stdio: 'ignore', timeout: 15000, windowsHide: true })
+      if (checked.status === 0) continue
+      if (checked.error?.code === 'ETIMEDOUT') throw Error(name + ' 启动超时，请单独运行它的 --version 命令后重试；观看进度保持原样。')
+      if (checked.error?.code === 'ENOENT') throw Error('未找到 ' + name + '。请检查安装位置和 PATH 后重新运行 ' + action + '。')
+      throw Error(name + ' 已找到但启动失败，请单独运行它的 --version 命令查看错误后重试；观看进度保持原样。')
     }
     if (action === 'uninstall') {
       if (dryRun) console.log('将卸载 ' + pluginId + '，删除播放组件、观看进度、设置、视频缓存和设备档案。')
       else {
         const run = codexRunner(codex)
-        const installed = run(['plugin', 'list', '--marketplace', marketplaceName]).installed
-        if (!Array.isArray(installed)) throw Error('无法确认插件安装状态，请更新 Codex 后重试。')
-        if (installed.some(plugin => plugin.pluginId === pluginId)) run(['plugin', 'remove', pluginId])
+        const registrations = run(['plugin', 'marketplace', 'list']).marketplaces
+        if (!Array.isArray(registrations)) throw Error('无法确认插件市场状态，请更新 Codex 后重试。')
+        const registered = registrations.find(row => row.name === marketplaceName)
+        if (registered) {
+          const installed = run(['plugin', 'list', '--marketplace', marketplaceName]).installed
+          if (!Array.isArray(installed)) throw Error('无法确认插件安装状态，请更新 Codex 后重试。')
+          if (installed.some(plugin => plugin.pluginId === pluginId)) run(['plugin', 'remove', pluginId])
+          if (isManagedMarketplace(registered.marketplaceSource?.source)) run(['plugin', 'marketplace', 'remove', marketplaceName])
+        }
         const failures = []
         for (const cleanup of [removeManagedFfmpeg, removeUserData]) {
           try { await cleanup() } catch (error) { failures.push(error.message) }
@@ -109,6 +123,7 @@ export async function main(argv = process.argv.slice(2)) {
       return
     }
     if (!dryRun) {
+      if (source === defaultSource) await prepareLocalMarketplace()
       console.log('正在准备播放组件，首次使用需要联网下载…')
       await ensureFfmpeg()
     }

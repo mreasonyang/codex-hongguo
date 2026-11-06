@@ -24,7 +24,7 @@ npx.cmd "@kyun.si/codex-hongguo@latest" setup
 
 包名的引号必须保留，避免 PowerShell 将 `@` 解析为展开运算符；`npx.cmd` 可直接调用 npm 命令入口。Windows 详细说明和离线安装见 [Windows 支持](docs/windows-support.md)。
 
-命令会检查运行环境、自动下载并校验播放组件，再通过 Codex 原生市场安装插件。首次安装需要联网，之后复用本机缓存。安装完成时会提示你到 Codex「设置 → Hooks」审查、信任并启用 `UserPromptSubmit`、`Stop`、`Interrupt`。然后打开新的本地聊天使用。
+默认安装和更新不需要 Git。命令会检查 Node、npm 和 Codex CLI，自动准备播放组件，再通过本机市场索引从 npm 安装插件。首次安装需要联网，之后复用本机缓存。安装完成时会提示你到 Codex「设置 → Hooks」审查、信任并启用 `UserPromptSubmit`、`Stop`、`Interrupt`。然后打开新的本地聊天使用。
 
 ### 安装后配置
 

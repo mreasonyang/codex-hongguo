@@ -5,6 +5,8 @@ description: 配置红果短剧插件，检查本机播放环境和回合自动�
 
 帮助用户在当前安装环境完成红果短剧配置。该插件用于本机执行的 Codex 对话，不需要红果账号、API Key 或浏览器自动化权限。
 
+默认安装和更新使用持久的本机 npm 市场索引，不要求 Git；仍需要可运行的 Codex CLI。只有显式指定 Git 市场来源时才需要 Git。
+
 从此 SKILL.md 的实际位置向上两级确定插件根目录。在 macOS/Linux 用 `sh "<插件根目录>/bin/run-node" check` 检查；Windows x64 / Windows 11 ARM64 在 PowerShell 用 `& "<插件根目录>\bin\run-node.exe" check`。启动器自动寻找 Node，并检查版本及 SQLite。正确引用包含空格的路径。脚本只输出 Node、进度库、FFmpeg 的环境元数据，以及固定的 Hooks 人工授权核对提示，不检测授权状态，不发送模型请求。npm 包支持 macOS/Linux、Windows x64 和 Windows 11 ARM64，Windows x64/ARM64 启动器随 npm 包和离线包提供。
 
 - 需要 Node.js >=22.16。播放组件由插件自动下载、校验并缓存，无需用户自行安装 FFmpeg。首次需要联网；准备失败时检查网络，macOS/Linux 重新运行 `npx "@kyun.si/codex-hongguo@latest" setup`，Windows 重新运行 `npx.cmd "@kyun.si/codex-hongguo@latest" setup`。PowerShell 中以 `@` 开头的 npm 包名必须加引号，以免出现 `SplattingNotPermitted`；调用 npm 工具时使用 `npx.cmd`、`npm.cmd`。Windows 接受 x64 或 ARM64 Node；ARM64 机器使用 Windows 11 和插件 >=0.0.30，可保留原生 ARM64 Node。特殊安装可使用 HONGGUO_NODE、HONGGUO_FFMPEG、HONGGUO_CODEX 指定程序；不要修改用户其他插件、认证或网络配置。

@@ -24,7 +24,7 @@ npx.cmd "@kyun.si/codex-hongguo@latest" setup
 
 Keep the package name quoted so PowerShell treats the leading `@` literally. `npx.cmd` invokes the npm command shim directly. See [Windows support](docs/windows-support.md) (Chinese) for details and offline installation.
 
-The command checks the environment, downloads and verifies the playback component, then installs the plugin through Codex's native marketplace. The first installation requires a network connection; later runs reuse the local cache. The installer tells you to review, trust and enable `UserPromptSubmit`, `Stop` and `Interrupt` in Codex **Settings → Hooks**. Then open a new local chat to use the plugin.
+Default installation and updates do not require Git. The command checks Node, npm and the Codex CLI, prepares the playback component, then uses a local marketplace index to install the plugin from npm. The first installation requires a network connection; later runs reuse the local cache. The installer tells you to review, trust and enable `UserPromptSubmit`, `Stop` and `Interrupt` in Codex **Settings → Hooks**. Then open a new local chat to use the plugin.
 
 ### Post-Install Setup
 
