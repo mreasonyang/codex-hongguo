@@ -1,0 +1,56 @@
+{
+  "name": "@kyun.si/codex-hongguo",
+  "version": "0.0.32",
+  "sourceCommit": "2c7b261815fab1413e0aa5523b2c979ec58b06c6",
+  "buildCompleted": true,
+  "sha256": "d4aeab7bbbf697155140696d6cad233052558aaffdbf3d9abf5a38f1d4fad98b",
+  "windowsShellRegressionVerified": true,
+  "architectures": [
+    "x64",
+    "arm64"
+  ],
+  "shells": [
+    "Windows PowerShell 5.1",
+    "PowerShell 7"
+  ],
+  "events": [
+    "UserPromptSubmit",
+    "Stop",
+    "Interrupt"
+  ],
+  "legacyPowerShellFailureReproduced": true,
+  "stdinAndCardGuidanceVerified": true,
+  "terminalEventPersistenceVerified": true,
+  "packagedHooksMatchSource": true,
+  "desktopNaturalTurnVerified": false,
+  "cardRenderingVerified": false,
+  "qualification": {
+    "runId": 42196054095,
+    "url": "https://github.com/mreasonyang/codex-hongguo/actions/runs/42196054095",
+    "headSha": "2c7b261815fab1413e0aa5523b2c979ec58b06c6",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "name": "windows-hooks (windows-latest, x64)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "windows-hooks (windows-11-arm, arm64)",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "confirmedAt": "2026-11-06T09:37:03.368Z",
+  "integrity": "sha512-fLfR7tjrM0HT48bdIDYBQnRRFcGFWO2s1zq9wTq7r0CnnSV8MmuYYR+Y5bgR71iD/YM4eXjlFlcQm9jG+8lRYA==",
+  "publishedAt": "2026-11-06T10:04:19.987Z",
+  "publicationConfirmedAt": "2026-11-06T10:04:31.102Z",
+  "publicationMethod": "local npm web authentication via Brave; one-time authorization completed by user",
+  "defaultInstallationRequiresGit": false,
+  "localMarketplaceIndex": true,
+  "url": "https://www.npmjs.com/package/@kyun.si/codex-hongguo/v/0.0.32",
+  "ciRunForThisRelease": true,
+  "ciScope": "Windows PowerShell hook regression only",
+  "releasePolicy": "User requested actual-shell hook regression on Windows. Desktop natural-turn and card-rendering acceptance remains manual."
+}
