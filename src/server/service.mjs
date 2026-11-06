@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import { callerId } from './store.mjs'
 import { PlayerError } from './errors.mjs'
-import { inspectHooks } from './setup.mjs'
+import { manualHooks } from './setup.mjs'
 
 export const secret = () => randomBytes(24).toString('base64url')
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/)
@@ -77,10 +77,9 @@ export const schemas = {
   remove_history: z.object({ seriesId: dramaId }),
 }
 export class Service {
-  constructor(store, catalog, checkHooks = inspectHooks) {
+  constructor(store, catalog) {
     this.store = store
     this.catalog = catalog
-    this.checkHooks = checkHooks
     this.panels = new Map()
   }
   open(meta) {
@@ -301,13 +300,12 @@ export class Service {
         }
       case 'get_setup_status': {
         if (!this.catalog.ffmpeg) void this.catalog.prepareMediaRuntime?.().catch(() => {})
-        this.checkingHooks ??= this.checkHooks().finally(() => { this.checkingHooks = null })
         return {
           runtime: process.version,
           database: this.store.writable(),
           ffmpeg: this.catalog.ffmpeg,
           dismissed: this.store.setupDismissed(),
-          hooks: await this.checkingHooks,
+          hooks: manualHooks(),
         }
       }
       case 'set_setup_dismissed':

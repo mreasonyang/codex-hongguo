@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { prepareRuntime, findExecutable, spawnSync } from '../runtime/executables.mjs'
-import { inspectHooks } from '../server/setup.mjs'
+import { hookAuthorizationHint } from '../server/setup.mjs'
 import { ensureFfmpeg, removeManagedFfmpeg } from '../runtime/ffmpeg-runtime.mjs'
 import { removeUserData } from '../runtime/uninstall-data.mjs'
 
@@ -113,15 +113,7 @@ export async function main(argv = process.argv.slice(2)) {
       await ensureFfmpeg()
     }
     install({ run: codexRunner(codex), source, dryRun })
-    if (!dryRun) {
-      console.log('回合联动需要手动授权：打开 Codex 设置 → Hooks → 红果短剧，审查、信任并启用 UserPromptSubmit、Stop、Interrupt。')
-      const hooks = await inspectHooks({ command: codex, installedId: pluginId })
-      const names = { userPromptSubmit: 'UserPromptSubmit', stop: 'Stop', interrupt: 'Interrupt' }
-      const pending = hooks.events.filter(row => row.status !== 'ready').map(row => names[row.event])
-      if (hooks.status === 'ready') console.log('三个回合 Hooks 均已信任并启用，无需重复授权。')
-      else if (hooks.status === 'unknown') console.log('暂未确认 Hooks 授权状态。请按上方步骤在 Codex 设置 → Hooks 核对。')
-      else console.log('还需完成 ' + pending.join('、') + ' 的信任或启用。请在 Codex 设置 → Hooks 完成授权。')
-    }
+    if (!dryRun) console.log(hookAuthorizationHint)
   } catch (error) {
     console.error(error.message)
     process.exitCode = 1

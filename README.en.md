@@ -20,8 +20,8 @@ The command checks the environment, downloads and verifies the playback componen
 
 ### Post-Install Setup
 
-- **Run the Setup guide**: Run **Setup** from the plugin details view (which invokes `hongguo-setup`), or say `配置红果短剧` in a local conversation. The setup check verifies Node, the progress database, the playback component, and whether all three plugin Hooks are trusted and enabled.
-- **Review and trust Hooks**: For task-start and task-end playback control, open Codex Desktop **Settings → Hooks** (`设置 → Hooks`), review and trust Hongguo's `UserPromptSubmit`, `Stop`, and `Interrupt` hooks, and then run the check again. Installation and Setup never trust Hooks automatically on your behalf and never treat past turn records as proof that Hooks are configured; if host trust status cannot be read, it is shown as **Unverified** (`待确认`). You can watch manually before completing Hook setup.
+- **Run the Setup guide**: Run **Setup** from the plugin details view (which invokes `hongguo-setup`), or say `配置红果短剧` in a local conversation. Setup checks Node, the progress database and the playback component, then shows a fixed reminder to check Hook authorization manually in Codex Settings → Hooks.
+- **Review and trust Hooks**: For task-start and task-end playback control, open Codex Desktop **Settings → Hooks** (`设置 → Hooks`), review and trust Hongguo's `UserPromptSubmit`, `Stop`, and `Interrupt` hooks and confirm they are enabled. Installation and Setup show a fixed reminder; they do not query or judge Hook authorization. You can watch manually before completing Hook setup.
 - **No extra accounts or permissions**: Normal browsing and playback do not require a Hongguo account, API key, or browser automation permissions.
 
 ## Screenshots
@@ -64,7 +64,7 @@ The switches are independent, saved across restarts, and shared by all chats. Ot
 
 - **No task suggestions**: Enable suggestions, trust all three Hooks, and retry in a new local turn with no visible player. If the catalog returns no candidates or the host does not display the card, use the right-side **＋** to open the player.
 - **Playback component preparation failed**: Check your connection and run the installation command again. The plugin retries preparation automatically.
-- **Turn linkage is unverified**: Check all three events in Codex **Settings → Hooks**. A passing environment check does not establish that automatic pausing works; manual playback remains available.
+- **Task-linked playback is not working**: Check all three events in Codex **Settings → Hooks**. A passing environment check does not establish that automatic pausing works; manual playback remains available.
 
 - **Playback pauses too often**: Turn off **Pause automatically when a task ends** in the player's Settings and save to keep watching continuously.
 - **A new task does not resume playback**: Enable and save **Play automatically when a task starts**. Keep the player open in that chat with an episode selected. New defaults do not override a previously saved off setting.

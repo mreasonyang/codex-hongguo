@@ -139,8 +139,9 @@ try {
   assert.equal(checked.status, 0, '安装副本的设置检查未完成')
   const setup = JSON.parse(checked.stdout)
   assert.equal(setup.manualReady, true)
-  assert.equal(setup.followReady, false, '隔离配置中尚未信任的 Hooks 不应显示已配置')
-  console.log('宿主已识别设置引导，安装副本检查通过，未信任的回合联动保持待配置')
+  assert.equal(setup.hooks.status, 'manual_check', 'Hooks 授权只提示用户人工检查')
+  assert.equal('followReady' in setup, false, '不得自动判断回合联动授权状态')
+  console.log('宿主已识别设置引导，播放环境检查通过，Hooks 授权提示人工核对')
   console.log(
     '安装状态',
     detail.summary.installed,
@@ -223,13 +224,13 @@ try {
   assert.equal(history._meta?.data?.items?.find(row => row.seriesId === 'hg-987654321')?.positionMs, 12345, '重复安装后观看进度丢失')
   const firstSetup = await hostCall('get_setup_status', { panel: opened._meta.panel })
   assert.equal(firstSetup._meta?.data?.dismissed, true, '重复安装后引导设置丢失')
-  assert.notEqual(firstSetup._meta.data.hooks.status, 'ready')
-  assert.ok(firstSetup._meta.data.hooks.events.every(event => event.status !== 'ready'))
+  assert.equal(firstSetup._meta.data.hooks.status, 'manual_check')
+  assert.ok(firstSetup._meta.data.hooks.events.every(event => event.status === 'manual_check'))
   const dismissed = await hostCall('set_setup_dismissed', { panel: opened._meta.panel, dismissed: true })
   assert.equal(dismissed._meta?.data?.dismissed, true)
   const nextSetup = await hostCall('get_setup_status', { panel: opened._meta.panel })
   assert.equal(nextSetup._meta?.data?.dismissed, true)
-  assert.notEqual(nextSetup._meta.data.hooks.status, 'ready')
+  assert.equal(nextSetup._meta.data.hooks.status, 'manual_check')
   const listed = await hostCall('list_series', { panel: opened._meta.panel }, 90000)
   const shows = listed._meta?.data?.items
   assert.ok(shows?.length && shows.every((s) => /^hg-\d+$/.test(s.id) && s.title), '未取得真实红果片库')

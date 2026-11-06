@@ -69,7 +69,7 @@ node scripts/verify-install.mjs --playback
 - 主缓存 `media/` 的 40 集/1 GiB 策略不包含 `panel-media/` 临时分片。分片按活动状态与空闲时间独立回收，不能把主缓存上限描述成整个数据目录的大小上限。
 - 不把媒体密钥、源媒体地址或面板能力值写入日志。媒体解密信息通过内存与 FFmpeg 标准输入传递，不放进进程参数。
 - Hook 只保存 `session_id`、`turn_id`、`hook_event_name` 对应状态，不保存原始输入、提示词或回复。异常时返回 `{}`，不阻断宿主任务。
-- Setup 只回读当前插件和当前安装路径的公开 Hook 状态；安装与启用不等于信任，不自动写入信任记录。诊断只输出必要元数据，不转发完整环境、进程参数或宿主原始日志。
+- Setup 只检查播放环境；Hooks 授权固定提示用户在 Codex 原生设置人工核对，不读取或判断授权状态，不自动写入信任记录。诊断只输出必要元数据，不转发完整环境、进程参数或宿主原始日志。
 
 ## 版本号
 
@@ -89,12 +89,12 @@ npm run version:patch
 | `HONGGUO_NODE` | `bin/run-node` / `run-node.exe`：指定 Node >=22.16 的绝对路径（Windows 需 x64）。它不改变 npx 自身使用的 Node。 |
 | `HONGGUO_FFMPEG` | 高级覆盖项：指定 FFmpeg 可执行文件的绝对路径，省略时使用插件自动准备的组件。 |
 | `HONGGUO_RUNTIME_DIR` | 指定播放组件缓存根目录，插件使用其下的 `codex-hongguo/` 专属命名空间。 |
-| `HONGGUO_CODEX` | 安装和 Setup：指定 Codex CLI。 |
+| `HONGGUO_CODEX` | 安装、更新和卸载：指定 Codex CLI。 |
 | `HONGGUO_PROFILE_PATH` | Catalog：指定匿名 SDK 设备档案位置。 |
 
 覆盖项必须在实际启动服务、Hook 或 Setup 的进程环境中可见。只在运行 npx 的终端里设置，不代表桌面宿主或其子进程继承了这些值；安装器不会把它们写进发布包。
 
-构建后可运行 `node bin/codex-hongguo.mjs --help` 查看命令，`doctor` 输出环境与 Hook 检查元数据。检查与安装相关的 `--dry-run` 仍会检查 Node、npm 和 Codex，但不会下载播放组件。Hook 检查严格匹配执行检查的副本；从源码、解压目录或 npx 缓存运行 `doctor` 得到 `unknown`，不代表宿主安装副本的 Hooks 未信任，应从插件详情页运行 Setup。
+构建后可运行 `node bin/codex-hongguo.mjs --help` 查看命令，`doctor` 输出播放环境元数据与固定的 Hooks 人工核对提示。检查与安装相关的 `--dry-run` 仍会检查 Node、npm 和 Codex，但不会下载播放组件。Hooks 授权不执行检测，由用户直接在 Codex「设置 → Hooks」核对。
 
 `uninstall [--dry-run]` 只检查 Node 和 Codex，不依赖播放组件或 npm 可执行程序；移除插件后清理组件专属目录和默认用户数据目录，包括进度、设置、整集/面板视频缓存、设备档案、损坏文件、历史组件和下载残片。不跟随符号链接，不删除自定义目录内的无关文件。清理失败时返回失败，重复运行可重试清理。自定义缓存位置使用 `<HONGGUO_RUNTIME_DIR>/codex-hongguo/` 命名空间。自定义 `HONGGUO_DATA_DIR` 时只删除保留给插件的 `player.sqlite` 及 WAL/SHM/journal、`media/`、`panel-media/` 和 `device/`。
 
