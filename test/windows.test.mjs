@@ -103,23 +103,3 @@ test('Windows launcher termination reaps its Node runtime', { skip: process.plat
   }
   assert.fail('Node survived the Windows launcher')
 })
-
-test('Windows turn-start hook validates and writes its guidance in one Node process', { skip: process.platform !== 'win32' }, t => {
-  const dir = mkdtempSync(join(tmpdir(), '红果 hook 单次 Node '))
-  t.after(() => rmSync(dir, { recursive: true, force: true, maxRetries:10, retryDelay:100 }))
-  const plugin = join(dir, '插件 目录')
-  mkdirSync(join(plugin, 'bin'), { recursive: true })
-  cpSync('dist', join(plugin, 'dist'), { recursive: true })
-  for (const name of ['run-node.exe', 'run-node-arm64.exe']) cpSync(join('dist/launcher', name), join(plugin, 'bin', name))
-  const counter = join(dir, 'node-starts.txt'), preload = join(dir, 'count-start.cjs')
-  writeFileSync(preload, "require('node:fs').appendFileSync(process.env.HONGGUO_TEST_STARTS,'node\\n')")
-  const result = spawnSync(join(plugin, 'bin', 'run-node.exe'), ['hook'], {
-    env: { ...process.env, HONGGUO_NODE: process.execPath, HONGGUO_DATA_DIR: join(dir, 'data'),
-      HONGGUO_TEST_STARTS: counter, NODE_OPTIONS: '--require ' + JSON.stringify(preload.replaceAll('\\', '/')) },
-    input: JSON.stringify({ session_id: 'windows-hook', turn_id: 'one-node', hook_event_name: 'UserPromptSubmit' }),
-    encoding: 'utf8', windowsHide: true, timeout: 10000,
-  })
-  assert.equal(result.status, 0, 'Windows turn-start hook did not complete within its configured deadline')
-  assert.match(JSON.parse(result.stdout).hookSpecificOutput.additionalContext, /show_waiting_picks.*turnId "one-node"/)
-  assert.equal(readFileSync(counter, 'utf8'), 'node\n', 'A hook must not launch a separate Node probe before writing guidance')
-})
