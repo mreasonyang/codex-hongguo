@@ -106,7 +106,7 @@ test('Windows launcher termination reaps its Node runtime', { skip: process.plat
 
 test('Windows turn-start hook validates and writes its guidance in one Node process', { skip: process.platform !== 'win32' }, t => {
   const dir = mkdtempSync(join(tmpdir(), '红果 hook 单次 Node '))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => rmSync(dir, { recursive: true, force: true, maxRetries:10, retryDelay:100 }))
   const plugin = join(dir, '插件 目录')
   mkdirSync(join(plugin, 'bin'), { recursive: true })
   cpSync('dist', join(plugin, 'dist'), { recursive: true })

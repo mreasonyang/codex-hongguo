@@ -25,7 +25,7 @@ for (const shell of shells) test(`packaged hooks run through ${shell.name} with 
   cpSync('dist', join(plugin, 'dist'), { recursive: true })
   for (const name of ['run-node.exe', 'run-node-arm64.exe']) cpSync(join('dist/launcher', name), join(plugin, 'bin', name))
   const data = join(dir, '进度 目录'), store = new Store(data)
-  t.after(() => { store.close(); rmSync(dir, { recursive: true, force: true }) })
+  t.after(() => { store.close(); rmSync(dir, { recursive: true, force: true, maxRetries:10, retryDelay:100 }) })
   const env = { ...process.env, PLUGIN_ROOT: plugin, HONGGUO_NODE: process.execPath, HONGGUO_DATA_DIR: data }
   const run = (command, input, deadline) => spawnSync(shell.command, [...shell.args, shell.cmd ? '"' + command + '"' : command], {
     env, cwd: tmpdir(), input, encoding: 'utf8', windowsHide: true, windowsVerbatimArguments: !!shell.cmd, timeout: deadline,
