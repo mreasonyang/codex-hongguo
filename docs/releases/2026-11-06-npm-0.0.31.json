@@ -1,0 +1,31 @@
+{
+  "name": "@kyun.si/codex-hongguo",
+  "version": "0.0.31",
+  "sourceCommit": "be2320cbac404c7936f850f988b4fd732dbb269f",
+  "sha256": "b4b55b973bd7edd4db39299bd8706af459a01d75bd75c6dbecc9b69129c36416",
+  "buildCompleted": true,
+  "runtimeVerificationPerformed": false,
+  "verificationDelegatedTo": "user",
+  "integrity": "sha512-GCI4s0RiO3gOjyodL1B9l727Rh9Drbbf57lNhzUBlMylHxE0tlgv7gFQ1qYQQWjdTA13EF6TupMgZf6do/rT2w==",
+  "publishedAt": "2026-11-06T07:38:49.078Z",
+  "publicationConfirmedAt": "2026-11-06T07:38:56.000Z",
+  "publicationMethod": "local npm web authentication via Brave; one-time authorization completed by user",
+  "defaultInstallationRequiresGit": false,
+  "localMarketplaceIndex": true,
+  "url": "https://www.npmjs.com/package/@kyun.si/codex-hongguo/v/0.0.31",
+  "windowsLaunchers": [
+    "x64",
+    "arm64"
+  ],
+  "windowsArm64": {
+    "minimumOS": "Windows 11",
+    "nodeArchitectures": [
+      "arm64",
+      "x64"
+    ],
+    "nativeArm64PlaybackComponent": true,
+    "runtimeVerified": false
+  },
+  "ciRunForThisRelease": false,
+  "releasePolicy": "User requested build and publication without runtime verification; user performs acceptance."
+}
