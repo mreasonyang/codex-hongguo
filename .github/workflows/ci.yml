@@ -49,7 +49,7 @@ jobs:
         timeout-minutes: 7
       - name: Verify Windows command shims and launcher independently
         if: runner.os == 'Windows'
-        run: node --test --test-timeout=30000 test/windows.test.mjs test/distribution.test.mjs
+        run: node --test --test-timeout=120000 test/windows.test.mjs test/windows-hooks-shell.test.mjs test/distribution.test.mjs
         timeout-minutes: 2
       - name: Run regression tests
         run: node --test --test-timeout=180000 test/*.test.mjs

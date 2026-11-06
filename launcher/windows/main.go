@@ -15,6 +15,10 @@ import (
 	"unsafe"
 )
 
+// Reserved for rejecting a Node candidate before it can consume hook stdin.
+const unsupportedNodeExit = 78
+const nodeCheck = `const [a,b]=process.versions.node.split(".").map(Number);if(!["x64","arm64"].includes(process.arch)||a<22||(a===22&&b<16))process.exit(78);try{require("node:sqlite")}catch{process.exit(78)}`
+
 func candidates() []string {
 	if override := os.Getenv("HONGGUO_NODE"); override != "" {
 		return []string{override}
@@ -51,7 +55,7 @@ func usable(node string) bool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	probe := exec.CommandContext(ctx, node, "--no-warnings", "-e", `const [a,b]=process.versions.node.split(".").map(Number);if(!["x64","arm64"].includes(process.arch)||a<22||(a===22&&b<16))process.exit(1);require("node:sqlite")`)
+	probe := exec.CommandContext(ctx, node, "--no-warnings", "-e", nodeCheck)
 	probe.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	// The probe never consumes the hook's stdin or forwards runtime diagnostics.
 	return probe.Run() == nil
@@ -97,16 +101,44 @@ func execute(command *exec.Cmd) int {
 		return 1
 	}
 	// The OS closes the job handle at process exit. Closing it here would kill this launcher too.
+	status, _ := executeProcess(command)
+	return status
+}
+
+func executeProcess(command *exec.Cmd) (int, bool) {
 	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
 	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	if err := command.Run(); err != nil {
 		var exited *exec.ExitError
 		if errors.As(err, &exited) {
-			return exited.ExitCode()
+			return exited.ExitCode(), true
 		}
+		return 1, false
+	}
+	return 0, true
+}
+
+func runHook(target string) int {
+	if _, err := processJob(); err != nil {
+		fmt.Fprintln(os.Stderr, "Unable to initialize the Windows runtime job.")
 		return 1
 	}
-	return 0
+	// Cold Windows/ARM startup must not launch Node twice within one hook deadline.
+	// Validate in the same process that imports the hook, without reading stdin until
+	// a compatible runtime has been selected. A rejected candidate leaves stdin intact.
+	bootstrap := nodeCheck + `;import(require("node:url").pathToFileURL(process.argv[1]).href).catch(()=>{process.stderr.write("Hongguo hook failed to start.\n");process.exitCode=1})`
+	for _, node := range candidates() {
+		if !filepath.IsAbs(node) {
+			continue
+		}
+		status, started := executeProcess(exec.Command(node, "--no-warnings", "-e", bootstrap, "--", target))
+		if !started || status == unsupportedNodeExit {
+			continue
+		}
+		return status
+	}
+	fmt.Fprintln(os.Stderr, "Hongguo requires Node.js x64 or ARM64 >=22.16 with node:sqlite. Install it, restart Codex, then run Setup. Check HONGGUO_NODE if configured.")
+	return 1
 }
 
 func run() int {
@@ -128,6 +160,9 @@ func run() int {
 	// its short bootstrap runs under Windows' x64 emulation and delegates to ARM64.
 	if runtime.GOARCH == "amd64" && nativeArm64() {
 		return execute(exec.Command(filepath.Join(filepath.Dir(launcher), "run-node-arm64.exe"), os.Args[1:]...))
+	}
+	if os.Args[1] == "hook" {
+		return runHook(filepath.Join(filepath.Dir(launcher), "..", "dist", target))
 	}
 	for _, node := range candidates() {
 		if !usable(node) {

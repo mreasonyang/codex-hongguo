@@ -65,6 +65,12 @@ ZIP 包含插件程序，首次准备播放组件仍需联网。更新时切换�
 
 0.0.30 的 ARM64 运行路径按用户要求仅构建打包，本次未执行运行验证，实机验收由用户完成。
 
+0.0.32 修复 Windows 回合钩子的 Shell 命令：旧版使用 `"%PLUGIN_ROOT%\bin\run-node.exe" hook`，在 PowerShell 下会报 `Unexpected token 'hook'`。新版显式调用 Windows PowerShell，使用调用运算符 `&` 执行原生启动器；插件路径在执行时从环境中读取，不把路径拼进 Shell 源码，兼容空格、中文及特殊字符。外层会话可以使用 CMD、Windows PowerShell 5.1 或 PowerShell 7。修改钩子命令后，需要在桌面版重新审查并信任更新后的三个 Hooks。
+
+同版将 Windows 的 Node 版本与 SQLite 检查和钩子程序合并到一个 Node 进程，避免每次先探测再重启 Node。`UserPromptSubmit` 的超时从 2 秒改为 10 秒；`Stop` 和 `Interrupt` 为 3 秒，后者符合宿主的超时上限。旧版 2 秒的整体预算小于启动器 3 秒的单次 Node 探测预算，在冷启动和 ARM64 转交时可能来不及输出推荐卡片指令。
+
+`windows-hooks.yml` 针对 Windows x64 与 Windows 11 ARM64，通过真实 CMD、Windows PowerShell 5.1 和 PowerShell 7 执行发行包中的三个钩子命令，并验证 stdin、推荐指令输出和停止状态写入。测试也在 PowerShell 中重现旧命令的解析错误，不再只直接启动 EXE。执行结果以对应 Actions 记录为准；桌面自然回合与实际卡片显示仍由用户验收。
+
 `ci.yml` 在 macOS、Linux、Windows x64 执行构建、回归、打包和隔离 npm 安装。Windows 安装验证不设置 `npm_config_force`，并分别在 Windows PowerShell 5.1 和 PowerShell 7 中执行带引号的 `npx.cmd` 命令；同时覆盖中文及空格路径、原生启动器、MCP 资源、Hooks 状态写入、更新保留进度与完整卸载。发布 workflow 依赖三平台验证通过。
 
 自动化不能代替桌面画面、声音和自然回合事件观察。在 Windows Codex 桌面仍需独立记录以下结果：

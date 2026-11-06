@@ -6,8 +6,8 @@
           {
             "type": "command",
             "command": "sh \"${PLUGIN_ROOT}/bin/run-node\" hook",
-            "commandWindows": "\"%PLUGIN_ROOT%\\bin\\run-node.exe\" hook",
-            "timeout": 2
+            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -Command \"& ([IO.Path]::Combine([Environment]::GetEnvironmentVariable('PLUGIN_ROOT'), 'bin', 'run-node.exe')) hook; exit (Get-Variable LASTEXITCODE -ValueOnly -ErrorAction Stop)\"",
+            "timeout": 10
           }
         ]
       }
@@ -18,8 +18,8 @@
           {
             "type": "command",
             "command": "sh \"${PLUGIN_ROOT}/bin/run-node\" hook",
-            "commandWindows": "\"%PLUGIN_ROOT%\\bin\\run-node.exe\" hook",
-            "timeout": 2
+            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -Command \"& ([IO.Path]::Combine([Environment]::GetEnvironmentVariable('PLUGIN_ROOT'), 'bin', 'run-node.exe')) hook; exit (Get-Variable LASTEXITCODE -ValueOnly -ErrorAction Stop)\"",
+            "timeout": 3
           }
         ]
       }
@@ -30,8 +30,8 @@
           {
             "type": "command",
             "command": "sh \"${PLUGIN_ROOT}/bin/run-node\" hook",
-            "commandWindows": "\"%PLUGIN_ROOT%\\bin\\run-node.exe\" hook",
-            "timeout": 2
+            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -Command \"& ([IO.Path]::Combine([Environment]::GetEnvironmentVariable('PLUGIN_ROOT'), 'bin', 'run-node.exe')) hook; exit (Get-Variable LASTEXITCODE -ValueOnly -ErrorAction Stop)\"",
+            "timeout": 3
           }
         ]
       }
