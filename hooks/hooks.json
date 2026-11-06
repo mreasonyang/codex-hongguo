@@ -6,7 +6,7 @@
           {
             "type": "command",
             "command": "sh \"${PLUGIN_ROOT}/bin/run-node\" hook",
-            "commandWindows": "$ErrorActionPreference = 'Stop'; & \"$env:PLUGIN_ROOT\\bin\\run-node.exe\" hook; exit $LASTEXITCODE",
+            "commandWindows": "$ErrorActionPreference = 'Stop'; $OutputEncoding = [Text.UTF8Encoding]::new($false); ([IO.StreamReader]::new([Console]::OpenStandardInput(), [Text.Encoding]::UTF8)).ReadToEnd() | & \"$env:PLUGIN_ROOT\\bin\\run-node.exe\" hook; exit $LASTEXITCODE",
             "timeout": 10
           }
         ]
@@ -18,7 +18,7 @@
           {
             "type": "command",
             "command": "sh \"${PLUGIN_ROOT}/bin/run-node\" hook",
-            "commandWindows": "$ErrorActionPreference = 'Stop'; & \"$env:PLUGIN_ROOT\\bin\\run-node.exe\" hook; exit $LASTEXITCODE",
+            "commandWindows": "$ErrorActionPreference = 'Stop'; $OutputEncoding = [Text.UTF8Encoding]::new($false); ([IO.StreamReader]::new([Console]::OpenStandardInput(), [Text.Encoding]::UTF8)).ReadToEnd() | & \"$env:PLUGIN_ROOT\\bin\\run-node.exe\" hook; exit $LASTEXITCODE",
             "timeout": 3
           }
         ]
@@ -30,7 +30,7 @@
           {
             "type": "command",
             "command": "sh \"${PLUGIN_ROOT}/bin/run-node\" hook",
-            "commandWindows": "$ErrorActionPreference = 'Stop'; & \"$env:PLUGIN_ROOT\\bin\\run-node.exe\" hook; exit $LASTEXITCODE",
+            "commandWindows": "$ErrorActionPreference = 'Stop'; $OutputEncoding = [Text.UTF8Encoding]::new($false); ([IO.StreamReader]::new([Console]::OpenStandardInput(), [Text.Encoding]::UTF8)).ReadToEnd() | & \"$env:PLUGIN_ROOT\\bin\\run-node.exe\" hook; exit $LASTEXITCODE",
             "timeout": 3
           }
         ]

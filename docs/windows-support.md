@@ -65,7 +65,7 @@ ZIP 包含插件程序，首次准备播放组件仍需联网。更新时切换�
 
 0.0.30 的 ARM64 运行路径按用户要求仅构建打包，本次未执行运行验证，实机验收由用户完成。
 
-0.0.32 修复 Windows 回合钩子的 Shell 命令：旧版使用 `"%PLUGIN_ROOT%\bin\run-node.exe" hook`，在 PowerShell 下会报 `Unexpected token 'hook'`。新版由宿主 PowerShell 直接使用调用运算符 `&` 执行原生启动器，插件路径在执行时从 `$env:PLUGIN_ROOT` 读取，兼容空格、中文及特殊字符。命令适用于 Windows PowerShell 5.1 和 PowerShell 7。修改钩子命令后，需要在桌面版重新审查并信任更新后的三个 Hooks。
+0.0.32 修复 Windows 回合钩子的 Shell 命令：旧版使用 `"%PLUGIN_ROOT%\bin\run-node.exe" hook`，在 PowerShell 下会报 `Unexpected token 'hook'`。新版由宿主 PowerShell 直接使用调用运算符 `&` 执行原生启动器，插件路径在执行时从 `$env:PLUGIN_ROOT` 读取，兼容空格、中文及特殊字符；同时显式读取 UTF-8 stdin 并透传事件 JSON，避免原生进程等待输入结束。命令适用于 Windows PowerShell 5.1 和 PowerShell 7。修改钩子命令后，需要在桌面版重新审查并信任更新后的三个 Hooks。
 
 同版将 `UserPromptSubmit` 的超时从 2 秒改为 10 秒；`Stop` 和 `Interrupt` 为 3 秒，后者符合宿主的超时上限。旧版 2 秒的整体预算小于启动器 3 秒的单次 Node 探测预算，在冷启动和 ARM64 转交时可能来不及输出推荐卡片指令。
 

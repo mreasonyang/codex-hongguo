@@ -37,7 +37,7 @@ for (const shell of shells) test(`packaged hooks run through ${shell.name} with 
     const definition = definitions[event][0].hooks[0]
     const session = 'shell-session', turn = 'shell-' + event
     const command = definition.commandWindows
-    const result = run(command, JSON.stringify({ session_id: session, turn_id: turn, hook_event_name: event }), definition.timeout * 1000)
+    const result = run(command, JSON.stringify({ session_id: session, turn_id: turn, hook_event_name: event, prompt: '合成中文输入，不应进入输出或进度库' }), definition.timeout * 1000)
     const categories = [
       ['parser_error', /Unexpected token|ParserError|SplattingNotPermitted/i],
       ['command_not_found', /not recognized|CommandNotFound|cannot find/i],
