@@ -21,7 +21,6 @@ The command checks the environment, downloads and verifies the playback componen
 ### Post-Install Setup
 
 - **Run the Setup guide**: Run **Setup** from the plugin details view (which invokes `hongguo-setup`), or say `配置红果短剧` in a local conversation. The setup check verifies Node, the progress database, the playback component, and whether all three plugin Hooks are trusted and enabled.
-- **In-player getting started guide**: The player shows a getting started guide (`使用指南`) the first time it opens. Clicking **Browse shows** (`开始选剧`) dismisses the guide. It appears again if an update requires hook review. You can reopen it anytime from **Settings → Getting started** (`设置 → 使用指南`) and click **Check again** (`重新检查`), or run **Diagnostics** (`自检`) in Settings.
 - **Review and trust Hooks**: For task-start and task-end playback control, open Codex Desktop **Settings → Hooks** (`设置 → Hooks`), review and trust Hongguo's `UserPromptSubmit`, `Stop`, and `Interrupt` hooks, and then run the check again. Installation and Setup never trust Hooks automatically on your behalf and never treat past turn records as proof that Hooks are configured; if host trust status cannot be read, it is shown as **Unverified** (`待确认`). You can watch manually before completing Hook setup.
 - **No extra accounts or permissions**: Normal browsing and playback do not require a Hongguo account, API key, or browser automation permissions.
 
@@ -31,7 +30,7 @@ The command checks the environment, downloads and verifies the playback componen
 
 ![Hongguo show catalog with recommendations, search, Continue watching, and watch history](docs/images/codex-hongguo-catalog.png)
 
-**Player**: Watch beside your chat, choose episodes, adjust the volume, and autoplay the next episode.
+**Player**: Watch beside your chat, choose episodes and autoplay the next episode.
 
 ![Watching Hongguo short dramas in the side panel while Codex works on a task](docs/images/codex-hongguo-player.png)
 
@@ -44,7 +43,7 @@ The command checks the environment, downloads and verifies the playback componen
 | Watch independently | In Codex Desktop with the plugin installed, click [Open Hongguo Short Dramas](codex://plugins/codex-hongguo@hongguo-local/app/open_drama_panel) to open the standalone catalog. To play and pause automatically with tasks, open the player from the corresponding chat instead. |
 
 - **Browse & resume**: The catalog shows saved titles as it refreshes. On first use, titles appear as soon as the first batch arrives. Click any show title in Recommendations, Search results, or Watch history (`观看历史`) to start playing. Previously watched shows automatically resume from your last episode and timestamp, with a banner option to **Start over** (`从头播放`). Watch history is grouped by show and supports removing individual entries.
-- **Muted by default & playback controls**: Playback starts muted whenever you open the player; click the speaker button or adjust the volume slider to unmute. On-screen controls support scrubbing, playback speed (`0.75×`–`2×`), and fullscreen. The episode selector groups episodes in sets of 50 with Previous, Next, and random episode buttons.
+- **Muted by default & playback controls**: Playback starts muted whenever you open the player; click the speaker button to unmute. On-screen controls support scrubbing, playback speed (`0.75×`–`2×`), and fullscreen. The episode selector groups episodes in sets of 50 with Previous, Next, and random episode buttons.
 - **Watch while waiting**: Both the conversation card and catalog can offer up to 3 titles. Choices stay fixed within a turn. Chats share local rotation records, which advance after titles become visible. Disable suggestions or edit additional search keywords in **Settings**.
 - **Pause and resume.** Click the picture, center button or toolbar playback button to pause. Click again to resume from the same position, during or after a task.
 - **Background playback.** Playback continues when you switch windows or tabs. When automatic pausing is enabled, a task ending or being interrupted in this chat also pauses background playback. Closing the player saves your position.
@@ -64,7 +63,7 @@ The switches are independent, saved across restarts, and shared by all chats. Ot
 ## Troubleshooting
 
 - **No task suggestions**: Enable suggestions, trust all three Hooks, and retry in a new local turn with no visible player. If the catalog returns no candidates or the host does not display the card, use the right-side **＋** to open the player.
-- **Playback component preparation failed**: Check your connection and run the installation command again, or click **Check again** in **Settings → Getting started**. The plugin retries preparation automatically.
+- **Playback component preparation failed**: Check your connection and run the installation command again. The plugin retries preparation automatically.
 - **Turn linkage is unverified**: Check all three events in Codex **Settings → Hooks**. A passing environment check does not establish that automatic pausing works; manual playback remains available.
 
 - **Playback pauses too often**: Turn off **Pause automatically when a task ends** in the player's Settings and save to keep watching continuously.
