@@ -1,10 +1,19 @@
-# Hongguo Short Dramas (codex-hongguo)
+<p align="center">
+  <img src="assets/logo.png" width="112" height="112" alt="Original codex-hongguo icon: a red fruit, green leaf and ivory play button on graphite">
+</p>
 
-<img src="assets/logo.png" width="96" height="96" alt="Independent codex-hongguo plugin icon: a coral-red fruit, sage leaf and ivory play button on graphite">
+<h1 align="center">Hongguo Short Dramas · codex-hongguo</h1>
 
-[中文](README.md) · English
+<p align="center">Watch an episode while Codex works.</p>
 
-Watch Hongguo short dramas in the right-hand panel while Codex works on a task. By default, a new task resumes the selected episode; finishing or interrupting the task pauses playback and saves your position. You can turn off either behavior independently in Settings. The plugin supports local-executor Codex Desktop conversations.
+<p align="center">
+  <a href="README.md">中文</a> · English<br>
+  <a href="#installation--setup">Installation &amp; Setup</a> · <a href="#screenshots">Screenshots</a> · <a href="#usage">Usage</a>
+</p>
+
+Watch Hongguo short dramas in the right-hand panel of Codex Desktop, with browsing, search, resume and autoplay next. By default, a new task resumes the selected episode; finishing or interrupting the task pauses playback and saves your position. You can turn off either behavior independently in Settings. The plugin supports local-executor Codex Desktop conversations.
+
+This is an independent, unofficial plugin with original icon artwork. The red fruit echoes the name Hongguo ("red fruit"), while the leaf and play button form the plugin's own mark.
 
 After installation and Hook review, continue working normally. The optional **Watch while you wait** card offers up to three shows per turn. It prioritizes **Continue watching**, or **Watch next** when the saved episode is complete and another episode is available. Other slots rotate unwatched shows. Clicking a title opens the player in that chat and starts muted playback.
 

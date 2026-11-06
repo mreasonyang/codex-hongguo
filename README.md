@@ -1,10 +1,19 @@
-# 红果短剧 (codex-hongguo)
+<p align="center">
+  <img src="assets/logo.png" width="112" height="112" alt="codex-hongguo 原创图标：石墨灰底、红色果实、绿叶与米白播放键">
+</p>
 
-<img src="assets/logo.png" width="96" height="96" alt="codex-hongguo 独立插件图标：石墨灰底、红色果实、鼠尾草绿叶片与米白播放键">
+<h1 align="center">红果短剧 · codex-hongguo</h1>
 
-中文 · [English](README.en.md)
+<p align="center">边等 Codex，边看一集。</p>
 
-在 Codex 桌面会话右侧看红果短剧，边看边等任务。默认在新任务开始时续播已选剧集，任务结束或中断时暂停并保存进度；两个行为都可在设置中独立关闭。插件用于使用本机执行器的 Codex 桌面对话。
+<p align="center">
+  中文 · <a href="README.en.md">English</a><br>
+  <a href="#安装与配置">安装与配置</a> · <a href="#界面预览">界面预览</a> · <a href="#观看用法">观看用法</a>
+</p>
+
+在 Codex 桌面会话右侧看红果短剧，支持选剧、搜索、续播和连播。默认在新任务开始时续播已选剧集，任务结束或中断时暂停并保存进度；两个行为都可在设置中独立关闭。插件用于使用本机执行器的 Codex 桌面对话。
+
+本项目是非官方的独立插件，图标为原创设计。红色果实呼应「红果」，叶片和播放键构成插件自己的标识。
 
 完成安装并信任 Hooks 后，照常发任务，对话里的「等待时看一集」每轮最多推荐三部。已有进度优先显示「继续观看」；本集已看完且还有后续分集时显示「看下一集」。其余位置轮换没看过的剧，点剧名即可在当前聊天里打开播放器并静音开播。
 
