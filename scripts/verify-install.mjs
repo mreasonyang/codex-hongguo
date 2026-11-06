@@ -1,5 +1,5 @@
 // Exercise the installed copy in a disposable CLI profile, including paths with spaces.
-import { mkdtemp, mkdir, rm, readFile, writeFile, access, realpath } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, readFile, writeFile, access, realpath, copyFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fork } from 'node:child_process'
@@ -51,10 +51,19 @@ try {
     ? '@echo off\r\necho used>"%HONGGUO_FORBIDDEN_FFMPEG%"\r\nexit /b 91\r\n'
     : '#!/bin/sh\nprintf used > "$HONGGUO_FORBIDDEN_FFMPEG"\nexit 91\n', { mode: 0o755 })
   env.PATH = trap + (process.platform === 'win32' ? ';' : ':') + env.PATH
-  const cert = spawnSync(commands.openssl, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
-    '-keyout', join(tmp, 'registry.key'), '-out', join(tmp, 'registry.crt'),
-    '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1'], { stdio: 'ignore', timeout: 15000 })
-  assert.equal(cert.status, 0, '无法生成临时测试仓库证书')
+  // OpenSSL distributions differ in default config and Unicode filename support.
+  // Generate the disposable registry certificate with explicit config and ASCII names,
+  // then use Node to place it in the installation's Unicode profile.
+  const certificateRoot = await mkdtemp(join(tmpdir(), 'hongguo-registry-'))
+  try {
+    await writeFile(join(certificateRoot, 'openssl.cnf'), '[req]\ndistinguished_name=subject\n[subject]\n')
+    const cert = spawnSync(commands.openssl, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+      '-config', 'openssl.cnf', '-keyout', 'registry.key', '-out', 'registry.crt',
+      '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1'],
+    { cwd: certificateRoot, stdio: 'ignore', timeout: 15000 })
+    assert.equal(cert.status, 0, '无法生成临时测试仓库证书')
+    for (const name of ['registry.key', 'registry.crt']) await copyFile(join(certificateRoot, name), join(tmp, name))
+  } finally { await rm(certificateRoot, { recursive: true, force: true }) }
   const metadata = JSON.parse(await readFile(resolve('release/package-metadata.json'), 'utf8'))
   assert.equal(metadata.name, npmPackageName)
   assert.equal(metadata.version, version)
