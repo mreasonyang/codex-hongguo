@@ -28,6 +28,17 @@ npx.cmd "@kyun.si/codex-hongguo@latest" uninstall
 
 若 npm 报 `EBADPLATFORM`，Windows x64 请使用 0.0.29 或更新版本，Windows ARM64 请使用 0.0.30 或更新版本。0.0.29 的安装器仍会拒绝 ARM64 Node；更新到新版即可，无需使用 `--force`。
 
+### 插件已启用，但 Hooks 页面为空
+
+插件启用状态和钩子发现结果是两项独立的状态。先保留当前安装，使用 Windows 专用脚本收集安装副本与运行时发现结果：
+
+```powershell
+Invoke-WebRequest "https://github.com/mreasonyang/codex-hongguo/releases/download/v0.0.31/windows-hooks-diagnostics.cjs" -OutFile "$env:TEMP\hongguo-windows-hooks.cjs"
+node "$env:TEMP\hongguo-windows-hooks.cjs"
+```
+
+脚本列出插件版本、发行包中的钩子文件和 Windows 启动器是否存在，并通过 npm/PATH CLI 与可定位的桌面内置引擎分别查询钩子发现结果。它不执行钩子、不修改配置或信任记录，不输出命令参数、环境变量、原始日志或其他插件的配置。`desktopEngineFound: false` 表示没有定位到桌面内置引擎，不能把 CLI 的结果当成桌面版的结果。请将输出中的 JSON 提供给维护者；无需提交完整日志或认证配置。
+
 ## 离线 ZIP 安装
 
 也可以解压 `release/codex-hongguo-<版本>.zip` 到长期保留的目录，在解压根目录的 PowerShell 执行：
