@@ -3,7 +3,6 @@ import { coverArt, fill, icon, setCover, setIcon } from './ui-kit'
 import { panelStream } from './panel-stream'
 import { mediaErrorMessage, waitForMetadata } from './media-startup'
 import { finishedTurn, startedTurn } from './playback-turn'
-import { initOnboarding, showSetup } from './onboarding'
 import { browser, call, connect, hostLocale, type Context, type State, type Preferences } from './api'
 import { pickLabel, showWaitingPicks, waitingCard, type WaitingSelection } from './waiting'
 
@@ -873,20 +872,12 @@ el('stage').addEventListener('pointerleave', () => el('stage').classList.remove(
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && el('stage').classList.contains('expanded')) void fullscreen()
 })
-const volume = el<HTMLInputElement>('volume')
 video.onvolumechange = () => {
   const silent = video.muted || video.volume === 0
   setIcon(el('mute'), silent ? 'mute' : 'volume', tr(silent ? '取消静音' : '静音'))
   el('mute').setAttribute('aria-pressed', String(silent))
-  volume.value = String(Math.round(video.volume * 100))
-  fill(volume)
 }
-video.volume = Number(volume.value) / 100
-fill(volume)
-volume.oninput = () => {
-  video.volume = Number(volume.value) / 100
-  video.muted = video.volume === 0
-}
+video.volume = 0.7
 el<HTMLSelectElement>('speed').onchange = (e) =>
   (video.playbackRate = parseFloat((e.target as HTMLSelectElement).value))
 const queryInput = el<HTMLInputElement>('query')
@@ -944,11 +935,6 @@ el('copy').onclick = async () => {
   }
 }
 el('settingsCancel').onclick = () => el('prefs').click()
-el('setupOpen').onclick = () => {
-  el('settings').hidden = true
-  el('prefs').setAttribute('aria-expanded', 'false')
-  void showSetup()
-}
 el('prefs').onclick = () => {
   el('settings').hidden = !el('settings').hidden
   el('prefs').setAttribute('aria-expanded', String(!el('settings').hidden))
@@ -978,35 +964,6 @@ el('settings').onsubmit = (e) => {
       if (!series) await list()
     })
     .catch((err) => notice(explain(err)))
-}
-el('health').onclick = async () => {
-  const box = el('healthInfo')
-  box.hidden = !box.hidden
-  el('health').setAttribute('aria-expanded', String(!box.hidden))
-  if (box.hidden) return
-  box.textContent = tr('正在检查…')
-  try {
-    const h = await call<{ runtime: string; database: boolean; ffmpeg: boolean }>('get_health')
-    const rows: Array<[string, string, boolean]> = [
-      ['Node', h.runtime, true],
-      ['进度库', h.database ? '可写' : '不可用', h.database],
-      ['播放组件', h.ffmpeg ? '就绪' : '准备中', h.ffmpeg],
-    ]
-    box.replaceChildren(
-      ...rows.map(([name, value, ok]) => {
-        const row = document.createElement('div'),
-          label = document.createElement('span'),
-          result = document.createElement('span')
-        row.className = 'healthRow ' + (ok ? 'ok' : 'bad')
-        label.textContent = tr(name)
-        result.textContent = tr(value)
-        row.append(icon(ok ? 'check' : 'alert'), label, result)
-        return row
-      }),
-    )
-  } catch (e) {
-    box.textContent = explain(e)
-  }
 }
 el('choose').onclick = async () => {
   try {
@@ -1097,7 +1054,6 @@ async function initPlayer(selection?: WaitingSelection) {
   current = null
   displayState()
   activatePage()
-  initOnboarding(notice)
   void call<typeof prefs>('get_preferences').then(settings => {
     if (!playerReady) return
     prefs = settings

@@ -519,60 +519,6 @@ h1 {
   justify-content: flex-end;
   gap: 6px;
 }
-#health {
-  margin-right: auto;
-}
-#healthInfo {
-  font-size: var(--fs-sm);
-  color: var(--text-2);
-}
-.setupHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-#setupGuide p {
-  margin: 8px 0;
-  color: var(--text-2);
-  font-size: var(--fs-sm);
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-}
-#setupGuide .sheetActions {
-  margin-top: 10px;
-}
-.healthRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--line);
-}
-.healthRow:last-child {
-  border-bottom: 0;
-}
-.healthRow .i {
-  width: 14px;
-  height: 14px;
-}
-.healthRow.ok .i {
-  color: var(--success);
-}
-.healthRow.bad .i {
-  color: var(--danger);
-}
-.healthRow span:first-of-type {
-  flex: 1;
-}
-.healthRow span:last-child {
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-
 /* Turn linkage strip */
 .linkage {
   margin-bottom: 14px;
@@ -1439,16 +1385,6 @@ h1 {
 .spacer {
   flex: 1;
 }
-.volume {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 4px;
-  color: var(--text-2);
-}
-.volume input {
-  width: 72px;
-}
 @container panel (max-width: 340px) {
   #random .lbl {
     position: absolute;
@@ -1460,9 +1396,6 @@ h1 {
   #random {
     width: 28px;
     padding: 0;
-  }
-  .volume input {
-    width: 60px;
   }
 }
 

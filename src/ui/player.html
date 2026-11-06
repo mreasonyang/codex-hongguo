@@ -64,7 +64,6 @@
         <circle cx="15" cy="7.5" r="2" />
         <circle cx="9" cy="16.5" r="2" />
       </symbol>
-      <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2.5-6 5 12 2.5-6h4" /></symbol>
       <symbol id="i-search" viewBox="0 0 24 24">
         <circle cx="11" cy="11" r="6" />
         <path d="m19.5 19.5-4.2-4.2" />
@@ -148,30 +147,10 @@
           <input id="terms" maxlength="185" placeholder="用逗号分隔" />
         </label>
         <div class="sheetActions">
-          <button type="button" id="health" class="link" aria-expanded="false" aria-controls="healthInfo">
-            <svg class="i" aria-hidden="true"><use href="#i-pulse" /></svg>
-            <span>自检</span>
-          </button>
           <button type="button" id="settingsCancel" class="btn ghost">取消</button>
           <button type="submit" class="btn primary">保存设置</button>
         </div>
-        <div id="healthInfo" hidden></div>
-        <button type="button" id="setupOpen" class="link">使用指南</button>
       </form>
-
-      <section id="setupGuide" class="sheet" aria-labelledby="setupTitle" hidden>
-        <div class="setupHead">
-          <h2 id="setupTitle">开始使用红果</h2>
-          <button id="setupCheck" class="link" type="button">重新检查</button>
-        </div>
-        <p>点剧名即可播放，默认静音；打开扬声器出声。</p>
-        <div id="setupRows" role="status" aria-live="polite"></div>
-        <p id="setupHelp"></p>
-        <p class="setupHooks">回合联动需要在 Codex 设置 → Hooks 审查、信任并启用红果的 UserPromptSubmit、Stop、Interrupt。</p>
-        <div class="sheetActions">
-          <button id="setupDone" class="btn primary" type="button">开始选剧</button>
-        </div>
-      </section>
 
       <section class="linkage" aria-label="回合联动">
         <div class="statusbar">
@@ -317,11 +296,6 @@
                 <span class="lbl">随机一集</span>
               </button>
               <span class="spacer"></span>
-              <label class="volume">
-                <svg class="i" aria-hidden="true"><use href="#i-volume" /></svg>
-                <span class="sr">音量</span>
-                <input type="range" id="volume" min="0" max="100" value="70" />
-              </label>
               <label class="switchRow compact">
                 <input type="checkbox" id="autonext" class="switch" checked />
                 <span>连播</span>

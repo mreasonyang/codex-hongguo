@@ -1,35 +1,7 @@
 // The catalog supplies show names and episode titles. Translate player chrome only.
 const en: Record<string, string> = {
-  '请审查红果的回合 Hooks': 'Review Hongguo’s task hooks',
-  使用指南: 'Getting started',
-  开始使用红果: 'Welcome to Hongguo',
-  重新检查: 'Check again',
-  '点剧名即可播放，默认静音；打开扬声器出声。': 'Choose a show to play. Playback starts muted; use the speaker to turn on sound.',
-  '回合联动需要在 Codex 设置 → Hooks 审查、信任并启用红果的 UserPromptSubmit、Stop、Interrupt。':
-    'For task-linked playback, review, trust and enable Hongguo’s UserPromptSubmit, Stop and Interrupt in Codex Settings → Hooks.',
   '推荐所属任务已结束，点击播放继续观看': 'The recommended task has ended. Click Play to keep watching.',
   '宿主阻止了自动播放，请点击播放继续': 'The host blocked autoplay. Click Play to continue.',
-  开始选剧: 'Browse shows',
-  已配置: 'Configured',
-  待确认: 'Unverified',
-  待配置: 'Needs setup',
-  '进度暂时无法保存，请检查红果的数据目录权限。': 'Progress cannot be saved. Check permissions for Hongguo’s data folder.',
-  '播放组件': 'Playback component',
-  '准备中': 'Preparing',
-  '播放组件尚未就绪。请检查网络后点击「重新检查」，插件会自动准备。':
-    'The playback component is not ready. Check your connection and click Check again to prepare it automatically.',
-  '回合联动已就绪。可在设置中配置任务开始自动播放和任务结束自动暂停。':
-    'Task hooks are ready. Configure automatic play and pause in Settings.',
-  '暂时无法读取 Hooks 状态，请在宿主设置中核对。现在可以先手动观看。':
-    'Hook status is unavailable. Check the host settings; you can watch manually for now.',
-  '尚未发现完整的回合事件。请检查插件已启用，并在新的本地对话中重试。':
-    'Some hooks were not found. Check that the plugin is enabled, then retry in a new local conversation.',
-  '回合联动尚未配置。完成下方操作后重新检查，也可以先手动观看。':
-    'Automatic pausing needs setup. Follow the instructions below and check again, or watch manually.',
-  '检查未完成，请稍后重试或在 Codex 设置 → Hooks 核对回合联动。':
-    'The check could not finish. Retry or review automatic pausing in Codex Settings → Hooks.',
-  '本次已收起指南，暂时无法保存此设置。': 'Guide hidden for now. This preference could not be saved.',
-  自检: 'Diagnostics',
   设置: 'Settings',
   以下设置对所有聊天生效: 'These settings apply to all chats',
   任务结束自动暂停: 'Pause automatically when a task ends',
@@ -75,7 +47,6 @@ const en: Record<string, string> = {
   全屏: 'Fullscreen',
   退出全屏: 'Exit fullscreen',
   选择一部短剧: 'Choose a show',
-  音量: 'Volume',
   连播: 'Autoplay next',
   随机一集: 'Pick an episode',
   分集范围: 'Episode groups',

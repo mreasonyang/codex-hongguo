@@ -16,7 +16,7 @@ const root = join(tmp, '本地 市场'),
   profile = join(tmp, '独立配置')
 const npmMarket = join(tmp, 'npm 市场')
 const version = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version
-const playerUri = 'ui://hongguo/v15/player', waitingUri = 'ui://hongguo/v15/waiting'
+const playerUri = 'ui://hongguo/v16/player', waitingUri = 'ui://hongguo/v16/waiting'
 const commands = Object.fromEntries(['npm', 'codex', 'openssl'].map(name => [name, findExecutable(name)]))
 const env = {
   HOME: tmp,
@@ -282,8 +282,8 @@ try {
   })
   assert.deepEqual(resource.contents[0]._meta.ui.csp, { connectDomains: [], resourceDomains: ['blob:'] })
   assert.ok(resource.contents?.[0]?.text?.includes('id="fullscreen"'))
-  assert.match(resource.contents[0].text, /class="setupHooks">[^<]*审查、信任并启用[^<]*UserPromptSubmit/,
-    '安装副本必须包含明确的 Hooks 信任指南')
+  assert.doesNotMatch(resource.contents[0].text, /id="(?:setupGuide|setupOpen|health|healthInfo|volume)"/,
+    '播放器不应包含欢迎／自检页、入口或音量滑杆')
   assert.doesNotMatch(resource.contents[0].text, /自制样片|id="local"|video:\/\/hongguo\//)
   console.log(
     '两个入口、真实红果片库、分集和播放器资源通过安装验证。已识别会话',
@@ -343,7 +343,7 @@ try {
     name: npmPackageName, version, installation: 'fresh', sha256,
     platform: process.platform, arch: process.arch, windowsPreview: process.platform === 'win32',
     checkedAt: new Date().toISOString(),
-    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'progress-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'installation-trust-instructions', 'packaged-trust-guide', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'npx-uninstall', 'uninstall-dry-run', 'repeat-uninstall', 'uninstall-without-media-runtime', 'uninstall-cleans-component-directory-and-partial-downloads', 'uninstall-preserves-external-executables', 'uninstall-deletes-all-local-data'],
+    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'progress-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'installation-trust-instructions', 'minimal-player-ui', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'npx-uninstall', 'uninstall-dry-run', 'repeat-uninstall', 'uninstall-without-media-runtime', 'uninstall-cleans-component-directory-and-partial-downloads', 'uninstall-preserves-external-executables', 'uninstall-deletes-all-local-data'],
     mediaDecoded: process.argv.includes('--playback'), desktopPlaybackObserved: false,
   }, null, 2) + '\n')
 } finally {
