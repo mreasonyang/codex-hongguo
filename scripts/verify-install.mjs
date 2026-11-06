@@ -26,7 +26,8 @@ const env = {
   CODEX_HOME: profile,
   HONGGUO_DATA_DIR: join(tmp, 'data'),
   PATH: process.env.PATH || process.env.Path,
-  ...Object.fromEntries(['SystemRoot', 'WINDIR', 'ComSpec', 'PATHEXT', 'ProgramFiles', 'ProgramW6432'].filter(key => process.env[key]).map(key => [key, process.env[key]])),
+  // Keep Windows' shell/module prerequisites; user/npm/Codex homes remain isolated.
+  ...Object.fromEntries(['SystemRoot', 'SystemDrive', 'WINDIR', 'ComSpec', 'PATHEXT', 'ProgramFiles', 'ProgramW6432', 'ProgramData', 'ALLUSERSPROFILE', 'COMPUTERNAME', 'USERNAME', 'USERDOMAIN', 'PSModulePath'].filter(key => process.env[key]).map(key => [key, process.env[key]])),
   TEMP: tmp,
   TMP: tmp,
   HONGGUO_NODE: process.execPath,
