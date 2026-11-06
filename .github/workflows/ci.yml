@@ -47,13 +47,13 @@ jobs:
       - name: Prepare managed playback runtime
         run: node scripts/prepare-media.mjs
         timeout-minutes: 7
-      - name: Run regression tests
-        run: node --test --test-timeout=180000 test/*.test.mjs
-        timeout-minutes: 5
       - name: Verify Windows command shims and launcher independently
         if: runner.os == 'Windows'
         run: node --test --test-timeout=30000 test/windows.test.mjs test/distribution.test.mjs
         timeout-minutes: 2
+      - name: Run regression tests
+        run: node --test --test-timeout=180000 test/*.test.mjs
+        timeout-minutes: 5
       - run: npm run package
       - run: npm run verify:install
       - uses: actions/upload-artifact@v4
