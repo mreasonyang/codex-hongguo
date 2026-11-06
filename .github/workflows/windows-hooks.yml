@@ -8,7 +8,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, windows-11-arm]
+        include:
+          - os: windows-latest
+            arch: x64
+          - os: windows-11-arm
+            arch: arm64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 12
     steps:
@@ -16,12 +20,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+          architecture: ${{ matrix.arch }}
           cache: npm
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
           cache: false
       - run: npm ci
+      - name: Confirm native Node architecture
+        env:
+          HONGGUO_EXPECT_ARCH: ${{ matrix.arch }}
+        run: node -e "if(process.arch!==process.env.HONGGUO_EXPECT_ARCH)process.exit(1);console.log('Node architecture:',process.arch)"
       - name: Build native launchers and hook program
         run: npm run build
       - name: Verify hooks through CMD and both PowerShell versions
