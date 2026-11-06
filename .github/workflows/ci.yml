@@ -32,18 +32,28 @@ jobs:
       - name: Install macOS media tools
         if: runner.os == 'macOS'
         run: brew install openssl@3
-      - name: Install Windows media tools
-        if: runner.os == 'Windows'
-        run: choco install openssl.light --no-progress --yes
       - name: Locate Windows OpenSSL
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          @("$env:ProgramFiles\OpenSSL\bin", "$env:ProgramFiles\OpenSSL-Win64\bin", "$env:ProgramFiles\Git\usr\bin") | ForEach-Object {
-            if (Test-Path "$_\openssl.exe") { $_ >> $env:GITHUB_PATH }
-          }
+          $candidates = @("$env:ProgramFiles\OpenSSL\bin", "$env:ProgramFiles\OpenSSL-Win64\bin", "$env:ProgramFiles\Git\usr\bin")
+          $opensslDirectory = $candidates | Where-Object { Test-Path "$_\openssl.exe" } | Select-Object -First 1
+          if (-not $opensslDirectory) { throw 'OpenSSL was not found in the Windows runner image.' }
+          $opensslDirectory >> $env:GITHUB_PATH
       - run: npm ci
-      - run: npm test
+      - name: Build plugin and native launcher
+        run: npm run build
+        timeout-minutes: 4
+      - name: Prepare managed playback runtime
+        run: node scripts/prepare-media.mjs
+        timeout-minutes: 7
+      - name: Verify Windows command shims and launcher independently
+        if: runner.os == 'Windows'
+        run: node --test --test-timeout=30000 test/windows.test.mjs test/distribution.test.mjs
+        timeout-minutes: 2
+      - name: Run regression tests
+        run: node --test --test-timeout=180000 test/*.test.mjs
+        timeout-minutes: 5
       - run: npm run package
       - run: npm run verify:install
       - uses: actions/upload-artifact@v4

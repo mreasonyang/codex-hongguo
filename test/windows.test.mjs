@@ -17,17 +17,23 @@ test('Windows .cmd discovery and both process APIs preserve Chinese, spaces and 
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   const tools = join(dir, '工具 目录')
   mkdirSync(tools)
-  const receiver = join(dir, '接收 参数.mjs')
+  const receiver = join(dir, 'receiver.mjs')
   writeFileSync(receiver, 'process.stdout.write(JSON.stringify(process.argv.slice(2)))')
   const shim = join(tools, 'hongguo-probe.cmd')
-  writeFileSync(shim, `@echo off\r\n"${process.execPath}" "${receiver}" %*\r\n`)
+  // Keep the batch file ASCII like real npm shims. Unicode paths are expanded
+  // from the environment and %~dp0, independently of cmd.exe's console code page.
+  writeFileSync(shim, '@echo off\r\n"%HONGGUO_TEST_NODE%" "%~dp0..\\receiver.mjs" %*\r\n')
+  const env = { ...process.env, HONGGUO_TEST_NODE: process.execPath }
   const command = findExecutable('hongguo-probe', undefined, { env: { Path: `relative;"${tools}"` }, home: dir })
   assert.equal(command, shim)
   const args = ['中文 路径', 'a&b', '(test)', 'x^y', 'quote"here', 'trailing\\']
-  const result = spawnSync(command, args, { encoding: 'utf8', windowsHide: true })
-  assert.equal(result.status, 0)
+  const result = spawnSync(command, args, { env, encoding: 'utf8', windowsHide: true, timeout: 5000 })
+  const diagnostic = { code: result.error?.code, status: result.status,
+    missingModule: /MODULE_NOT_FOUND/.test(result.stderr || ''),
+    missingCommand: /not recognized|cannot find/.test(result.stderr || '') }
+  assert.equal(result.status, 0, JSON.stringify(diagnostic))
   assert.deepEqual(JSON.parse(result.stdout), args)
-  const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true })
+  const child = spawn(command, args, { env, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true, timeout: 5000 })
   let stdout = ''
   child.stdout.on('data', chunk => { stdout += chunk })
   await new Promise((ok, fail) => { child.once('error', fail); child.once('close', code => code === 0 ? ok() : fail(Error('probe failed'))) })

@@ -1,6 +1,6 @@
 {
   "name": "@kyun.si/codex-hongguo",
-  "version": "0.0.28",
+  "version": "0.0.29",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -13,7 +13,7 @@
     "version": "node scripts/version.mjs --sync",
     "prebuild": "node scripts/version.mjs",
     "build": "node scripts/build.mjs",
-    "test": "npm run build && node scripts/prepare-media.mjs && node --test test/*.test.mjs",
+    "test": "npm run build && node scripts/prepare-media.mjs && node --test --test-timeout=180000 test/*.test.mjs",
     "package": "npm run build && node scripts/package.mjs",
     "verify:install": "node scripts/verify-install.mjs",
     "release:publish": "node scripts/publish.mjs"

@@ -1,5 +1,5 @@
 // Exercise the installed copy in a disposable CLI profile, including paths with spaces.
-import { mkdtemp, mkdir, rm, readFile, writeFile, access, realpath } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, readFile, writeFile, access, realpath, copyFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fork } from 'node:child_process'
@@ -33,8 +33,6 @@ const env = {
   HONGGUO_CODEX: commands.codex,
   npm_config_cafile: join(tmp, 'registry.crt'),
   npm_config_cache: join(tmp, 'npm-cache'),
-  // Preview-only qualification: published npm metadata stays gated until Windows desktop acceptance.
-  ...(process.platform === 'win32' ? { npm_config_force: 'true' } : {}),
   NODE_EXTRA_CA_CERTS: join(tmp, 'registry.crt'),
 }
 function run(bin, args) {
@@ -53,15 +51,24 @@ try {
     ? '@echo off\r\necho used>"%HONGGUO_FORBIDDEN_FFMPEG%"\r\nexit /b 91\r\n'
     : '#!/bin/sh\nprintf used > "$HONGGUO_FORBIDDEN_FFMPEG"\nexit 91\n', { mode: 0o755 })
   env.PATH = trap + (process.platform === 'win32' ? ';' : ':') + env.PATH
-  const cert = spawnSync(commands.openssl, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
-    '-keyout', join(tmp, 'registry.key'), '-out', join(tmp, 'registry.crt'),
-    '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1'], { stdio: 'ignore', timeout: 15000 })
-  assert.equal(cert.status, 0, '无法生成临时测试仓库证书')
+  // OpenSSL distributions differ in default config and Unicode filename support.
+  // Generate the disposable registry certificate with explicit config and ASCII names,
+  // then use Node to place it in the installation's Unicode profile.
+  const certificateRoot = await mkdtemp(join(tmpdir(), 'hongguo-registry-'))
+  try {
+    await writeFile(join(certificateRoot, 'openssl.cnf'), '[req]\ndistinguished_name=subject\n[subject]\n')
+    const cert = spawnSync(commands.openssl, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+      '-config', 'openssl.cnf', '-keyout', 'registry.key', '-out', 'registry.crt',
+      '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1'],
+    { cwd: certificateRoot, stdio: 'ignore', timeout: 15000 })
+    assert.equal(cert.status, 0, '无法生成临时测试仓库证书')
+    for (const name of ['registry.key', 'registry.crt']) await copyFile(join(certificateRoot, name), join(tmp, name))
+  } finally { await rm(certificateRoot, { recursive: true, force: true }) }
   const metadata = JSON.parse(await readFile(resolve('release/package-metadata.json'), 'utf8'))
   assert.equal(metadata.name, npmPackageName)
   assert.equal(metadata.version, version)
   const archivePath = resolve('release', metadata.filename)
-  registry = fork(new URL('./test-registry.mjs', import.meta.url), [tmp, archivePath, version, npmPackageName], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] })
+  registry = fork(new URL('./test-registry.mjs', import.meta.url), [tmp, archivePath, version, npmPackageName, resolve('release/npm/codex-hongguo/package.json')], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] })
   const { origin } = await new Promise((ok, fail) => {
     const timer = setTimeout(() => fail(Error('临时 npm 仓库启动超时')), 5000)
     registry.once('message', message => { clearTimeout(timer); ok(message) })
@@ -84,6 +91,21 @@ try {
   seeded.setSetupDismissed(true)
   seeded.close()
   run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
+  if (process.platform === 'win32') {
+    // Exercise the same quoted scoped package used in the installation instructions,
+    // with both Windows PowerShell 5.1 and PowerShell 7. No platform bypass is allowed.
+    const quote = value => "'" + value.replaceAll("'", "''") + "'"
+    const args = ['--yes', '--registry', origin, npmPackageName + '@latest', 'setup', '--marketplace', npmMarket]
+    const script = "$ErrorActionPreference = 'Stop'; npx.cmd " + args.map(quote).join(' ') + '; exit $LASTEXITCODE'
+    for (const shell of ['powershell', 'pwsh']) {
+      const result = spawnSync(findExecutable(shell), ['-NoProfile', '-NonInteractive', '-Command', script], {
+        cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 120000, windowsHide: true,
+      })
+      assert.equal(result.status, 0, shell + ' 中带引号的 npx 安装命令失败')
+      assert.match(result.stdout, /UserPromptSubmit.*Stop.*Interrupt/)
+    }
+    console.log('Windows PowerShell 5.1 和 PowerShell 7 的 npx.cmd 安装通过，未绕过 npm 平台检查')
+  }
   console.log('全新 npm 安装、播放组件自动准备和重复安装通过，未调用系统 FFmpeg')
   child = spawn(commands.codex, ['app-server'], { cwd: root, env, stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true })
   const requests = new Map()
@@ -129,6 +151,8 @@ try {
   assert.equal(detail.onboardingSkill?.name?.split(':').at(-1), 'hongguo-setup', '宿主未识别安装后的设置引导')
   assert.equal(detail.onboardingSkill.enabled, true)
   const installedRoot = resolve(dirname(detail.onboardingSkill.path), '../..')
+  const installedPackage = JSON.parse(await readFile(join(installedRoot, 'package.json'), 'utf8'))
+  assert.ok(installedPackage.os.includes(process.platform), '发行包必须声明支持当前安装平台')
   await access(join(installedRoot, 'bin/run-node'))
   await access(join(installedRoot, 'bin/run-node.exe'))
   await access(join(installedRoot, 'dist/vendor/openhongguo/dist/openhongguo.wasm'))
@@ -342,7 +366,8 @@ try {
   const sha256 = createHash('sha256').update(await readFile(archivePath)).digest('hex')
   await writeFile(resolve('release/verification.json'), JSON.stringify({
     name: npmPackageName, version, installation: 'fresh', sha256,
-    platform: process.platform, arch: process.arch, windowsPreview: process.platform === 'win32',
+    platform: process.platform, arch: process.arch,
+    powershellInstall: process.platform === 'win32' ? ['5.1', '7'] : [],
     checkedAt: new Date().toISOString(),
     checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'progress-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'installation-trust-instructions', 'minimal-player-ui', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'npx-uninstall', 'uninstall-dry-run', 'repeat-uninstall', 'uninstall-without-media-runtime', 'uninstall-cleans-component-directory-and-partial-downloads', 'uninstall-preserves-external-executables', 'uninstall-deletes-all-local-data'],
     mediaDecoded: process.argv.includes('--playback'), desktopPlaybackObserved: false,

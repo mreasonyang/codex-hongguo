@@ -8,13 +8,21 @@ After installation and Hook review, continue working normally. The optional **Wa
 
 ## Installation & Setup
 
-Supports macOS and Linux (x64/arm64). Requires Node.js >=22.16 with npm and a Codex CLI supporting npm plugin sources. The plugin prepares its playback component automatically; no separate FFmpeg installation is needed.
+Supports macOS, Linux (x64/arm64), and Windows (x64 Node). Requires Node.js >=22.16 with npm and a Codex CLI supporting npm plugin sources. The plugin prepares its playback component automatically; no separate FFmpeg installation is needed.
 
-Install with npm:
+Install with npm on macOS / Linux:
 
 ```sh
-npx @kyun.si/codex-hongguo@latest setup
+npx "@kyun.si/codex-hongguo@latest" setup
 ```
+
+On Windows PowerShell:
+
+```powershell
+npx.cmd "@kyun.si/codex-hongguo@latest" setup
+```
+
+Keep the package name quoted so PowerShell treats the leading `@` literally. `npx.cmd` invokes the npm command shim directly. See [Windows support](docs/windows-support.md) (Chinese) for details and offline installation.
 
 The command checks the environment, downloads and verifies the playback component, then installs the plugin through Codex's native marketplace. The first installation requires a network connection; later runs reuse the local cache. The installer tells you to review, trust and enable `UserPromptSubmit`, `Stop` and `Interrupt` in Codex **Settings → Hooks**. Then open a new local chat to use the plugin.
 
@@ -77,15 +85,17 @@ Close all open player panels and split-view browser tabs before updating or unin
 Update with:
 
 ```sh
-npx @kyun.si/codex-hongguo@latest update
+npx "@kyun.si/codex-hongguo@latest" update
 ```
+
+In Windows PowerShell, use `npx.cmd` instead of `npx` for the update and uninstall commands, keeping the package name quoted.
 
 Updates preserve viewing progress and settings. Open a new chat afterward and review changed Hooks when prompted.
 
 Uninstall with:
 
 ```sh
-npx @kyun.si/codex-hongguo@latest uninstall
+npx "@kyun.si/codex-hongguo@latest" uninstall
 ```
 
 Uninstalling deletes the plugin's playback components, viewing progress, settings, all video caches and device profiles, including old components and partial downloads. System FFmpeg installations and external executables are kept. Open a new chat afterward. To disable the plugin temporarily while keeping data, use Codex plugin settings.
@@ -95,6 +105,7 @@ The default user data directories below are removed automatically during uninsta
 | OS | User Data Directory |
 | --- | --- |
 | macOS | `~/Library/Application Support/CodexHongguo/` |
+| Windows | `%LOCALAPPDATA%\CodexHongguo\` (defaults to `%USERPROFILE%\AppData\Local\CodexHongguo\`) |
 | Linux | `codex-hongguo` under `XDG_DATA_HOME` (defaults to `~/.local/share/codex-hongguo/`) |
 
 Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn state, recommendation rotation, catalog and episode metadata, refresh state and settings. `media/` holds prepared full episodes, capped at 40 episodes and 1 GiB with protection for active files. `panel-media/` contains temporary panel fragments with separate cleanup; its size is outside that 1 GiB limit. `device/` holds the upstream SDK's anonymous device profile. Raw hook payloads, prompts and assistant replies are not written to disk. Third-party runtime dependency notices are under `licenses/` in the plugin root.

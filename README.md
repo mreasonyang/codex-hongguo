@@ -8,13 +8,21 @@
 
 ## 安装与配置
 
-支持 macOS 和 Linux（x64/arm64）。需要 Node.js >=22.16（含 npm）和支持 npm 插件源的 Codex CLI。播放组件由插件自动准备，无需单独安装 FFmpeg。
+支持 macOS、Linux（x64/arm64）和 Windows（x64 Node）。需要 Node.js >=22.16（含 npm）和支持 npm 插件源的 Codex CLI。播放组件由插件自动准备，无需单独安装 FFmpeg。
 
-使用 npm 安装：
+macOS / Linux 使用 npm 安装：
 
 ```sh
-npx @kyun.si/codex-hongguo@latest setup
+npx "@kyun.si/codex-hongguo@latest" setup
 ```
+
+Windows PowerShell 使用：
+
+```powershell
+npx.cmd "@kyun.si/codex-hongguo@latest" setup
+```
+
+包名的引号必须保留，避免 PowerShell 将 `@` 解析为展开运算符；`npx.cmd` 可直接调用 npm 命令入口。Windows 详细说明和离线安装见 [Windows 支持](docs/windows-support.md)。
 
 命令会检查运行环境、自动下载并校验播放组件，再通过 Codex 原生市场安装插件。首次安装需要联网，之后复用本机缓存。安装完成时会提示你到 Codex「设置 → Hooks」审查、信任并启用 `UserPromptSubmit`、`Stop`、`Interrupt`。然后打开新的本地聊天使用。
 
@@ -76,15 +84,17 @@ npx @kyun.si/codex-hongguo@latest setup
 更新命令：
 
 ```sh
-npx @kyun.si/codex-hongguo@latest update
+npx "@kyun.si/codex-hongguo@latest" update
 ```
+
+Windows PowerShell 将上述更新和卸载命令中的 `npx` 写为 `npx.cmd`，并保留包名引号。
 
 更新会保留观看进度和设置。完成后打开新聊天，并按提示重新审查 Hooks。
 
 卸载命令：
 
 ```sh
-npx @kyun.si/codex-hongguo@latest uninstall
+npx "@kyun.si/codex-hongguo@latest" uninstall
 ```
 
 卸载会删除本插件的播放组件、观看进度、设置、全部视频缓存和设备档案，包括历史组件和下载残片；系统或外部自行配置的 FFmpeg 不会删除。完成后打开新聊天。只想暂时停用并保留数据时，可从 Codex 插件设置中禁用。
@@ -94,6 +104,7 @@ npx @kyun.si/codex-hongguo@latest uninstall
 | 系统 | 用户数据目录 |
 | --- | --- |
 | macOS | `~/Library/Application Support/CodexHongguo/` |
+| Windows | `%LOCALAPPDATA%\CodexHongguo\`（缺省为 `%USERPROFILE%\AppData\Local\CodexHongguo\`） |
 | Linux | `XDG_DATA_HOME` 下的 `codex-hongguo`（缺省为 `~/.local/share/codex-hongguo/`） |
 
 目录内 `player.sqlite`（及其 WAL/SHM 文件）保存观看进度、回合状态、推荐轮换、片库与分集元数据、刷新状态及播放器设置；`media/` 保存本机处理后的整集缓存（上限 40 集、1 GiB，活动文件有保护期）；`panel-media/` 保存单独回收的临时面板分片，其占用不计入整集缓存的 1 GiB 上限；`device/` 为上游 SDK 管理的匿名设备档案。本插件不将 Hook 原始输入、提示词和模型回复写入磁盘。第三方运行时依赖的许可证位于插件根目录 `licenses/`。

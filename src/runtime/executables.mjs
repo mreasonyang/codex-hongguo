@@ -2,11 +2,26 @@ import { accessSync, constants, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { posix, win32 } from 'node:path'
 import crossSpawn from 'cross-spawn'
+import escape from 'cross-spawn/lib/util/escape.js'
+import { spawn as nativeSpawn, spawnSync as nativeSpawnSync } from 'node:child_process'
 import { ffmpegPath } from './ffmpeg-runtime.mjs'
 
-// Keep callers on an argv API; cross-spawn escapes Windows command shims.
-export const spawn = crossSpawn
-export const spawnSync = crossSpawn.sync
+// Global npm and custom .cmd shims forward %* through a second cmd.exe parse too.
+// cross-spawn only doubles escaping for shims under node_modules/.bin.
+function commandShim(command, args, options = {}) {
+  if (process.platform !== 'win32' || !/\.(?:cmd|bat)$/i.test(command)) return null
+  const shell = win32.join(options.env?.SystemRoot || process.env.SystemRoot || 'C:\\Windows', 'System32', 'cmd.exe')
+  const script = [escape.command(win32.normalize(command)), ...args.map(arg => escape.argument(arg, true))].join(' ')
+  return { shell, args: ['/d', '/s', '/v:off', '/c', '"' + script + '"'], options: { ...options, windowsVerbatimArguments: true } }
+}
+export function spawn(command, args = [], options) {
+  const shim = commandShim(command, args, options)
+  return shim ? nativeSpawn(shim.shell, shim.args, shim.options) : crossSpawn(command, args, options)
+}
+export function spawnSync(command, args = [], options) {
+  const shim = commandShim(command, args, options)
+  return shim ? nativeSpawnSync(shim.shell, shim.args, shim.options) : crossSpawn.sync(command, args, options)
+}
 
 export function stopChild(child) {
   if (!child?.pid || child.exitCode !== null || child.signalCode !== null) return

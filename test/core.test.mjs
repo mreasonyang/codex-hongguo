@@ -260,8 +260,10 @@ test('loopback pairing, origin, Host, cookie, fixed-turn scope, replay and conti
   assert.equal((await post('/exchange', { ticket: stale })).status, 403)
 })
 test('compiled plugin exposes a model-visible waiting widget and keeps player controls app-only', async (t) => {
+  let client
+  t.after(() => client?.close())
   const { dir } = setup(t)
-  const client = new Client({ name: 'test', version: '1' })
+  client = new Client({ name: 'test', version: '1' })
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: ['--no-warnings', join(projectRoot, 'dist/server/index.mjs')],
@@ -269,7 +271,6 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
     stderr: 'ignore',
   })
   await client.connect(transport)
-  t.after(() => client.close())
   const { version } = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8'))
   assert.equal(client.getServerVersion()?.version, version)
   const { tools } = await client.listTools()
@@ -350,14 +351,15 @@ test('self-created CENC sample decrypts from stdin and decodes video and audio',
 })
 
 test('media preparation deduplicates across database connections and protects active files', async (t) => {
+  let second
+  t.after(() => second?.close())
   const { store, dir } = setup(t)
   const { MediaCache, hasFfmpeg } = await import('../src/server/media.mjs')
   if (!hasFfmpeg()) {
     t.skip('FFmpeg unavailable')
     return
   }
-  const second = new Store(dir)
-  t.after(() => second.close())
+  second = new Store(dir)
   let calls = 0
   const resolve = async () => {
     calls++
@@ -418,13 +420,14 @@ test('history has one row per drama and removes all its episodes', (t) => {
   )
 })
 test('upgrading removes only the old sample progress and ignores late writes from an older open panel', (t) => {
+  let current
+  t.after(() => current?.close())
   const { dir, store: old } = setup(t)
   old.db.exec('PRAGMA user_version=0')
   const progress = { title: '剧名', label: '1', positionMs: 57000, durationMs: 120000 }
   old.save({ ...progress, seriesId: 'hg-10', episodeId: 'hg-101' })
   for (const name of ['tide', 'ridge']) old.save({ ...progress, seriesId: name, episodeId: name })
-  const current = new Store(dir)
-  t.after(() => current.close())
+  current = new Store(dir)
   assert.equal(current.history('tide').length, 0)
   assert.equal(current.history('ridge').length, 0)
   old.save({ ...progress, seriesId: 'ridge', episodeId: 'full-ridge-hevc' })

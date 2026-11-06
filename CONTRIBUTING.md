@@ -10,7 +10,7 @@
 - Go >=1.25：构建时交叉编译 Windows x64 原生启动器，无 CGO；使用发行包不需要 Go。
 - OpenSSL：隔离安装脚本用它生成本地 HTTPS 测试仓库的临时证书。
 
-npm 包目前开放 macOS/Linux；离线包另提供 Windows x64 原生试用入口。本机验收为 macOS，Linux/Windows 桌面实机仍待验证。Windows 安装、CI 范围及开放条件见 [Windows 支持](docs/windows-support.md)。
+npm 包支持 macOS/Linux 和 Windows x64。三平台 CI 覆盖构建、回归、打包与隔离 npm 安装；Windows 另覆盖 PowerShell 5.1/7 安装命令。桌面画面、声音和自然回合联动需独立观察，详见 [Windows 支持](docs/windows-support.md)。
 
 ## 构建与验证
 
