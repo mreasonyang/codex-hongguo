@@ -1,0 +1,62 @@
+{
+  "name": "@kyun.si/codex-hongguo",
+  "version": "0.0.29",
+  "integrity": "sha512-v4MX30Kke0JK3/8wYKdQHnhNAmny5JUMf0ndv0i2l2sV05c6txAfHt1I+dM7RJJkFSds+B5t2axOjVs0qRVKog==",
+  "sha256": "0adc98008e37ebe3490842f893905acc44d62cf133f04000a73dcb6966a0413a",
+  "publishedAt": "2026-11-06T06:17:14.048Z",
+  "verifiedAt": "2026-11-06T06:17:24.785Z",
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "publicationMethod": "local npm web authentication in Brave; refresh CLI login through the same browser flow when needed",
+  "url": "https://www.npmjs.com/package/@kyun.si/codex-hongguo/v/0.0.29",
+  "sourceCommit": "2ea5eb342199eb1dd976e6ed25e69b10f4631ccb",
+  "size": 13092791,
+  "verificationStatus": "public-registry-integrity-verified; public installation checks pending",
+  "checks": [
+    "npx-setup",
+    "fresh-install",
+    "repeat-setup",
+    "native-npm-source",
+    "progress-preserved",
+    "managed-ffmpeg-without-system-install",
+    "hook-review-required",
+    "installation-trust-instructions",
+    "minimal-player-ui",
+    "launcher-stdin",
+    "hook-stop",
+    "hook-interrupt",
+    "host-mcp",
+    "live-catalog",
+    "npx-uninstall",
+    "uninstall-dry-run",
+    "repeat-uninstall",
+    "uninstall-without-media-runtime",
+    "uninstall-cleans-component-directory-and-partial-downloads",
+    "uninstall-preserves-external-executables",
+    "uninstall-deletes-all-local-data"
+  ],
+  "ci": {
+    "url": "https://github.com/mreasonyang/codex-hongguo/actions/runs/42171501125",
+    "macos": "passed",
+    "linux": "passed",
+    "windows": "passed"
+  },
+  "windows": {
+    "arch": "x64",
+    "powershellInstall": [
+      "5.1",
+      "7"
+    ],
+    "regressions": {
+      "total": 98,
+      "passed": 95,
+      "skipped": 3
+    },
+    "nativeChecksPassed": 9,
+    "platformBypass": false
+  },
+  "desktopPlaybackObserved": false
+}
