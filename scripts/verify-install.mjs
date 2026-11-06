@@ -155,6 +155,7 @@ try {
   assert.ok(installedPackage.os.includes(process.platform), '发行包必须声明支持当前安装平台')
   await access(join(installedRoot, 'bin/run-node'))
   await access(join(installedRoot, 'bin/run-node.exe'))
+  await access(join(installedRoot, 'bin/run-node-arm64.exe'))
   await access(join(installedRoot, 'dist/vendor/openhongguo/dist/openhongguo.wasm'))
   await assert.rejects(access(join(installedRoot, 'node_modules')))
   const checked = spawnSync(process.execPath, [join(installedRoot, 'dist/setup/check.mjs')], {

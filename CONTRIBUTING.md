@@ -7,10 +7,10 @@
 - Node.js >=22.16，包含 `node:sqlite`，并有 npm 可执行程序。
 - 播放组件由插件自动下载并校验，无需全局 FFmpeg。首次运行测试需要联网。
 - Codex CLI：需要 `plugin` 和 `app-server` 子命令及 npm 插件源支持。本机隔离验收与发布 workflow 使用 0.157.1；这不是对所有其他版本的兼容性保证。
-- Go >=1.25：构建时交叉编译 Windows x64 原生启动器，无 CGO；使用发行包不需要 Go。
+- Go >=1.25：构建时交叉编译 Windows x64/ARM64 原生启动器，无 CGO；使用发行包不需要 Go。
 - OpenSSL：隔离安装脚本用它生成本地 HTTPS 测试仓库的临时证书。
 
-npm 包支持 macOS/Linux 和 Windows x64。三平台 CI 覆盖构建、回归、打包与隔离 npm 安装；Windows 另覆盖 PowerShell 5.1/7 安装命令。桌面画面、声音和自然回合联动需独立观察，详见 [Windows 支持](docs/windows-support.md)。
+npm 包支持 macOS/Linux、Windows x64 和 Windows 11 ARM64。ARM64 0.0.30 此次按用户要求仅构建打包，运行验收由用户完成。三平台 CI 覆盖构建、回归、打包与隔离 npm 安装；Windows 另覆盖 PowerShell 5.1/7 安装命令。桌面画面、声音和自然回合联动需独立观察，详见 [Windows 支持](docs/windows-support.md)。
 
 ## 构建与验证
 
@@ -55,7 +55,7 @@ node scripts/verify-install.mjs --playback
 | `src/server/panel-media.mjs` | 面板 H.264/AAC 准备、硬件转码及软件回退、fMP4 分片和分块读取。 |
 | `src/server/browser.mjs` | 一次性本机分屏配对、会话与媒体访问控制。 |
 | `src/ui/` | 片库、播放器、推荐卡片、宿主交互和中英文界面。 |
-| `src/cli/`、`src/runtime/`、`bin/` | npm 命令入口、原生市场安装/更新/卸载、运行时发现和 POSIX 启动器；`launcher/windows/` 为 Windows x64 启动器源码。 |
+| `src/cli/`、`src/runtime/`、`bin/` | npm 命令入口、原生市场安装/更新/卸载、运行时发现和 POSIX 启动器；`launcher/windows/` 为 Windows x64/ARM64 启动器源码。 |
 | `scripts/` | 构建、打包、版本同步、隔离安装验证和发布。 |
 
 `show_waiting_picks` 是模型可见的推荐入口，其余播放器操作由应用界面调用。推荐卡片和播放器共用 HTML，但使用不同资源与展示模式；更改卡片进入播放器的流程时，需要同时检查 `waiting.ts` 和 `player.ts`。
@@ -86,7 +86,7 @@ npm run version:patch
 | 环境变量 | 读取方与用途 |
 | --- | --- |
 | `HONGGUO_DATA_DIR` | 服务、Hooks、Setup：指定包含 SQLite、整集、面板分片和匿名设备档案的数据目录。 |
-| `HONGGUO_NODE` | `bin/run-node` / `run-node.exe`：指定 Node >=22.16 的绝对路径（Windows 需 x64）。它不改变 npx 自身使用的 Node。 |
+| `HONGGUO_NODE` | `bin/run-node` / `run-node.exe`：指定 Node >=22.16 的绝对路径（Windows 需 x64 或 ARM64）。它不改变 npx 自身使用的 Node。 |
 | `HONGGUO_FFMPEG` | 高级覆盖项：指定 FFmpeg 可执行文件的绝对路径，省略时使用插件自动准备的组件。 |
 | `HONGGUO_RUNTIME_DIR` | 指定播放组件缓存根目录，插件使用其下的 `codex-hongguo/` 专属命名空间。 |
 | `HONGGUO_CODEX` | 安装、更新和卸载：指定 Codex CLI。 |

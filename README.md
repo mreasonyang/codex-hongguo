@@ -8,7 +8,7 @@
 
 ## 安装与配置
 
-支持 macOS、Linux（x64/arm64）和 Windows（x64 Node）。需要 Node.js >=22.16（含 npm）和支持 npm 插件源的 Codex CLI。播放组件由插件自动准备，无需单独安装 FFmpeg。
+支持 macOS、Linux（x64/arm64）、Windows x64 和 Windows 11 ARM64。需要对应架构的 Node.js >=22.16（含 npm）和支持 npm 插件源的 Codex CLI。播放组件由插件自动准备，无需单独安装 FFmpeg。
 
 macOS / Linux 使用 npm 安装：
 

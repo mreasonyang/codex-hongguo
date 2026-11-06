@@ -48,6 +48,7 @@ test('MCP manifest launches the packaged platform entry and keeps stdout as JSON
   mkdirSync(join(plugin, 'bin'), { recursive: true })
   cpSync('dist', join(plugin, 'dist'), { recursive: true })
   cpSync(process.platform === 'win32' ? 'dist/launcher/run-node.exe' : 'bin/run-node', join(plugin, 'bin', process.platform === 'win32' ? 'run-node.exe' : 'run-node'))
+  if (process.platform === 'win32') cpSync('dist/launcher/run-node-arm64.exe', join(plugin, 'bin/run-node-arm64.exe'))
   // Windows resolves an extensionless command to .exe; exercise exactly that host contract.
   const command = resolve(plugin, manifest.command)
   const child = spawn(command, manifest.args, { cwd: plugin, env: { ...process.env, HONGGUO_NODE: process.execPath, HONGGUO_DATA_DIR: dir }, stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true })
@@ -78,6 +79,7 @@ test('Windows launcher termination reaps its Node runtime', { skip: process.plat
   mkdirSync(join(dir, 'bin'), { recursive: true })
   mkdirSync(join(dir, 'dist/server'), { recursive: true })
   cpSync('dist/launcher/run-node.exe', join(dir, 'bin/run-node.exe'))
+  cpSync('dist/launcher/run-node-arm64.exe', join(dir, 'bin/run-node-arm64.exe'))
   writeFileSync(join(dir, 'dist/server/index.mjs'), 'console.log(JSON.stringify({pid:process.pid}));setInterval(()=>{},1000)')
   const child = spawn(join(dir, 'bin/run-node.exe'), ['server'], { env: { ...process.env, HONGGUO_NODE: process.execPath }, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true })
   let pid

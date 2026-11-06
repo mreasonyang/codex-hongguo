@@ -1,4 +1,4 @@
-// Windows x64 companion to bin/run-node. Node and FFmpeg remain external dependencies.
+// Windows x64/ARM64 companion to bin/run-node. Node and FFmpeg remain external dependencies.
 package main
 
 import (
@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -50,7 +51,7 @@ func usable(node string) bool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	probe := exec.CommandContext(ctx, node, "--no-warnings", "-e", `const [a,b]=process.versions.node.split(".").map(Number);if(process.arch!=="x64"||a<22||(a===22&&b<16))process.exit(1);require("node:sqlite")`)
+	probe := exec.CommandContext(ctx, node, "--no-warnings", "-e", `const [a,b]=process.versions.node.split(".").map(Number);if(!["x64","arm64"].includes(process.arch)||a<22||(a===22&&b<16))process.exit(1);require("node:sqlite")`)
 	probe.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	// The probe never consumes the hook's stdin or forwards runtime diagnostics.
 	return probe.Run() == nil
@@ -64,7 +65,7 @@ func processJob() (syscall.Handle, error) {
 		return 0, err
 	}
 	job := syscall.Handle(handle)
-	// JOBOBJECT_EXTENDED_LIMIT_INFORMATION on Windows x64; LimitFlags is at byte 16.
+	// JOBOBJECT_EXTENDED_LIMIT_INFORMATION on 64-bit Windows; LimitFlags is at byte 16.
 	info := [144]byte{}
 	*(*uint32)(unsafe.Pointer(&info[16])) = 0x2000 // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
 	ok, _, err := kernel.NewProc("SetInformationJobObject").Call(handle, 9, uintptr(unsafe.Pointer(&info[0])), uintptr(len(info)))
@@ -77,6 +78,35 @@ func processJob() (syscall.Handle, error) {
 		return 0, err
 	}
 	return job, nil
+}
+
+func nativeArm64() bool {
+	query := syscall.NewLazyDLL("kernel32.dll").NewProc("IsWow64Process2")
+	if query.Find() != nil {
+		return false
+	}
+	var processMachine, nativeMachine uint16
+	current, _ := syscall.GetCurrentProcess()
+	ok, _, _ := query.Call(uintptr(current), uintptr(unsafe.Pointer(&processMachine)), uintptr(unsafe.Pointer(&nativeMachine)))
+	return ok != 0 && nativeMachine == 0xaa64
+}
+
+func execute(command *exec.Cmd) int {
+	if _, err := processJob(); err != nil {
+		fmt.Fprintln(os.Stderr, "Unable to initialize the Windows runtime job.")
+		return 1
+	}
+	// The OS closes the job handle at process exit. Closing it here would kill this launcher too.
+	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
+	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	if err := command.Run(); err != nil {
+		var exited *exec.ExitError
+		if errors.As(err, &exited) {
+			return exited.ExitCode()
+		}
+		return 1
+	}
+	return 0
 }
 
 func run() int {
@@ -94,29 +124,18 @@ func run() int {
 	if err != nil {
 		return 1
 	}
+	// The fixed MCP/Hook entry remains compatible with x64 hosts. On Windows ARM,
+	// its short bootstrap runs under Windows' x64 emulation and delegates to ARM64.
+	if runtime.GOARCH == "amd64" && nativeArm64() {
+		return execute(exec.Command(filepath.Join(filepath.Dir(launcher), "run-node-arm64.exe"), os.Args[1:]...))
+	}
 	for _, node := range candidates() {
 		if !usable(node) {
 			continue
 		}
-		_, err := processJob()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Unable to initialize the Windows runtime job.")
-			return 1
-		}
-		// The OS closes the job handle at process exit. Closing it here would kill this launcher too.
-		command := exec.Command(node, "--no-warnings", filepath.Join(filepath.Dir(launcher), "..", "dist", target))
-		command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
-		command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-		if err := command.Run(); err != nil {
-			var exited *exec.ExitError
-			if errors.As(err, &exited) {
-				return exited.ExitCode()
-			}
-			return 1
-		}
-		return 0
+		return execute(exec.Command(node, "--no-warnings", filepath.Join(filepath.Dir(launcher), "..", "dist", target)))
 	}
-	fmt.Fprintln(os.Stderr, "Hongguo requires Node.js x64 >=22.16 with node:sqlite. Install it, restart Codex, then run Setup. Check HONGGUO_NODE if configured.")
+	fmt.Fprintln(os.Stderr, "Hongguo requires Node.js x64 or ARM64 >=22.16 with node:sqlite. Install it, restart Codex, then run Setup. Check HONGGUO_NODE if configured.")
 	return 1
 }
 

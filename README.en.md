@@ -8,7 +8,7 @@ After installation and Hook review, continue working normally. The optional **Wa
 
 ## Installation & Setup
 
-Supports macOS, Linux (x64/arm64), and Windows (x64 Node). Requires Node.js >=22.16 with npm and a Codex CLI supporting npm plugin sources. The plugin prepares its playback component automatically; no separate FFmpeg installation is needed.
+Supports macOS, Linux (x64/arm64), Windows x64, and Windows 11 ARM64. Requires Node.js >=22.16 with npm for your architecture and a Codex CLI supporting npm plugin sources. The plugin prepares its playback component automatically; no separate FFmpeg installation is needed.
 
 Install with npm on macOS / Linux:
 

@@ -20,6 +20,7 @@ for (const file of ['.codex-plugin/plugin.json', '.mcp.json', 'hooks/hooks.json'
 await chmod(join(npmRoot, 'bin/codex-hongguo.mjs'), 0o755)
 await chmod(join(npmRoot, 'bin/run-node'), 0o755)
 await cp('dist/launcher/run-node.exe', join(npmRoot, 'bin/run-node.exe'))
+await cp('dist/launcher/run-node-arm64.exe', join(npmRoot, 'bin/run-node-arm64.exe'))
 await rm(join(npmRoot, 'dist/launcher'), { recursive: true })
 // Keep the tested compatibility manifest canonical until portable hook discovery is qualified.
 await writeFile(join(npmRoot, 'package.json'), JSON.stringify({
@@ -77,7 +78,7 @@ async function collect(dir, base) {
     if (entry.isDirectory()) await collect(path, name)
     else {
       // Native unzip must retain the POSIX launcher's executable bit too, including Windows-built ZIPs.
-      const executable = /\/bin\/(?:run-node(?:\.exe)?|codex-hongguo\.mjs)$/.test(name)
+      const executable = /\/bin\/(?:run-node(?:-arm64)?(?:\.exe)?|codex-hongguo\.mjs)$/.test(name)
       entries[name] = [new Uint8Array(await readFile(path)), { os: 3, attrs: ((executable ? 0o100755 : 0o100644) << 16) >>> 0 }]
     }
   }

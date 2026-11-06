@@ -64,6 +64,7 @@ test('launcher works from another directory with a minimal GUI PATH and preserve
   mkdirSync(join(plugin, 'bin'), { recursive: true })
   cpSync('dist', join(plugin, 'dist'), { recursive: true })
   cpSync(windows ? 'dist/launcher/run-node.exe' : 'bin/run-node', join(plugin, 'bin', windows ? 'run-node.exe' : 'run-node'))
+  if (windows) cpSync('dist/launcher/run-node-arm64.exe', join(plugin, 'bin/run-node-arm64.exe'))
   const launcher = join(plugin, 'bin', windows ? 'run-node.exe' : 'run-node')
   const runtimeEnv = { ...process.env, HOME: dir, USERPROFILE: dir, PATH: windows ? process.env.SystemRoot : '/usr/bin:/bin', HONGGUO_NODE: process.execPath, HONGGUO_DATA_DIR: join(dir, 'data') }
   const result = spawnSync(launcher, ['hook'], {
