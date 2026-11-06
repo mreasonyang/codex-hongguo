@@ -36,8 +36,18 @@ const env = {
   NODE_EXTRA_CA_CERTS: join(tmp, 'registry.crt'),
 }
 function run(bin, args) {
-  const r = spawnSync(commands[bin] || bin, args, { cwd: root, env, stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8', timeout: bin === 'npm' ? 420000 : 120000, windowsHide: true })
-  assert.equal(r.status, 0, '隔离安装步骤失败 ' + args.slice(0, 2).join(' '))
+  const r = spawnSync(commands[bin] || bin, args, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: bin === 'npm' ? 420000 : 120000, windowsHide: true })
+  // Never relay host logs. Only a fixed category crosses the diagnostic boundary.
+  const diagnostic = (r.stderr || '') + '\n' + (r.stdout || '')
+  const reason = /红果后台仍在运行/.test(diagnostic) ? 'plugin_running'
+    : /无法确认红果后台是否已退出/.test(diagnostic) ? 'process_check_failed'
+    : /无法删除红果插件缓存/.test(diagnostic) ? 'cache_in_use'
+    : /红果插件卸载失败/.test(diagnostic) ? 'plugin_remove_failed'
+    : /红果市场尚未注销/.test(diagnostic) ? 'market_still_registered'
+    : /无法确认红果市场的位置/.test(diagnostic) ? 'market_location_unknown'
+    : /Codex 步骤失败/.test(diagnostic) ? 'codex_step_failed'
+    : r.error?.code === 'ETIMEDOUT' ? 'timeout' : 'unknown'
+  assert.equal(r.status, 0, '隔离安装步骤失败 ' + args.slice(0, 2).join(' ') + ' [' + reason + ']')
   return r.stdout
 }
 let child, registry
