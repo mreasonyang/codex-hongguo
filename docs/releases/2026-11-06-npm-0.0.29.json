@@ -14,7 +14,7 @@
   "url": "https://www.npmjs.com/package/@kyun.si/codex-hongguo/v/0.0.29",
   "sourceCommit": "2ea5eb342199eb1dd976e6ed25e69b10f4631ccb",
   "size": 13092791,
-  "verificationStatus": "public-registry-integrity-verified; public installation checks pending",
+  "verificationStatus": "public-registry-integrity-and-public-installation-verified",
   "checks": [
     "npx-setup",
     "fresh-install",
@@ -58,5 +58,17 @@
     "nativeChecksPassed": 9,
     "platformBypass": false
   },
-  "desktopPlaybackObserved": false
+  "desktopPlaybackObserved": false,
+  "publicInstallation": {
+    "platform": "darwin-arm64",
+    "latest": "0.0.29",
+    "freshSetup": true,
+    "matchingInstalledPluginVersion": true,
+    "repeatSetup": true,
+    "uninstallDryRun": true,
+    "fullUninstall": true,
+    "repeatUninstall": true,
+    "externalExecutablesPreserved": true
+  },
+  "publicVerifiedAt": "2026-11-06T06:19:11.571Z"
 }
