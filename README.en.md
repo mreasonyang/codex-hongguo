@@ -1,6 +1,6 @@
 # Hongguo Short Dramas (codex-hongguo)
 
-<img src="assets/logo.png" width="96" height="96" alt="Independent codex-hongguo plugin icon: ivory code brackets and a coral play button on graphite">
+<img src="assets/logo.png" width="96" height="96" alt="Independent codex-hongguo plugin icon: a coral-red fruit, sage leaf and ivory play button on graphite">
 
 [中文](README.md) · English
 

@@ -1,6 +1,6 @@
 # 红果短剧 (codex-hongguo)
 
-<img src="assets/logo.png" width="96" height="96" alt="codex-hongguo 独立插件图标：石墨灰底、米白代码括号与珊瑚色播放键">
+<img src="assets/logo.png" width="96" height="96" alt="codex-hongguo 独立插件图标：石墨灰底、红色果实、鼠尾草绿叶片与米白播放键">
 
 中文 · [English](README.en.md)
 

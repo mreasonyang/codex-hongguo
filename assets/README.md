@@ -2,9 +2,10 @@
 
 Original artwork for codex-hongguo, distributed under the project's MIT license.
 
-The mark combines code brackets with a play button. Its graphite background
-(`#242B2E`), ivory brackets (`#FFF4E5`) and coral play button (`#FF856F`) identify
-this independent Codex plugin. It does not use Hongguo's official artwork.
+The mark combines a coral-red fruit (`#F36C58`), a sage leaf (`#A8C8A0`) and an
+ivory play button (`#FFF4E5`) on a graphite background (`#242B2E`). The fruit
+connects the independent plugin to its Hongguo ("red fruit") name; the play button
+identifies its short-drama player. It does not use Hongguo's official artwork.
 
 - `icon.svg`: vector master and composer icon, designed on a 128 × 128 grid.
 - `logo.png`: 512 × 512 RGBA export for plugin details and documentation.
