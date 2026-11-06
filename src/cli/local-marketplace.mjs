@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { realpathSync } from 'node:fs'
 import { dataRoot } from '../server/paths.mjs'
 import { marketplace, packageVersion } from '../runtime/distribution.mjs'
 
@@ -15,7 +16,10 @@ export function marketplaceSource(registration) {
 }
 
 export function isManagedMarketplace(source, managedRoot = managedMarketplaceRoot) {
-  return typeof source === 'string' && /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(relative(managedRoot, resolve(source)))
+  if (typeof source !== 'string') return false
+  const version = /^\d{1,3}\.\d{1,3}\.\d{1,3}$/
+  if (version.test(relative(managedRoot, resolve(source)))) return true
+  try { return version.test(relative(realpathSync.native(managedRoot), realpathSync.native(source))) } catch { return false }
 }
 
 export async function prepareLocalMarketplace() {

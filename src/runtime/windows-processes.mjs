@@ -38,22 +38,32 @@ foreach ($entry in $expected) {
     if ($candidate.WaitForExit(5000)) { $result.stopped++ } else { $result.failed++ }
   } catch [ArgumentException] { $result.skipped++ }
     catch {
-      try { if ($null -ne $candidate -and $candidate.HasExited) { $result.skipped++ } else { $result.failed++ } }
-      catch { $result.failed++ }
+      $failure = $_.Exception
+      while ($null -ne $failure.InnerException) { $failure = $failure.InnerException }
+      if ($failure -is [ArgumentException] -or ($failure -is [ComponentModel.Win32Exception] -and $failure.NativeErrorCode -in @(87, 1168))) {
+        $result.skipped++
+      } else {
+        try { if ($null -ne $candidate -and $candidate.WaitForExit(500)) { $result.skipped++ } else { $result.failed++ } }
+        catch { $result.failed++ }
+      }
     }
     finally { if ($null -ne $candidate) { $candidate.Dispose() } }
 }
 ${emitJson}`
 
-const processFailure = () => Error('无法安全停止红果后台进程，插件文件可能仍被占用。请关闭红果播放器及使用该插件的 Codex 会话，再重新运行 uninstall；尚未清理观看数据。')
+const processFailure = (stage = 'identity', reason = 'unavailable', status) => Object.assign(
+  Error('无法安全停止红果后台进程，插件文件可能仍被占用。请关闭红果播放器及使用该插件的 Codex 会话，再重新运行 uninstall；尚未清理观看数据。'),
+  { code: 'PLUGIN_PROCESS_STOP_FAILED', diagnostic: { stage, reason, ...(Number.isInteger(status) ? { status } : {}) } },
+)
 function invokePowerShell(script, input, env) {
   const command = win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
   const result = spawnSync(command, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], {
     env, input, encoding: 'utf8', timeout: 20000, windowsHide: true,
-    maxBuffer: 2 * 1024 * 1024, stdio: ['pipe', 'pipe', 'ignore'],
+    maxBuffer: 2 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'],
   })
-  if (result.status !== 0) throw processFailure()
-  try { return JSON.parse(result.stdout) } catch { throw processFailure() }
+  const stage = input === undefined ? 'collect' : 'terminate'
+  if (result.status !== 0) throw processFailure(stage, result.error?.code === 'ETIMEDOUT' ? 'timeout' : /ParserError|Unexpected token/i.test(result.stderr || '') ? 'parser' : 'execution', result.status)
+  try { return JSON.parse(result.stdout) } catch { throw processFailure(stage, 'invalid_json') }
 }
 const normalize = path => win32.normalize(path.replace(/^\\\\\?\\UNC\\/i, '\\\\').replace(/^\\\\\?\\/, '')).toLowerCase()
 
@@ -102,11 +112,18 @@ export async function stopWindowsPluginProcesses({ env = process.env, home = hom
   const executables = await ownedWindowsExecutables({ env, home })
   if (!executables.length) return { stopped: 0 }
   const records = invoke(collectScript, undefined, env)
-  if (!Array.isArray(records)) throw processFailure()
+  if (!Array.isArray(records)) throw processFailure('collect', 'invalid_schema')
   const selected = await selectOwnedWindowsProcesses(records, executables)
   if (!selected.length) return { stopped: 0 }
   const result = invoke(stopScript, JSON.stringify(selected), env)
-  if (!Number.isInteger(result?.stopped) || !Number.isInteger(result?.failed) || result.failed !== 0) throw processFailure()
+  if (!Number.isInteger(result?.stopped) || !Number.isInteger(result?.failed)) throw processFailure('terminate', 'invalid_schema')
+  if (result.failed !== 0) {
+    const error = processFailure('terminate', 'process_busy')
+    error.diagnostic.stopped = result.stopped
+    error.diagnostic.failed = result.failed
+    error.diagnostic.skipped = Number.isInteger(result.skipped) ? result.skipped : 0
+    throw error
+  }
   // Closing each launcher's existing Windows Job also terminates its own Node
   // and playback children. Never terminate unrelated node.exe/codex.exe by name.
   if (result.stopped) await new Promise(resolve => setTimeout(resolve, 150))

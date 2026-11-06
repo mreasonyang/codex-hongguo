@@ -10,6 +10,7 @@ import { spawn, spawnSync, findExecutable, stopChild } from '../src/runtime/exec
 import { stopWindowsPluginProcesses } from '../src/runtime/windows-processes.mjs'
 import { removeUserData } from '../src/runtime/uninstall-data.mjs'
 import { removeManagedFfmpeg } from '../src/runtime/ffmpeg-runtime.mjs'
+import { isManagedMarketplace } from '../src/cli/local-marketplace.mjs'
 
 const alive = pid => { try { process.kill(pid, 0); return true } catch { return false } }
 const waitGone = async pid => {
@@ -74,6 +75,7 @@ test('isolated native Windows uninstall stops only owned launchers, deregisters 
     if (args[1] === 'marketplace' && args[2] === 'list') result.marketplaces = result.marketplaces.map(row => {
       if (row.name !== 'hongguo-local') return row
       assert.equal(typeof row.root, 'string')
+      assert.ok(isManagedMarketplace(row.root, managedRoot), 'Native local root must identify the managed marketplace')
       rootOnlySeen = true
       return { name: row.name, root: row.root }
     })

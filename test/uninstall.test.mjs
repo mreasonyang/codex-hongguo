@@ -1,10 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { uninstall, codexRunner, pluginId } from '../src/cli/main.mjs'
-import { marketplaceSource } from '../src/cli/local-marketplace.mjs'
+import { marketplaceSource, isManagedMarketplace } from '../src/cli/local-marketplace.mjs'
 import { selectOwnedWindowsProcesses } from '../src/runtime/windows-processes.mjs'
 
 function fixture() {
@@ -47,6 +47,16 @@ test('source and root layouts preserve explicit custom marketplaces', async () =
   await uninstall(options)
   assert.ok(!calls.includes('plugin marketplace remove hongguo-local'))
   assert.ok(calls.includes('clean user data'))
+})
+
+test('managed marketplace detection resolves directory aliases without accepting a prefix sibling', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'hongguo-market-alias-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }))
+  const root = join(dir, 'managed'), alias = join(dir, 'alias')
+  mkdirSync(join(root, '0.0.32'), { recursive: true })
+  symlinkSync(root, alias, process.platform === 'win32' ? 'junction' : 'dir')
+  assert.equal(isManagedMarketplace(join(alias, '0.0.32'), root), true)
+  assert.equal(isManagedMarketplace(join(dir, 'managed-other', '0.0.32'), root), false)
 })
 
 test('unknown marketplace location or failed process stop leaves plugin data intact', async () => {

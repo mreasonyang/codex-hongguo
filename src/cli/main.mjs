@@ -25,7 +25,9 @@ export function codexRunner(command, env = process.env) {
         error.code = occupied ? 'PLUGIN_CACHE_IN_USE' : 'PLUGIN_REMOVE_FAILED'
         throw error
       }
-      throw Error('Codex 步骤失败：' + args.slice(0, 3).join(' ') + '。请在 Codex 插件设置中检查状态后重试。')
+      const text = (result.stderr || '') + '\n' + (result.stdout || '')
+      const reason = /no such file|does not exist|cannot find|not found/i.test(text) ? 'not_found' : /access is denied|os error 5|permission denied/i.test(text) ? 'access_denied' : /git/i.test(text) ? 'git' : 'unknown'
+      throw Object.assign(Error('Codex 步骤失败：' + args.slice(0, 3).join(' ') + '。请在 Codex 插件设置中检查状态后重试。'), { diagnostic: { step: args.slice(0, 3).join(' '), reason, status: result.status } })
     }
     try { return JSON.parse(result.stdout) } catch { throw Error('Codex 返回了无法识别的结果，请更新 Codex 后重试。') }
   }
