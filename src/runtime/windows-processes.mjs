@@ -3,76 +3,29 @@ import { homedir } from 'node:os'
 import { win32 } from 'node:path'
 import { spawnSync } from './executables.mjs'
 
-// These collectors read executable identity, PID and creation time only. Never
-// read CommandLine, process environments, authentication files or host logs.
-const emitJson = `$json = ConvertTo-Json -InputObject $result -Compress -Depth 4
+// Only PID/executable metadata is collected. No argv, environment inspection or
+// process termination. Unknown identities fail the preflight without deletion.
+const collectScript = `$ErrorActionPreference = 'Stop'
+$result = @{ processes = @(); unreadable = 0 }
+$query = "SELECT ProcessId, ExecutablePath FROM Win32_Process WHERE Name = 'run-node.exe' OR Name = 'run-node-arm64.exe'"
+foreach ($candidate in @(Get-CimInstance -Query $query)) {
+  if ([string]::IsNullOrEmpty($candidate.ExecutablePath)) { $result.unreadable++ }
+  else { $result.processes += @{ pid = [int]$candidate.ProcessId; executable = [string]$candidate.ExecutablePath } }
+}
+$json = ConvertTo-Json -InputObject $result -Compress -Depth 4
 $bytes = [Text.Encoding]::UTF8.GetBytes($json)
 $output = [Console]::OpenStandardOutput()
 $output.Write($bytes, 0, $bytes.Length)
 $output.Flush()`
-const collectScript = `$ErrorActionPreference = 'Stop'
-$result = @()
-foreach ($name in @('run-node', 'run-node-arm64')) {
-  foreach ($candidate in [Diagnostics.Process]::GetProcessesByName($name)) {
-    try {
-      $result += @{ pid = $candidate.Id; executable = $candidate.MainModule.FileName; started = [string]$candidate.StartTime.ToUniversalTime().Ticks }
-    } catch { } finally { $candidate.Dispose() }
-  }
-}
-${emitJson}`
-const stopScript = `$ErrorActionPreference = 'Stop'
-$reader = [IO.StreamReader]::new([Console]::OpenStandardInput(), [Text.Encoding]::UTF8)
-$payload = $reader.ReadToEnd()
-$expected = @(ConvertFrom-Json -InputObject $payload)
-$result = @{ stopped = 0; skipped = 0; failed = 0 }
-foreach ($entry in $expected) {
-  $candidate = $null
-  try {
-    $candidate = [Diagnostics.Process]::GetProcessById([int]$entry.pid)
-    $boundHandle = $candidate.Handle
-    if ($candidate.HasExited) { $result.skipped++; continue }
-    $samePath = [String]::Equals($candidate.MainModule.FileName, [string]$entry.executable, [StringComparison]::OrdinalIgnoreCase)
-    $sameStart = [string]$candidate.StartTime.ToUniversalTime().Ticks -eq [string]$entry.started
-    if (-not ($samePath -and $sameStart)) { $result.skipped++; continue }
-    $candidate.Kill()
-    if ($candidate.WaitForExit(5000)) { $result.stopped++ } else { $result.failed++ }
-  } catch [ArgumentException] { $result.skipped++ }
-    catch {
-      $failure = $_.Exception
-      while ($null -ne $failure.InnerException) { $failure = $failure.InnerException }
-      if ($failure -is [ArgumentException] -or ($failure -is [ComponentModel.Win32Exception] -and $failure.NativeErrorCode -in @(87, 1168))) {
-        $result.skipped++
-      } else {
-        try { if ($null -ne $candidate -and $candidate.WaitForExit(500)) { $result.skipped++ } else { $result.failed++ } }
-        catch { $result.failed++ }
-      }
-    }
-    finally { if ($null -ne $candidate) { $candidate.Dispose() } }
-}
-${emitJson}`
-
-const processFailure = (stage = 'identity', reason = 'unavailable', status) => Object.assign(
-  Error('无法安全停止红果后台进程，插件文件可能仍被占用。请关闭红果播放器及使用该插件的 Codex 会话，再重新运行 uninstall；尚未清理观看数据。'),
-  { code: 'PLUGIN_PROCESS_STOP_FAILED', diagnostic: { stage, reason, ...(Number.isInteger(status) ? { status } : {}) } },
-)
-function invokePowerShell(script, input, env) {
-  const command = win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-  const result = spawnSync(command, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], {
-    env, input, encoding: 'utf8', timeout: 20000, windowsHide: true,
-    maxBuffer: 2 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'],
-  })
-  const stage = input === undefined ? 'collect' : 'terminate'
-  if (result.status !== 0) throw processFailure(stage, result.error?.code === 'ETIMEDOUT' ? 'timeout' : /ParserError|Unexpected token/i.test(result.stderr || '') ? 'parser' : 'execution', result.status)
-  try { return JSON.parse(result.stdout) } catch { throw processFailure(stage, 'invalid_json') }
-}
+const checkFailure = () => Object.assign(Error('无法确认红果后台是否已退出，卸载已停止且未修改文件或配置。请先关闭红果播放器及使用该插件的 Codex 会话，再重新运行 uninstall。'), { code: 'PLUGIN_PROCESS_CHECK_FAILED' })
 const normalize = path => win32.normalize(path.replace(/^\\\\\?\\UNC\\/i, '\\\\').replace(/^\\\\\?\\/, '')).toLowerCase()
 
 export async function ownedWindowsExecutables({ env = process.env, home = homedir() } = {}) {
   const codexHome = env.CODEX_HOME || win32.join(home, '.codex')
-  if (!win32.isAbsolute(codexHome)) throw processFailure()
+  if (!win32.isAbsolute(codexHome)) throw checkFailure()
   const root = win32.join(codexHome, 'plugins', 'cache', 'hongguo-local', 'codex-hongguo')
   let versions
-  try { versions = await readdir(root, { withFileTypes: true }) } catch (error) { if (error.code === 'ENOENT') return []; throw processFailure() }
+  try { versions = await readdir(root, { withFileTypes: true }) } catch (error) { if (error.code === 'ENOENT') return []; throw checkFailure() }
   const paths = []
   for (const version of versions) {
     if (!version.isDirectory() || version.isSymbolicLink()) continue
@@ -90,7 +43,7 @@ export async function ownedWindowsExecutables({ env = process.env, home = homedi
           if (win32.relative(canonicalRoot, canonical).toLowerCase() === 'bin\\' + name) paths.push(canonical)
         } catch (error) { if (error.code !== 'ENOENT') throw error }
       }
-    } catch (error) { if (error.code !== 'ENOENT') throw processFailure() }
+    } catch (error) { if (error.code !== 'ENOENT') throw checkFailure() }
   }
   return paths
 }
@@ -98,34 +51,28 @@ export async function ownedWindowsExecutables({ env = process.env, home = homedi
 export async function selectOwnedWindowsProcesses(records, executables, canonicalize = realpath) {
   const allowed = new Set(executables.map(normalize)), selected = []
   for (const row of records) {
-    if (!Number.isInteger(row?.pid) || row.pid <= 0 || row.pid === process.pid || typeof row.executable !== 'string' ||
-      !win32.isAbsolute(row.executable) || typeof row.started !== 'string' || !/^\d{10,20}$/.test(row.started)) continue
+    if (!Number.isInteger(row?.pid) || row.pid <= 0 || row.pid === process.pid || typeof row.executable !== 'string' || !win32.isAbsolute(row.executable)) continue
     let path
     try { path = await canonicalize(row.executable) } catch { continue }
-    if (allowed.has(normalize(path))) selected.push({ pid: row.pid, executable: row.executable, started: row.started })
+    if (allowed.has(normalize(path))) selected.push({ pid: row.pid, executable: row.executable })
   }
   return selected
 }
 
-export async function stopWindowsPluginProcesses({ env = process.env, home = homedir(), platform = process.platform, invoke = invokePowerShell } = {}) {
-  if (platform !== 'win32') return { stopped: 0 }
+export async function assertWindowsPluginIdle({ env = process.env, home = homedir(), platform = process.platform } = {}) {
+  if (platform !== 'win32') return
   const executables = await ownedWindowsExecutables({ env, home })
-  if (!executables.length) return { stopped: 0 }
-  const records = invoke(collectScript, undefined, env)
-  if (!Array.isArray(records)) throw processFailure('collect', 'invalid_schema')
-  const selected = await selectOwnedWindowsProcesses(records, executables)
-  if (!selected.length) return { stopped: 0 }
-  const result = invoke(stopScript, JSON.stringify(selected), env)
-  if (!Number.isInteger(result?.stopped) || !Number.isInteger(result?.failed)) throw processFailure('terminate', 'invalid_schema')
-  if (result.failed !== 0) {
-    const error = processFailure('terminate', 'process_busy')
-    error.diagnostic.stopped = result.stopped
-    error.diagnostic.failed = result.failed
-    error.diagnostic.skipped = Number.isInteger(result.skipped) ? result.skipped : 0
-    throw error
-  }
-  // Closing each launcher's existing Windows Job also terminates its own Node
-  // and playback children. Never terminate unrelated node.exe/codex.exe by name.
-  if (result.stopped) await new Promise(resolve => setTimeout(resolve, 150))
-  return { stopped: result.stopped }
+  if (!executables.length) return
+  const command = win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+  const result = spawnSync(command, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', collectScript], {
+    env, encoding: 'utf8', timeout: 20000, windowsHide: true,
+    maxBuffer: 2 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'],
+  })
+  if (result.status !== 0) throw checkFailure()
+  let metadata
+  try { metadata = JSON.parse(result.stdout) } catch { throw checkFailure() }
+  if (!Array.isArray(metadata.processes) || !Number.isInteger(metadata.unreadable)) throw checkFailure()
+  const selected = await selectOwnedWindowsProcesses(metadata.processes, executables)
+  if (selected.length) throw Object.assign(Error('红果后台仍在运行，正在占用插件文件。卸载尚未开始，缓存、市场配置和观看数据均已保留。请先关闭红果播放器及使用该插件的 Codex 会话，再重新运行 uninstall。'), { code: 'PLUGIN_RUNNING' })
+  if (metadata.unreadable) throw checkFailure()
 }

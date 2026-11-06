@@ -2,12 +2,12 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, writeFile, cp, readdir, rm, access } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join, resolve, dirname } from 'node:path'
 import { once } from 'node:events'
 import { createInterface } from 'node:readline'
 import { uninstall, codexRunner, pluginId } from '../src/cli/main.mjs'
 import { spawn, spawnSync, findExecutable, stopChild } from '../src/runtime/executables.mjs'
-import { stopWindowsPluginProcesses } from '../src/runtime/windows-processes.mjs'
+import { assertWindowsPluginIdle } from '../src/runtime/windows-processes.mjs'
 import { removeUserData } from '../src/runtime/uninstall-data.mjs'
 import { removeManagedFfmpeg } from '../src/runtime/ffmpeg-runtime.mjs'
 import { isManagedMarketplace } from '../src/cli/local-marketplace.mjs'
@@ -18,7 +18,7 @@ const waitGone = async pid => {
   assert.equal(alive(pid), false, 'The plugin-owned process must exit')
 }
 
-test('isolated native Windows uninstall stops only owned launchers, deregisters root-only marketplace, removes cache/data and is repeatable', { skip: process.platform !== 'win32', timeout: 180000 }, async t => {
+test('isolated Windows preflight blocks a running plugin without changes, then user closure permits root-only deregistration and repeated uninstall', { skip: process.platform !== 'win32', timeout: 180000 }, async t => {
   const cli = findExecutable('codex'), root = await mkdtemp(join(tmpdir(), '红果 uninstall ')), children = []
   t.after(async () => {
     for (const child of children) stopChild(child)
@@ -39,7 +39,12 @@ test('isolated native Windows uninstall stops only owned launchers, deregisters 
   await writeFile(join(market, '.agents', 'plugins', 'marketplace.json'), JSON.stringify({ name: 'hongguo-local', plugins: [{ name: 'codex-hongguo', source: { source: 'local', path: './plugins/codex-hongguo' }, policy: { installation: 'AVAILABLE', authentication: 'ON_INSTALL' }, category: 'Entertainment' }] }))
   const noGit = join(root, 'no-git'); await mkdir(noGit)
   await writeFile(join(noGit, 'git.cmd'), '@echo off\r\nexit /b 127\r\n')
-  const env = { ...process.env, HOME: home, USERPROFILE: home, LOCALAPPDATA: local, APPDATA: join(home, 'AppData', 'Roaming'), CODEX_HOME: profile, HONGGUO_DATA_DIR: data, HONGGUO_NODE: process.execPath, HONGGUO_CODEX: cli, PATH: noGit + ';' + (process.env.PATH || process.env.Path) }
+  const system = process.env.SystemRoot || 'C:\\Windows'
+  const path = [noGit, dirname(process.execPath), dirname(cli), system, join(system, 'System32'), join(system, 'System32', 'WindowsPowerShell', 'v1.0')].join(';')
+  const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== 'PATH'))
+  const env = { ...inherited, HOME: home, USERPROFILE: home, LOCALAPPDATA: local, APPDATA: join(home, 'AppData', 'Roaming'), CODEX_HOME: profile, HONGGUO_DATA_DIR: data, HONGGUO_NODE: process.execPath, HONGGUO_CODEX: cli, PATH: path }
+  const git = spawnSync('git.exe', ['--version'], { env, cwd: root, stdio: 'ignore', timeout: 5000 })
+  assert.equal(git.error?.code, 'ENOENT', 'The isolated uninstall must not have a usable Git executable')
   const nativeRun = codexRunner(cli, env)
   nativeRun(['plugin', 'marketplace', 'add', market]); nativeRun(['plugin', 'add', pluginId])
   const cache = join(profile, 'plugins', 'cache', 'hongguo-local', 'codex-hongguo')
@@ -64,10 +69,11 @@ test('isolated native Windows uninstall stops only owned launchers, deregisters 
   const outside = await start(outsideRoot, join(root, 'outside-data'))
   const sharedNode = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore', windowsHide: true }); children.push(sharedNode)
   assert.equal(alive(owned.child.pid), true)
-  let rootOnlySeen = false
+  let rootOnlySeen = false, codexSteps = 0
   const run = args => {
+    codexSteps++
     if (args[1] === 'remove') {
-      assert.equal(alive(owned.child.pid), false, 'Stop the owned launcher before native cache removal')
+      assert.equal(alive(owned.child.pid), false, 'The user must close the owned launcher before native cache removal')
       assert.equal(alive(outside.child.pid), true, 'Never stop a same-name executable outside the plugin cache')
       assert.equal(alive(sharedNode.pid), true, 'Never stop shared Node by name')
     }
@@ -81,9 +87,21 @@ test('isolated native Windows uninstall stops only owned launchers, deregisters 
     })
     return result
   }
-  await uninstall({ run, managedRoot, stopProcesses: () => stopWindowsPluginProcesses({ env, home }), removeFfmpeg: () => removeManagedFfmpeg({ env, home }), removeData: () => removeUserData({ env, home }) })
-  assert.equal(rootOnlySeen, true)
+  const options = { run, managedRoot, assertIdle: () => assertWindowsPluginIdle({ env, home }), removeFfmpeg: () => removeManagedFfmpeg({ env, home }), removeData: () => removeUserData({ env, home }) }
+  await assert.rejects(uninstall(options), error => error.code === 'PLUGIN_RUNNING' && /卸载尚未开始.*均已保留/.test(error.message))
+  assert.equal(codexSteps, 0, 'Running preflight must abort before any Codex operation')
+  assert.equal(alive(owned.child.pid), true, 'Uninstall must not terminate the running launcher')
+  assert.equal(alive(owned.nodePid), true, 'Uninstall must not terminate the running backend')
+  await access(join(installedRoot, 'bin', 'run-node.exe'))
+  await access(join(data, 'player.sqlite'))
+  await access(join(market, '.agents', 'plugins', 'marketplace.json'))
+  assert.ok(nativeRun(['plugin', 'marketplace', 'list']).marketplaces.some(row => row.name === 'hongguo-local'))
+  // Simulate the user closing the identified plugin before retrying.
+  stopChild(owned.child)
+  await waitGone(owned.child.pid)
   await waitGone(owned.nodePid)
+  await uninstall(options)
+  assert.equal(rootOnlySeen, true)
   await assert.rejects(access(installedRoot), { code: 'ENOENT' })
   await assert.rejects(access(data), { code: 'ENOENT' })
   assert.ok(!nativeRun(['plugin', 'marketplace', 'list']).marketplaces.some(row => row.name === 'hongguo-local'))

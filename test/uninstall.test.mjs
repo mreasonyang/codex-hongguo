@@ -20,7 +20,7 @@ function fixture() {
       if (args[1] === 'marketplace' && args[2] === 'remove') { registered = null; return {} }
       assert.fail('Unexpected Codex operation')
     },
-    stopProcesses: async () => { calls.push('stop owned processes') },
+    assertIdle: async () => { calls.push('check owned processes') },
     removeFfmpeg: async () => { calls.push('clean playback runtime') },
     removeData: async () => { calls.push('clean user data') },
   }
@@ -30,7 +30,7 @@ function fixture() {
 test('root-only local marketplace is unregistered before data cleanup; repeated uninstall succeeds without Git', async () => {
   const { options, calls } = fixture()
   await uninstall(options)
-  assert.ok(calls.indexOf('stop owned processes') < calls.indexOf('plugin remove ' + pluginId))
+  assert.ok(calls.indexOf('check owned processes') < calls.indexOf('plugin remove ' + pluginId))
   assert.ok(calls.indexOf('plugin remove ' + pluginId) < calls.indexOf('plugin marketplace remove hongguo-local'))
   assert.ok(calls.indexOf('plugin marketplace remove hongguo-local') < calls.indexOf('clean user data'))
   await uninstall(options)
@@ -59,26 +59,26 @@ test('managed marketplace detection resolves directory aliases without accepting
   assert.equal(isManagedMarketplace(join(dir, 'managed-other', '0.0.32'), root), false)
 })
 
-test('unknown marketplace location or failed process stop leaves plugin data intact', async () => {
+test('unknown marketplace location or running preflight leaves plugin data and registration intact', async () => {
   for (const unknown of [true, false]) {
     const { options, calls, setRegistration } = fixture()
     if (unknown) setRegistration({ name: 'hongguo-local' })
-    else options.stopProcesses = async () => { throw Error('stop failed') }
+    else options.assertIdle = async () => { throw Object.assign(Error('running'), { code: 'PLUGIN_RUNNING' }) }
     await assert.rejects(uninstall(options))
     assert.ok(!calls.includes('plugin remove ' + pluginId))
     assert.ok(!calls.includes('clean user data'))
+    if (!unknown) assert.equal(calls.length, 0, 'Preflight must run before any Codex step')
   }
 })
 
-test('cache lock retries remain bounded and never unregister or erase data on failure', async () => {
+test('a cache lock race produces an error without unregistering or erasing data', async () => {
   const { options, calls } = fixture(), original = options.run
-  options.platform = 'win32'
   options.run = args => {
     if (args[1] === 'remove') { calls.push('locked'); throw Object.assign(Error('occupied'), { code: 'PLUGIN_CACHE_IN_USE' }) }
     return original(args)
   }
   await assert.rejects(uninstall(options), { code: 'PLUGIN_CACHE_IN_USE' })
-  assert.equal(calls.filter(c => c === 'locked').length, 3)
+  assert.equal(calls.filter(c => c === 'locked').length, 1)
   assert.ok(!calls.includes('plugin marketplace remove hongguo-local'))
   assert.ok(!calls.includes('clean user data'))
 })
@@ -104,10 +104,10 @@ test('cache access errors produce actionable fixed diagnostics without relaying 
 test('process selection uses canonical executable identity and excludes shared Node, prefix siblings and malformed identities', async () => {
   const own = 'C:\\Users\\Eason\\.codex\\plugins\\cache\\hongguo-local\\codex-hongguo\\0.0.32\\bin\\run-node.exe'
   const rows = [
-    { pid: 810001, executable: own.toUpperCase(), started: '638000000000000000' },
-    { pid: 810002, executable: own.replace('codex-hongguo\\', 'codex-hongguo-other\\'), started: '638000000000000000' },
-    { pid: 810003, executable: 'C:\\Program Files\\nodejs\\node.exe', started: '638000000000000000' },
-    { pid: 810004, executable: own, started: 'invalid' },
+    { pid: 810001, executable: own.toUpperCase() },
+    { pid: 810002, executable: own.replace('codex-hongguo\\', 'codex-hongguo-other\\') },
+    { pid: 810003, executable: 'C:\\Program Files\\nodejs\\node.exe' },
+    { pid: -1, executable: own },
   ]
   const chosen = await selectOwnedWindowsProcesses(rows, [own], async path => path)
   assert.deepEqual(chosen.map(row => row.pid), [810001])

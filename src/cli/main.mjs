@@ -4,7 +4,7 @@ import { prepareRuntime, findExecutable, spawnSync } from '../runtime/executable
 import { hookAuthorizationHint } from '../server/setup.mjs'
 import { ensureFfmpeg, removeManagedFfmpeg } from '../runtime/ffmpeg-runtime.mjs'
 import { removeUserData } from '../runtime/uninstall-data.mjs'
-import { stopWindowsPluginProcesses } from '../runtime/windows-processes.mjs'
+import { assertWindowsPluginIdle } from '../runtime/windows-processes.mjs'
 import { marketplaceName } from '../runtime/distribution.mjs'
 import { defaultSource, prepareLocalMarketplace, isManagedMarketplace, marketplaceSource } from './local-marketplace.mjs'
 
@@ -33,7 +33,8 @@ export function codexRunner(command, env = process.env) {
   }
 }
 
-export async function uninstall({ run, stopProcesses = stopWindowsPluginProcesses, removeFfmpeg = removeManagedFfmpeg, removeData = removeUserData, managedRoot, platform = process.platform }) {
+export async function uninstall({ run, assertIdle = assertWindowsPluginIdle, removeFfmpeg = removeManagedFfmpeg, removeData = removeUserData, managedRoot }) {
+  await assertIdle()
   const registrations = run(['plugin', 'marketplace', 'list']).marketplaces
   if (!Array.isArray(registrations)) throw Error('无法确认插件市场状态，请更新 Codex 后重试。')
   const registered = registrations.find(row => row.name === marketplaceName)
@@ -41,16 +42,7 @@ export async function uninstall({ run, stopProcesses = stopWindowsPluginProcesse
   if (registered && (typeof source !== 'string' || !source.length)) throw Error('无法确认红果市场的位置，尚未清理数据。请更新 Codex CLI 后重新运行 uninstall。')
   const installed = run(['plugin', 'list', '--marketplace', marketplaceName]).installed
   if (!Array.isArray(installed)) throw Error('无法确认插件安装状态，请更新 Codex 后重试。')
-  await stopProcesses()
-  if (installed.some(plugin => plugin.pluginId === pluginId)) {
-    for (let attempt = 0; ; attempt++) {
-      try { run(['plugin', 'remove', pluginId]); break } catch (error) {
-        if (platform !== 'win32' || error.code !== 'PLUGIN_CACHE_IN_USE' || attempt === 2) throw error
-        await stopProcesses()
-        await new Promise(resolve => setTimeout(resolve, 250))
-      }
-    }
-  }
+  if (installed.some(plugin => plugin.pluginId === pluginId)) run(['plugin', 'remove', pluginId])
   if (registered && isManagedMarketplace(source, managedRoot)) {
     run(['plugin', 'marketplace', 'remove', marketplaceName])
     const remaining = run(['plugin', 'marketplace', 'list']).marketplaces
