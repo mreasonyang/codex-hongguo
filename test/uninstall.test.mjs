@@ -2,10 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, win32 } from 'node:path'
 import { uninstall, codexRunner, pluginId } from '../src/cli/main.mjs'
 import { marketplaceSource, isManagedMarketplace } from '../src/cli/local-marketplace.mjs'
-import { selectOwnedWindowsProcesses } from '../src/runtime/windows-processes.mjs'
+import { assertWindowsPluginIdle, selectOwnedWindowsProcesses } from '../src/runtime/windows-processes.mjs'
+import { spawnSync } from '../src/runtime/executables.mjs'
 
 function fixture() {
   const calls = [], managedRoot = join(tmpdir(), 'hongguo-managed-marketplace')
@@ -111,4 +112,22 @@ test('process selection uses canonical executable identity and excludes shared N
   ]
   const chosen = await selectOwnedWindowsProcesses(rows, [own], async path => path)
   assert.deepEqual(chosen.map(row => row.pid), [810001])
+})
+
+test('Windows idle preflight supports the isolated npm installer environment', { skip: process.platform !== 'win32' }, async t => {
+  const home = mkdtempSync(join(tmpdir(), 'hongguo-minimal-env-'))
+  t.after(() => rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }))
+  const profile = join(home, '.codex'), bin = join(profile, 'plugins', 'cache', 'hongguo-local', 'codex-hongguo', 'fixture', 'bin')
+  mkdirSync(bin, { recursive: true })
+  writeFileSync(join(bin, 'run-node.exe'), 'closed fixture executable')
+  const env = { HOME: home, USERPROFILE: home, CODEX_HOME: profile, APPDATA: home, LOCALAPPDATA: home, TEMP: home, TMP: home, PATH: process.env.PATH || process.env.Path,
+    ...Object.fromEntries(['SystemRoot', 'WINDIR', 'ComSpec', 'PATHEXT', 'ProgramFiles', 'ProgramW6432'].filter(key => process.env[key]).map(key => [key, process.env[key]])) }
+  try { await assertWindowsPluginIdle({ env, home }) } catch {
+    // Fixed capability/count metadata only; never relay a PowerShell diagnostic.
+    const script = `$ErrorActionPreference='Stop';$r=@{available=$false;queried=$false;unreadable=0};try{$null=Get-Command Get-CimInstance;$r.available=$true;foreach($p in @(Get-CimInstance -Query "SELECT ProcessId, ExecutablePath FROM Win32_Process WHERE Name = 'run-node.exe' OR Name = 'run-node-arm64.exe'")){if([string]::IsNullOrEmpty($p.ExecutablePath)){$r.unreadable++}};$r.queried=$true}catch{};ConvertTo-Json -InputObject $r -Compress`
+    const probe = spawnSync(win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-NonInteractive', '-Command', script], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 20000 })
+    let metadata = {}
+    try { metadata = JSON.parse(probe.stdout) } catch {}
+    assert.fail('minimal_env_preflight status=' + probe.status + ' available=' + (metadata.available === true) + ' queried=' + (metadata.queried === true) + ' unreadable=' + (Number.isInteger(metadata.unreadable) ? metadata.unreadable : -1))
+  }
 })
