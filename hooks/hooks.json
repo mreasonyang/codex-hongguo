@@ -6,7 +6,7 @@
           {
             "type": "command",
             "command": "sh \"${PLUGIN_ROOT}/bin/run-node\" hook",
-            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand JABFAHIAcgBvAHIAQQBjAHQAaQBvAG4AUAByAGUAZgBlAHIAZQBuAGMAZQAgAD0AIAAnAFMAdABvAHAAJwAKACYAIAAoAEoAbwBpAG4ALQBQAGEAdABoACAAJABlAG4AdgA6AFAATABVAEcASQBOAF8AUgBPAE8AVAAgACcAYgBpAG4AXAByAHUAbgAtAG4AbwBkAGUALgBlAHgAZQAnACkAIABoAG8AbwBrAAoAZQB4AGkAdAAgACQATABBAFMAVABFAFgASQBUAEMATwBEAEUACgA=",
+            "commandWindows": "$ErrorActionPreference = 'Stop'; & \"$env:PLUGIN_ROOT\\bin\\run-node.exe\" hook; exit $LASTEXITCODE",
             "timeout": 10
           }
         ]
@@ -18,7 +18,7 @@
           {
             "type": "command",
             "command": "sh \"${PLUGIN_ROOT}/bin/run-node\" hook",
-            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand JABFAHIAcgBvAHIAQQBjAHQAaQBvAG4AUAByAGUAZgBlAHIAZQBuAGMAZQAgAD0AIAAnAFMAdABvAHAAJwAKACYAIAAoAEoAbwBpAG4ALQBQAGEAdABoACAAJABlAG4AdgA6AFAATABVAEcASQBOAF8AUgBPAE8AVAAgACcAYgBpAG4AXAByAHUAbgAtAG4AbwBkAGUALgBlAHgAZQAnACkAIABoAG8AbwBrAAoAZQB4AGkAdAAgACQATABBAFMAVABFAFgASQBUAEMATwBEAEUACgA=",
+            "commandWindows": "$ErrorActionPreference = 'Stop'; & \"$env:PLUGIN_ROOT\\bin\\run-node.exe\" hook; exit $LASTEXITCODE",
             "timeout": 3
           }
         ]
@@ -30,7 +30,7 @@
           {
             "type": "command",
             "command": "sh \"${PLUGIN_ROOT}/bin/run-node\" hook",
-            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand JABFAHIAcgBvAHIAQQBjAHQAaQBvAG4AUAByAGUAZgBlAHIAZQBuAGMAZQAgAD0AIAAnAFMAdABvAHAAJwAKACYAIAAoAEoAbwBpAG4ALQBQAGEAdABoACAAJABlAG4AdgA6AFAATABVAEcASQBOAF8AUgBPAE8AVAAgACcAYgBpAG4AXAByAHUAbgAtAG4AbwBkAGUALgBlAHgAZQAnACkAIABoAG8AbwBrAAoAZQB4AGkAdAAgACQATABBAFMAVABFAFgASQBUAEMATwBEAEUACgA=",
+            "commandWindows": "$ErrorActionPreference = 'Stop'; & \"$env:PLUGIN_ROOT\\bin\\run-node.exe\" hook; exit $LASTEXITCODE",
             "timeout": 3
           }
         ]

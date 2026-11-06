@@ -1,7 +1,6 @@
 import { build } from 'esbuild'
 import { readFile, writeFile, mkdir, cp } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
-await import('./prepare-windows-hooks.mjs')
 await import('./build-launcher.mjs')
 execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit'], { stdio: 'inherit' })
 await Promise.all([
