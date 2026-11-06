@@ -81,7 +81,15 @@ npx @kyun.si/codex-hongguo@latest update
 
 更新会保留观看进度和设置。完成后打开新聊天，并按提示重新审查 Hooks。
 
-- **禁用与卸载**：可从插件设置中禁用，或运行 `codex plugin remove codex-hongguo@hongguo-local` 卸载。卸载后可按需保留或手动清理以下专用数据目录：
+卸载命令：
+
+```sh
+npx @kyun.si/codex-hongguo@latest uninstall
+```
+
+卸载会保留观看进度、设置和本地缓存，完成后打开新聊天。只想暂时停用时，可从 Codex 插件设置中禁用。
+
+卸载后可按需保留或手动清理以下专用数据目录：
 
 | 系统 | 用户数据目录 |
 | --- | --- |

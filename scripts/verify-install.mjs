@@ -294,17 +294,37 @@ try {
   console.log('已发现三个待审查事件')
   stopChild(child)
   child = undefined
-  run('codex', ['plugin', 'remove', 'codex-hongguo@hongguo-local'])
-  console.log('隔离卸载通过')
+  const cachedMedia = join(defaultData, 'media', 'uninstall-preserve.mp4')
+  await mkdir(dirname(cachedMedia), { recursive: true })
+  await writeFile(cachedMedia, 'uninstall-cache-sentinel')
+  // Removal must work even when the playback component is unavailable.
+  env.HONGGUO_FFMPEG = join(tmp, 'missing-ffmpeg')
+  const uninstall = ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'uninstall']
+  run('npm', [...uninstall, '--dry-run'])
+  const installed = () => {
+    const result = spawnSync(commands.codex, ['plugin', 'list', '--marketplace', 'hongguo-local', '--json'], { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 })
+    assert.equal(result.status, 0, '无法检查隔离插件注册')
+    return JSON.parse(result.stdout).installed.some(plugin => plugin.pluginId === 'codex-hongguo@hongguo-local')
+  }
+  assert.equal(installed(), true, '卸载预览不应移除插件')
+  run('npm', uninstall)
+  assert.equal(installed(), false, 'npx 卸载后插件不应仍在已安装列表中')
+  assert.equal(await readFile(cachedMedia, 'utf8'), 'uninstall-cache-sentinel')
+  await access(commands.ffmpeg)
+  console.log('npx 卸载及预览通过；播放组件不可用不影响卸载，缓存已保留')
   const progress = new Store(defaultData)
-  try { assert.equal(progress.history().find(row => row.seriesId === 'hg-987654321').positionMs, 12345) } finally { progress.close() }
+  try {
+    assert.equal(progress.history().find(row => row.seriesId === 'hg-987654321').positionMs, 12345)
+    assert.equal(progress.preferences().autoPrompt, true)
+    assert.deepEqual(progress.preferences().searchTerms, ['总裁', '重生', '逆袭'])
+  } finally { progress.close() }
   await assert.rejects(access(env.HONGGUO_FORBIDDEN_FFMPEG), '不应调用系统 FFmpeg')
   const sha256 = createHash('sha256').update(await readFile(archivePath)).digest('hex')
   await writeFile(resolve('release/verification.json'), JSON.stringify({
     name: npmPackageName, version, installation: 'fresh', sha256,
     platform: process.platform, arch: process.arch, windowsPreview: process.platform === 'win32',
     checkedAt: new Date().toISOString(),
-    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'progress-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'uninstall-preserves-data'],
+    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'progress-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'npx-uninstall', 'uninstall-dry-run', 'uninstall-without-media-runtime', 'uninstall-preserves-data-and-caches'],
     mediaDecoded: process.argv.includes('--playback'), desktopPlaybackObserved: false,
   }, null, 2) + '\n')
 } finally {

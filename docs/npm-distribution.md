@@ -2,18 +2,21 @@
 
 面向维护者。版本以源码根目录 `package.json` 为准；包名配置为 `@kyun.si/codex-hongguo`，默认 GitHub 市场为 `mreasonyang/codex-hongguo`。实际发布状态见 README 的发布提示，并以 npm registry 回读为准。
 
-## 安装与更新
+## 安装、更新与卸载
 
 首发完成后的用户入口：
 
 ```sh
 npx @kyun.si/codex-hongguo@latest setup
 npx @kyun.si/codex-hongguo@latest update
+npx @kyun.si/codex-hongguo@latest uninstall
 ```
 
 命令检查 Node、npm 和 Codex CLI，自动准备播放组件，再通过 Codex 原生市场安装插件。Git 仓库的 `.agents/plugins/marketplace.json` 指向 npm 的确定版本；CLI 沿用 `codex-hongguo@hongguo-local` 标识。`setup` 注册来源并安装，`update` 对已经登记的同一 Git 来源先刷新市场，再安装。
 
 两个命令均支持 `--dry-run` 和 `--marketplace owner/repo|本地目录`。预览仍会检查依赖，但不调用 Codex 修改注册。来源参数只接受仓库 slug 或现有本地目录。后续操作省略该参数时会选择默认 GitHub 来源，因此自定义和离线来源每次都应显式提供。
+
+`uninstall` 自动查找 Codex CLI 并移除插件，保留市场注册、观看进度、设置和本地缓存；不下载或检查播放组件，也不检查 npm。支持 `--dry-run` 预览，不接受 `--marketplace`。卸载前关闭播放器面板，完成后打开新聊天。
 
 如果旧安装来自 ZIP，向导只替换同名市场并重新安装；失败会尝试恢复旧来源和插件注册。观看数据不移动、不清理。迁移前关闭播放器，完成后打开新对话并审查 Hooks。安装器不收集或输出账号凭据，认证由现有 Codex/npm 客户端处理；它不写入 Hook 信任，也不转发宿主原始诊断输出。
 
@@ -49,7 +52,7 @@ npm run verify:install
 | `release/codex-hongguo-<版本>.zip` | 相同插件产物组成的离线本地市场。 |
 | `release/marketplace/.agents/plugins/marketplace.json` | 待采用的版本索引，npm 发布核实成功后复制到仓库。 |
 | `release/package-metadata.json` | 包名文件、版本和大小等打包元数据。 |
-| `release/verification.json` | 成功的安装回执，包含版本、迁移基线、检查项和 tgz 的 SHA-256。 |
+| `release/verification.json` | 成功的安装回执，包含版本、全新安装检查项和 tgz 的 SHA-256。 |
 
 隔离验证创建本地 HTTPS npm 测试仓库及临时 CA，在临时 HOME/Codex 配置下执行真实 npm exec/npx 和 Codex 原生 npm 下载；生产 TLS 策略不变。从空白 HOME/Codex 配置全新安装，检查进度、设置、宿主工具、两个 UI 资源、真实片库/分集、三个待信任 Hooks，以及卸载保留数据。
 

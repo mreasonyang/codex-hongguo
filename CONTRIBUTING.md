@@ -28,7 +28,7 @@ npm run verify:install
 | `npm run build` | 校验版本与前端类型，打包 MCP、Hooks、Setup、CLI，复制上游 SDK/WASM，并内联生成播放器 HTML。 |
 | `npm test` | 先构建，再运行 `test/*.test.mjs`；覆盖回合状态、推荐轮换、安装迁移和恢复、持久化、解密、转码与媒体传输。测试数量以当次输出为准。 |
 | `npm run package` | 生成完整 npm tgz、同产物离线 ZIP、待发布索引和包元数据。源码根目录的 package 保持 `private: true`，实际发布包单独生成。 |
-| `npm run verify:install` | 从空白配置安装原生 npm 源，验证真实 npm exec/npx 安装和重复更新、宿主工具与 UI 资源、片库/分集、进度保留、待信任 Hooks、卸载保留数据；成功后写入绑定 tgz 哈希的回执。需要联网。 |
+| `npm run verify:install` | 从空白配置安装原生 npm 源，验证真实 npm exec/npx 安装和重复安装、宿主工具与 UI 资源、片库/分集、进度保留、待信任 Hooks、npx 卸载及预览、卸载保留数据和缓存；成功后写入绑定 tgz 哈希的回执。需要联网。 |
 
 安装验证从空白配置开始，不验证旧版兼容。额外验证真实分集解码时运行：
 
@@ -55,7 +55,7 @@ node scripts/verify-install.mjs --playback
 | `src/server/panel-media.mjs` | 面板 H.264/AAC 准备、硬件转码及软件回退、fMP4 分片和分块读取。 |
 | `src/server/browser.mjs` | 一次性本机分屏配对、会话与媒体访问控制。 |
 | `src/ui/` | 片库、播放器、推荐卡片、宿主交互、首次引导和中英文界面。 |
-| `src/cli/`、`src/runtime/`、`bin/` | npm 命令入口、原生市场安装/更新、运行时发现和 POSIX 启动器；`launcher/windows/` 为 Windows x64 启动器源码。 |
+| `src/cli/`、`src/runtime/`、`bin/` | npm 命令入口、原生市场安装/更新/卸载、运行时发现和 POSIX 启动器；`launcher/windows/` 为 Windows x64 启动器源码。 |
 | `scripts/` | 构建、打包、版本同步、隔离安装验证和发布。 |
 
 `show_waiting_picks` 是模型可见的推荐入口，其余播放器操作由应用界面调用。推荐卡片和播放器共用 HTML，但使用不同资源与展示模式；更改卡片进入播放器的流程时，需要同时检查 `waiting.ts` 和 `player.ts`。
@@ -94,6 +94,8 @@ npm run version:patch
 覆盖项必须在实际启动服务、Hook 或 Setup 的进程环境中可见。只在运行 npx 的终端里设置，不代表桌面宿主或其子进程继承了这些值；安装器不会把它们写进发布包。
 
 构建后可运行 `node bin/codex-hongguo.mjs --help` 查看命令，`doctor` 输出环境与 Hook 检查元数据。检查与安装相关的 `--dry-run` 仍会检查 Node、npm 和 Codex，但不会下载播放组件。Hook 检查严格匹配执行检查的副本；从源码、解压目录或 npx 缓存运行 `doctor` 得到 `unknown`，不代表宿主安装副本的 Hooks 未信任，应从插件详情页运行 Setup。
+
+`uninstall [--dry-run]` 只检查 Node 和 Codex，不依赖播放组件或 npm 可执行程序；调用原生插件移除后保留市场注册、观看进度、设置和所有本地缓存。
 
 需要桌面调试项目时，先打包，再运行 `node scripts/prepare-inline-trial.mjs`，从 Codex 打开生成的 `release/桌面对话试用`。这个项目使用独立数据目录和项目 Hooks，并在该项目内禁用全局红果实例；首次仍需审查项目 Hooks。
 

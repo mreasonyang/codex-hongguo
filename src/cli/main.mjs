@@ -63,10 +63,10 @@ export async function main(argv = process.argv.slice(2)) {
       return
     }
     if (['help', '--help', '-h'].includes(action)) {
-      console.log('红果短剧\n  codex-hongguo setup [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo update [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo doctor\n需要 Node.js >=22.16 和 Codex CLI；播放组件由插件自动准备。')
+      console.log('红果短剧\n  codex-hongguo setup [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo update [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo uninstall [--dry-run]\n  codex-hongguo doctor\n需要 Node.js >=22.16 和 Codex CLI；播放组件由插件自动准备。')
       return
     }
-    if (!['setup', 'update', 'doctor'].includes(action)) throw Error('未知命令；运行 codex-hongguo --help 查看用法。')
+    if (!['setup', 'update', 'uninstall', 'doctor'].includes(action)) throw Error('未知命令；运行 codex-hongguo --help 查看用法。')
     if (process.platform === 'win32' && process.arch !== 'x64') throw Error('Windows 试用版需要 x64 Node.js。')
     const [major, minor] = process.versions.node.split('.').map(Number)
     if (major < 22 || (major === 22 && minor < 16)) throw Error('需要 Node.js >=22.16。')
@@ -80,14 +80,24 @@ export async function main(argv = process.argv.slice(2)) {
     let source = defaultSource, dryRun = false
     for (let i = 0; i < options.length; i++) {
       if (options[i] === '--dry-run') dryRun = true
-      else if (options[i] === '--marketplace' && options[i + 1]) source = options[++i]
-      else throw Error('无法识别安装参数；运行 codex-hongguo --help 查看用法。')
+      else if (action !== 'uninstall' && options[i] === '--marketplace' && options[i + 1]) source = options[++i]
+      else throw Error('无法识别命令参数；运行 codex-hongguo --help 查看用法。')
     }
     // Resolve everything before changing the host's marketplace registration.
     const codex = findExecutable('codex', process.env.HONGGUO_CODEX)
-    for (const [name, command] of [['Codex CLI', codex], ['npm', findExecutable('npm')]]) {
+    const dependencies = [['Codex CLI', codex]]
+    if (action !== 'uninstall') dependencies.push(['npm', findExecutable('npm')])
+    for (const [name, command] of dependencies) {
       if (spawnSync(command, ['--version'], { stdio: 'ignore', timeout: 3000 }).status !== 0)
-        throw Error('未找到可运行的 ' + name + '。安装后重新运行 setup；已有插件与观看进度保持原样。')
+        throw Error('未找到可运行的 ' + name + '。安装后重新运行 ' + action + '；已有插件与观看进度保持原样。')
+    }
+    if (action === 'uninstall') {
+      if (dryRun) console.log('将卸载 ' + pluginId + '，保留观看进度、设置和本地缓存。')
+      else {
+        codexRunner(codex)(['plugin', 'remove', pluginId])
+        console.log('红果短剧已卸载，观看进度、设置和本地缓存已保留。请打开新聊天。')
+      }
+      return
     }
     if (!dryRun) {
       console.log('正在准备播放组件，首次使用需要联网下载…')

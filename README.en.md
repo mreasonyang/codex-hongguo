@@ -82,7 +82,15 @@ npx @kyun.si/codex-hongguo@latest update
 
 Updates preserve viewing progress and settings. Open a new chat afterward and review changed Hooks when prompted.
 
-- **Disable or uninstall**: Disable the plugin in Codex plugin settings, or run `codex plugin remove codex-hongguo@hongguo-local`. After uninstalling, you can keep or manually remove the dedicated user data directory below:
+Uninstall with:
+
+```sh
+npx @kyun.si/codex-hongguo@latest uninstall
+```
+
+Uninstalling preserves viewing progress, settings and local caches. Open a new chat afterward. To disable the plugin temporarily, use Codex plugin settings.
+
+After uninstalling, you can keep or manually remove the dedicated user data directory below:
 
 | OS | User Data Directory |
 | --- | --- |
