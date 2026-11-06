@@ -294,15 +294,26 @@ try {
   console.log('已发现三个待审查事件')
   stopChild(child)
   child = undefined
-  const cachedMedia = join(defaultData, 'media', 'uninstall-preserve.mp4')
+  const cachedMedia = join(defaultData, 'media', 'uninstall-delete.mp4')
   await mkdir(dirname(cachedMedia), { recursive: true })
   await writeFile(cachedMedia, 'uninstall-cache-sentinel')
+  await mkdir(join(defaultData, 'panel-media'), { recursive: true })
+  await writeFile(join(defaultData, 'panel-media', 'partial-fragment'), 'panel fragment')
+  await mkdir(join(defaultData, 'device'), { recursive: true })
+  await writeFile(join(defaultData, 'device', 'uninstall-sentinel'), 'anonymous device data')
   // Removal must not execute or change an externally configured component.
   env.HONGGUO_FFMPEG = join(tmp, 'external-ffmpeg')
   await writeFile(env.HONGGUO_FFMPEG, 'external-executable-sentinel')
   const uninstall = ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'uninstall']
   run('npm', [...uninstall, '--dry-run'])
   await access(commands.ffmpeg)
+  await access(cachedMedia)
+  const progress = new Store(defaultData)
+  try {
+    assert.equal(progress.history().find(row => row.seriesId === 'hg-987654321').positionMs, 12345)
+    assert.equal(progress.preferences().autoPrompt, true)
+    assert.deepEqual(progress.preferences().searchTerms, ['总裁', '重生', '逆袭'])
+  } finally { progress.close() }
   const installed = () => {
     const result = spawnSync(commands.codex, ['plugin', 'list', '--marketplace', 'hongguo-local', '--json'], { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 })
     assert.equal(result.status, 0, '无法检查隔离插件注册')
@@ -316,24 +327,18 @@ try {
   await writeFile(join(componentRoot, 'old-version', 'unfinished.archive'), 'partial download')
   run('npm', uninstall)
   assert.equal(installed(), false, 'npx 卸载后插件不应仍在已安装列表中')
-  assert.equal(await readFile(cachedMedia, 'utf8'), 'uninstall-cache-sentinel')
+  await assert.rejects(access(defaultData), '卸载后应删除整个默认用户数据目录，包括进度、设置、视频缓存和设备档案')
   await assert.rejects(access(componentRoot), '应清空组件专属目录，包括损坏文件、未知版本与下载残片')
   assert.equal(await readFile(env.HONGGUO_FFMPEG, 'utf8'), 'external-executable-sentinel')
   run('npm', uninstall)
-  console.log('npx 卸载、预览和重复卸载通过；组件目录及损坏文件、残片已清理，外部程序和视频缓存已保留')
-  const progress = new Store(defaultData)
-  try {
-    assert.equal(progress.history().find(row => row.seriesId === 'hg-987654321').positionMs, 12345)
-    assert.equal(progress.preferences().autoPrompt, true)
-    assert.deepEqual(progress.preferences().searchTerms, ['总裁', '重生', '逆袭'])
-  } finally { progress.close() }
+  console.log('npx 完整卸载、预览和重复卸载通过；组件、进度、设置、视频缓存和设备档案均已删除，外部程序未受影响')
   await assert.rejects(access(env.HONGGUO_FORBIDDEN_FFMPEG), '不应调用系统 FFmpeg')
   const sha256 = createHash('sha256').update(await readFile(archivePath)).digest('hex')
   await writeFile(resolve('release/verification.json'), JSON.stringify({
     name: npmPackageName, version, installation: 'fresh', sha256,
     platform: process.platform, arch: process.arch, windowsPreview: process.platform === 'win32',
     checkedAt: new Date().toISOString(),
-    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'progress-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'npx-uninstall', 'uninstall-dry-run', 'repeat-uninstall', 'uninstall-without-media-runtime', 'uninstall-cleans-component-directory-and-partial-downloads', 'uninstall-preserves-external-executables', 'uninstall-preserves-data-and-video-caches'],
+    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'progress-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'npx-uninstall', 'uninstall-dry-run', 'repeat-uninstall', 'uninstall-without-media-runtime', 'uninstall-cleans-component-directory-and-partial-downloads', 'uninstall-preserves-external-executables', 'uninstall-deletes-all-local-data'],
     mediaDecoded: process.argv.includes('--playback'), desktopPlaybackObserved: false,
   }, null, 2) + '\n')
 } finally {

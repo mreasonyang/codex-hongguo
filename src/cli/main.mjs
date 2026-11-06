@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { prepareRuntime, findExecutable, spawnSync } from '../runtime/executables.mjs'
 import { inspectHooks } from '../server/setup.mjs'
 import { ensureFfmpeg, removeManagedFfmpeg } from '../runtime/ffmpeg-runtime.mjs'
+import { removeUserData } from '../runtime/uninstall-data.mjs'
 
 export const marketplaceName = 'hongguo-local'
 export const pluginId = 'codex-hongguo@' + marketplaceName
@@ -92,14 +93,18 @@ export async function main(argv = process.argv.slice(2)) {
         throw Error('未找到可运行的 ' + name + '。安装后重新运行 ' + action + '；已有插件与观看进度保持原样。')
     }
     if (action === 'uninstall') {
-      if (dryRun) console.log('将卸载 ' + pluginId + ' 并清理本插件的播放组件目录，保留观看进度、设置和视频缓存。')
+      if (dryRun) console.log('将卸载 ' + pluginId + '，删除播放组件、观看进度、设置、视频缓存和设备档案。')
       else {
         const run = codexRunner(codex)
         const installed = run(['plugin', 'list', '--marketplace', marketplaceName]).installed
         if (!Array.isArray(installed)) throw Error('无法确认插件安装状态，请更新 Codex 后重试。')
         if (installed.some(plugin => plugin.pluginId === pluginId)) run(['plugin', 'remove', pluginId])
-        await removeManagedFfmpeg()
-        console.log('红果短剧已卸载，播放组件目录已清理；观看进度、设置和视频缓存已保留。请打开新聊天。')
+        const failures = []
+        for (const cleanup of [removeManagedFfmpeg, removeUserData]) {
+          try { await cleanup() } catch (error) { failures.push(error.message) }
+        }
+        if (failures.length) throw Error(failures.join('\n'))
+        console.log('红果短剧已卸载，播放组件、观看进度、设置、视频缓存和设备档案已删除。请打开新聊天。')
       }
       return
     }

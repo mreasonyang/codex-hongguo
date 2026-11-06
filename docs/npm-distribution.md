@@ -16,9 +16,9 @@ npx @kyun.si/codex-hongguo@latest uninstall
 
 两个命令均支持 `--dry-run` 和 `--marketplace owner/repo|本地目录`。预览仍会检查依赖，但不调用 Codex 修改注册。来源参数只接受仓库 slug 或现有本地目录。后续操作省略该参数时会选择默认 GitHub 来源，因此自定义和离线来源每次都应显式提供。
 
-`uninstall` 自动查找 Codex CLI 并移除插件，保留市场注册、观看进度、设置和视频缓存；不下载或运行播放组件，也不检查 npm。支持 `--dry-run` 预览，不接受 `--marketplace`。卸载前关闭播放器面板，完成后打开新聊天。
+`uninstall` 自动查找 Codex CLI 并移除插件，删除播放组件、观看进度、设置、全部视频缓存和设备档案；不下载或运行播放组件，也不检查 npm。支持 `--dry-run` 预览，不接受 `--marketplace`。卸载前关闭播放器面板，完成后打开新聊天。
 
-组件目录归属通过固定命名空间确定。默认使用插件专用缓存下的 `runtime/ffmpeg/`；自定义缓存时使用 `<HONGGUO_RUNTIME_DIR>/codex-hongguo/runtime/ffmpeg/`。卸载清空这个专属目录，包括损坏程序、缺失或损坏的回执、未知旧版本、安装锁和下载残片。目录内及目录本身的符号链接只删除链接，不跟随目标；目录外的系统或自配 FFmpeg、自定义缓存根目录和观看数据不删除。完整性校验用于安装和运行，不作为留下组件文件的理由。无法清理时返回失败并提示重试，重复卸载可以继续清理。
+组件目录归属通过固定命名空间确定。默认使用插件专用缓存下的 `runtime/ffmpeg/`；自定义缓存时使用 `<HONGGUO_RUNTIME_DIR>/codex-hongguo/runtime/ffmpeg/`。卸载清空这个专属目录，包括损坏程序、缺失或损坏的回执、未知旧版本、安装锁和下载残片；同时删除默认用户数据目录。目录内及目录本身的符号链接只删除链接，不跟随目标；目录外的系统或自配 FFmpeg、自定义目录的无关内容不删除。自定义 `HONGGUO_DATA_DIR` 时删除插件的 SQLite 及附属文件、`media/`、`panel-media/`、`device/`。完整性校验用于安装和运行，不作为留下组件文件的理由。无法清理时返回失败并提示重试，重复卸载可以继续清理。
 
 如果旧安装来自 ZIP，向导只替换同名市场并重新安装；失败会尝试恢复旧来源和插件注册。观看数据不移动、不清理。迁移前关闭播放器，完成后打开新对话并审查 Hooks。安装器不收集或输出账号凭据，认证由现有 Codex/npm 客户端处理；它不写入 Hook 信任，也不转发宿主原始诊断输出。
 
@@ -56,7 +56,7 @@ npm run verify:install
 | `release/package-metadata.json` | 包名文件、版本和大小等打包元数据。 |
 | `release/verification.json` | 成功的安装回执，包含版本、全新安装检查项和 tgz 的 SHA-256。 |
 
-隔离验证创建本地 HTTPS npm 测试仓库及临时 CA，在临时 HOME/Codex 配置下执行真实 npm exec/npx 和 Codex 原生 npm 下载；生产 TLS 策略不变。从空白 HOME/Codex 配置全新安装，检查进度、设置、宿主工具、两个 UI 资源、真实片库/分集、三个待信任 Hooks，以及卸载保留数据。
+隔离验证创建本地 HTTPS npm 测试仓库及临时 CA，在临时 HOME/Codex 配置下执行真实 npm exec/npx 和 Codex 原生 npm 下载；生产 TLS 策略不变。从空白 HOME/Codex 配置全新安装，检查进度、设置、宿主工具、两个 UI 资源、真实片库/分集、三个待信任 Hooks，以及卸载删除全部本地数据。
 
 额外验证真实分集解码时运行：
 

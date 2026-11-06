@@ -88,9 +88,9 @@ Uninstall with:
 npx @kyun.si/codex-hongguo@latest uninstall
 ```
 
-Uninstalling removes this plugin's dedicated playback component directory, including old versions and partial downloads, and preserves viewing progress, settings and video caches. System FFmpeg installations and external executables are kept. Open a new chat afterward. To disable the plugin temporarily, use Codex plugin settings.
+Uninstalling deletes the plugin's playback components, viewing progress, settings, all video caches and device profiles, including old components and partial downloads. System FFmpeg installations and external executables are kept. Open a new chat afterward. To disable the plugin temporarily while keeping data, use Codex plugin settings.
 
-After uninstalling, you can keep or manually remove the dedicated user data directory below:
+The default user data directories below are removed automatically during uninstall:
 
 | OS | User Data Directory |
 | --- | --- |
