@@ -41,7 +41,15 @@ jobs:
           if (-not $opensslDirectory) { throw 'OpenSSL was not found in the Windows runner image.' }
           $opensslDirectory >> $env:GITHUB_PATH
       - run: npm ci
-      - run: npm test
+      - name: Build plugin and native launcher
+        run: npm run build
+        timeout-minutes: 4
+      - name: Prepare managed playback runtime
+        run: node scripts/prepare-media.mjs
+        timeout-minutes: 7
+      - name: Run regression tests
+        run: node --test --test-timeout=180000 test/*.test.mjs
+        timeout-minutes: 5
       - run: npm run package
       - run: npm run verify:install
       - uses: actions/upload-artifact@v4

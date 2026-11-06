@@ -5,7 +5,7 @@ description: 配置红果短剧插件，检查本机播放环境和回合自动�
 
 帮助用户在当前安装环境完成红果短剧配置。该插件用于本机执行的 Codex 对话，不需要红果账号、API Key 或浏览器自动化权限。
 
-从此 SKILL.md 的实际位置向上两级确定插件根目录。在 macOS/Linux 用 `sh "<插件根目录>/bin/run-node" check` 检查；Windows x64在 PowerShell 用 `& "<插件根目录>\bin\run-node.exe" check`。启动器自动寻找 Node，并检查版本及 SQLite。正确引用包含空格的路径。脚本只输出 Node、进度库、FFmpeg 的环境元数据，以及固定的 Hooks 人工授权核对提示，不检测授权状态，不发送模型请求。npm 包支持 macOS/Linux 和 Windows x64，Windows 原生启动器随 npm 包和离线包提供。
+从此 SKILL.md 的实际位置向上两级确定插件根目录。在 macOS/Linux 用 `sh "<插件根目录>/bin/run-node" check` 检查；Windows x64 在 PowerShell 用 `& "<插件根目录>\bin\run-node.exe" check`。启动器自动寻找 Node，并检查版本及 SQLite。正确引用包含空格的路径。脚本只输出 Node、进度库、FFmpeg 的环境元数据，以及固定的 Hooks 人工授权核对提示，不检测授权状态，不发送模型请求。npm 包支持 macOS/Linux 和 Windows x64，Windows 原生启动器随 npm 包和离线包提供。
 
 - 需要 Node.js >=22.16。播放组件由插件自动下载、校验并缓存，无需用户自行安装 FFmpeg。首次需要联网；准备失败时检查网络，macOS/Linux 重新运行 `npx "@kyun.si/codex-hongguo@latest" setup`，Windows 重新运行 `npx.cmd "@kyun.si/codex-hongguo@latest" setup`。PowerShell 中以 `@` 开头的 npm 包名必须加引号，以免出现 `SplattingNotPermitted`；调用 npm 工具时使用 `npx.cmd`、`npm.cmd`。Windows 需要 x64 Node；ARM64 原生 Node 暂不支持。特殊安装可使用 HONGGUO_NODE、HONGGUO_FFMPEG、HONGGUO_CODEX 指定程序；不要修改用户其他插件、认证或网络配置。
 - Hooks 授权不执行检测。固定提示用户打开 Codex「设置 → Hooks → 红果短剧」，人工检查、信任并启用 UserPromptSubmit、Stop、Interrupt。不得自动宣称已授权或无需重复授权，不读取或写入信任记录，不把历史回合事件当成授权证明。
