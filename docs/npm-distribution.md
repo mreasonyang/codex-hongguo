@@ -7,9 +7,9 @@
 首发完成后的用户入口：
 
 ```sh
-npx @kyun.si/codex-hongguo@latest setup
-npx @kyun.si/codex-hongguo@latest update
-npx @kyun.si/codex-hongguo@latest uninstall
+npx "@kyun.si/codex-hongguo@latest" setup
+npx "@kyun.si/codex-hongguo@latest" update
+npx "@kyun.si/codex-hongguo@latest" uninstall
 ```
 
 命令检查 Node、npm 和 Codex CLI，自动准备播放组件，再通过 Codex 原生市场安装插件。Git 仓库的 `.agents/plugins/marketplace.json` 指向 npm 的确定版本；CLI 沿用 `codex-hongguo@hongguo-local` 标识。`setup` 和 `update` 均会注册来源，对已经登记的同一 Git 来源先刷新市场，再安装，避免重装时沿用旧索引。
@@ -26,7 +26,7 @@ npx @kyun.si/codex-hongguo@latest uninstall
 
 ## 运行环境与包内容
 
-当前 npm 包的 `os` 仍为 darwin/linux。Windows x64 原生启动器已随包构建，可通过离线 ZIP 试用；完整桌面验收通过前不开放 Windows npm 安装，见 [Windows 支持](windows-support.md)。本机验收平台为 macOS；Linux 实机仍待验证。需要外部 Node.js >=22.16（含 npm）和 Codex CLI。播放组件由安装器自动从原始发行者下载到用户缓存，校验固定的 SHA-256 后使用；不需要全局安装 FFmpeg。包内提供 JavaScript 依赖、播放器、SDK/WASM、播放组件清单和许可说明。
+npm 包的 `os` 为 darwin/linux/win32，Windows 需要 x64 Node。Windows PowerShell 使用 `npx.cmd "@kyun.si/codex-hongguo@latest" setup`，详见 [Windows 支持](windows-support.md)。三平台的自动化安装验证与桌面播放观察分别记录。需要外部 Node.js >=22.16（含 npm）和 Codex CLI。播放组件由安装器自动从原始发行者下载到用户缓存，校验固定的 SHA-256 后使用；不需要全局安装 FFmpeg。包内提供 JavaScript 依赖、播放器、SDK/WASM、播放组件清单和许可说明。
 
 MCP 使用同名的 `bin/run-node` / Windows `bin/run-node.exe` 入口，Hooks 按平台调用同一启动器。两者都检查 Node 版本及 `node:sqlite`；POSIX 保留 PATH、Homebrew、Volta、nvm、mise、fnm 查找，Windows 支持 PATH、常见 Node、Volta、nvm-windows 和 Scoop 位置。源码构建需 Go >=1.25，发行包使用者无需安装 Go。FFmpeg/Codex 通过 `src/runtime/executables.mjs` 查找，显式覆盖项见 [CONTRIBUTING](../CONTRIBUTING.md#运行环境与诊断)。覆盖值必须在实际宿主子进程的环境中可见。
 
@@ -91,4 +91,4 @@ node scripts/verify-install.mjs --playback
 
 在 npm 包设置中为 `mreasonyang/codex-hongguo` 的 `publish.yml` 配置受信任发布者，并明确允许直接 `npm publish`，与现有 workflow 的命令一致。npm 要求 CLI >=11.5.1 和 Node >=22.14；当前 workflow 使用 Node 24、npm 11、GitHub 托管 runner 以及 `id-token: write`，通过 OIDC 发布而不保存 npm 长期令牌。配置字段与权限以 [npm 受信任发布者文档](https://docs.npmjs.com/trusted-publishers/) 为准。
 
-发布前先通过 `ci.yml` 的 macOS/Linux/Windows 三平台构建、回归、打包和隔离安装。Windows 自动化在临时环境中允许安装试用产物，不改变公开 npm 平台限制。发布 job 再测试、打包、隔离安装并上传验收产物，然后发布带 provenance 的 tgz；registry 完整性回读通过后提交并推送索引和 README。workflow 文件已提供，实际 Actions 执行及 npm 受信任发布者配置仍需上线时验证。
+发布前先通过 `ci.yml` 的 macOS/Linux/Windows 三平台构建、回归、打包和隔离安装。Windows 使用正常 npm 平台检查，并通过 PowerShell 5.1 和 PowerShell 7 执行带引号的 `npx.cmd` 安装命令，不使用 `--force` 或 `npm_config_force`。发布 job 再测试、打包、隔离安装并上传验收产物，然后发布带 provenance 的 tgz；registry 完整性回读通过后提交并推送索引和 README。workflow 文件已提供，实际 Actions 执行及 npm 受信任发布者配置仍需上线时验证。

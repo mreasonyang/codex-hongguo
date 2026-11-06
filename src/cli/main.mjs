@@ -68,7 +68,7 @@ export async function main(argv = process.argv.slice(2)) {
       return
     }
     if (!['setup', 'update', 'uninstall', 'doctor'].includes(action)) throw Error('未知命令；运行 codex-hongguo --help 查看用法。')
-    if (process.platform === 'win32' && process.arch !== 'x64') throw Error('Windows 试用版需要 x64 Node.js。')
+    if (process.platform === 'win32' && process.arch !== 'x64') throw Error('Windows 需要 x64 Node.js，请安装 x64 版本后重试。')
     const [major, minor] = process.versions.node.split('.').map(Number)
     if (major < 22 || (major === 22 && minor < 16)) throw Error('需要 Node.js >=22.16。')
     prepareRuntime()

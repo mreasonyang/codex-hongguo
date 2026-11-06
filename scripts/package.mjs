@@ -24,7 +24,7 @@ await rm(join(npmRoot, 'dist/launcher'), { recursive: true })
 // Keep the tested compatibility manifest canonical until portable hook discovery is qualified.
 await writeFile(join(npmRoot, 'package.json'), JSON.stringify({
   name: pkg.name, version: pkg.version, description: '在 Codex 桌面对话中观看红果短剧并跟随回合暂停。',
-  type: 'module', license: pkg.license, engines: pkg.engines, os: ['darwin', 'linux'], cpu: ['x64', 'arm64'],
+  type: 'module', license: pkg.license, engines: pkg.engines, os: ['darwin', 'linux', 'win32'], cpu: ['x64', 'arm64'],
   repository: { type: 'git', url: 'git+https://github.com/mreasonyang/codex-hongguo.git' },
   homepage: 'https://github.com/mreasonyang/codex-hongguo#readme',
   bin: { 'codex-hongguo': './bin/codex-hongguo.mjs' },
