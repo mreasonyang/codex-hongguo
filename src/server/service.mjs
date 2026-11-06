@@ -190,14 +190,16 @@ export class Service {
           return {}
         }
         // Mounting is not playback: a host can replace or redraw the iframe before it starts.
-        const play = !!card.selected && !card.played && this.store.activeTurn(scope.sessionId, card.turnId) &&
+        const running = this.store.activeTurn(scope.sessionId, card.turnId)
+        const play = !!card.selected && !card.played && running &&
           !this.store.picksDismissed(scope.sessionId, card.turnId)
         card.taken = true
         if (card.browsing) {
           this.store.dismissPicks(scope.sessionId, card.turnId)
           card.browsing = false
         }
-        return { pick: card.selected, turnId: card.turnId, play, ...(play ? { playbackId: card.playbackId } : {}) }
+        return { pick: card.selected, turnId: card.turnId, play, ...(play ? { playbackId: card.playbackId } : {}),
+          ...(card.selected && !running ? { reason: 'turn-ended' } : {}) }
       }
       case 'set_player_visible':
         if (scope.waiting && !scope.waiting.taken) throw new PlayerError('请从本轮推荐中选剧', 403)

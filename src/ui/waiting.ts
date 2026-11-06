@@ -2,7 +2,7 @@ import { call, displayMode, requestPlayerTab } from './api'
 import { tr } from './locale'
 
 export type WaitingPick = { id: string; title: string; episodeId?: string; kind?: 'resume' | 'next' }
-export type WaitingSelection = { turnId: string; pick: WaitingPick | null; play: boolean; playbackId?: number }
+export type WaitingSelection = { turnId: string; pick: WaitingPick | null; play: boolean; playbackId?: number; reason?: 'turn-ended' }
 
 export function pickLabel(pick: WaitingPick) {
   if (!pick.episodeId) return pick.title

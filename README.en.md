@@ -16,7 +16,7 @@ Install with npm:
 npx @kyun.si/codex-hongguo@latest setup
 ```
 
-The command checks the environment, downloads and verifies the playback component, then installs the plugin through Codex's native marketplace. The first installation requires a network connection; later runs reuse the local cache. Open a new local chat after installing, run plugin Setup, and review the Hooks.
+The command checks the environment, downloads and verifies the playback component, then installs the plugin through Codex's native marketplace. The first installation requires a network connection; later runs reuse the local cache. The installer tells you to review, trust and enable `UserPromptSubmit`, `Stop` and `Interrupt` in Codex **Settings → Hooks**. Then open a new local chat to use the plugin.
 
 ### Post-Install Setup
 
@@ -69,6 +69,7 @@ The switches are independent, saved across restarts, and shared by all chats. Ot
 
 - **Playback pauses too often**: Turn off **Pause automatically when a task ends** in the player's Settings and save to keep watching continuously.
 - **A new task does not resume playback**: Enable and save **Play automatically when a task starts**. Keep the player open in that chat with an episode selected. New defaults do not override a previously saved off setting.
+- **A recommendation opens without playing**: During a running task, it should start muted. If that task ends before playback starts, the player asks you to click Play to continue. A host autoplay restriction is also shown explicitly.
 
 ## Updating, Disabling & Uninstalling
 

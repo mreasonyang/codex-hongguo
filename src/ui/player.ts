@@ -85,7 +85,9 @@ const instance = Array.from(crypto.getRandomValues(new Uint32Array(4)), n => n.t
 let playerReady = false, timer: number | undefined
 let promptTurn: string | null = null, promptRender: AbortController | undefined
 let waitingPlaybackId: number | undefined
+let pendingRecommendationTurn: string | undefined
 function confirmWaitingPlayback() {
+  pendingRecommendationTurn = undefined
   const playbackId = waitingPlaybackId
   waitingPlaybackId = undefined
   if (playbackId) void call('confirm_waiting_playback', { playbackId }, 1800).catch(() => {})
@@ -124,7 +126,8 @@ function save(reset = false) {
     .catch(() => notice('观看进度暂未写入，请检查本机服务'))
   return saved
 }
-function pause(reason = '') {
+function pause(reason = '', preserveRecommendation = false) {
+  if (!preserveRecommendation) pendingRecommendationTurn = undefined
   if (reason === '已手动暂停') confirmWaitingPlayback()
   action++
   backgroundPlayback = undefined
@@ -151,7 +154,7 @@ function release() {
   video.load()
 }
 function pick(ep: Episode) {
-  void pause()
+  void pause('', true)
   release()
   el('link').hidden = true
   el<HTMLInputElement>('linkValue').value = ''
@@ -205,6 +208,7 @@ async function select(s: Series, requested?: string, playNow = false, waitingTur
 
   const ticket = ++selection
   void pause()
+  pendingRecommendationTurn = playNow ? waitingTurn : undefined
   const interaction = action
   release()
   episode = null
@@ -238,7 +242,8 @@ async function select(s: Series, requested?: string, playNow = false, waitingTur
   }
   const ep = (requested && episodes.find((e) => e.id === requested && (!playNow || e.playable))) ||
     (!exactEpisode && ((playNow && episodes.find(e => e.playable)) || episodes[0]))
-  const playRequested = playNow && action === interaction && pageActive
+  const playRequested = playNow && pageActive && (action === interaction ||
+    (!!waitingTurn && pendingRecommendationTurn === waitingTurn))
   if (ep) pick(ep)
   else text('subtitle', '暂无可用分集')
   drawEpisodes()
@@ -656,6 +661,7 @@ function updateTime() {
 }
 async function start(recommendationTurn?: string, automatic = false) {
   if (!episode?.playable || !series || !pageActive) return
+  pendingRecommendationTurn = automatic ? undefined : recommendationTurn
   const n = ++action,
     ep = episode,
     show = series
@@ -722,7 +728,7 @@ async function start(recommendationTurn?: string, automatic = false) {
       if (n !== action) return
       if (state.turnId !== recommendationTurn || state.state !== 'submitted' ||
           (automatic && !state.preferences?.autoPlayOnStart)) {
-        void pause(automatic ? '' : '这条推荐已结束')
+        void pause(automatic ? '' : '推荐所属任务已结束，点击播放继续观看')
         return
       }
     }
@@ -731,12 +737,19 @@ async function start(recommendationTurn?: string, automatic = false) {
     if (playback === 'finished') video.currentTime = 0
     playback = 'playing'
     video.playbackRate = parseFloat(el<HTMLSelectElement>('speed').value)
+    // A host may reuse an iframe that the viewer previously unmuted. Opening
+    // a recommendation crosses an async tab handoff, so start that click muted.
+    if (recommendationTurn && !automatic) video.muted = true
     try {
       await video.play()
     } catch (error) {
       if (n !== action || !pageActive) return
       if (!(error instanceof DOMException && ['AbortError', 'NotAllowedError'].includes(error.name)) ||
-          (!document.hidden && document.hasFocus() && backgroundPlayback?.action !== n)) throw error
+          (!document.hidden && document.hasFocus() && backgroundPlayback?.action !== n)) {
+        if (error instanceof DOMException && error.name === 'NotAllowedError' && recommendationTurn && !automatic)
+          throw Error('宿主阻止了自动播放，请点击播放继续')
+        throw error
+      }
       rememberBackgroundPlayback()
       return
     }
@@ -1022,7 +1035,7 @@ function presence(visible: boolean) {
 async function suspend() {
   if (!pageActive) return
   pageActive = false
-  await Promise.all([pause('已暂停，点击播放继续'), presence(false)])
+  await Promise.all([pause('已暂停，点击播放继续', true), presence(false)])
 }
 function retryInterruptedPlayback(intent: InterruptedPlayback) {
   if (intent.action !== action || !pageActive || !loaded || playback !== 'playing' ||
@@ -1060,6 +1073,8 @@ function activatePage() {
   if (!playerReady || pageActive) return
   pageActive = true
   syncVisibility()
+  if (pendingRecommendationTurn && episode?.playable && video.paused && !preparing)
+    void start(pendingRecommendationTurn)
 }
 document.addEventListener('visibilitychange', syncVisibility)
 window.addEventListener('blur', rememberBackgroundPlayback)
@@ -1070,6 +1085,7 @@ window.addEventListener('pageshow', activatePage)
 async function initPlayer(selection?: WaitingSelection) {
   if (playerReady) return
   playerReady = true
+  pendingRecommendationTurn = undefined
   waitingPlaybackId = selection?.play ? selection.playbackId : undefined
   if (navigator.mediaSession) {
     navigator.mediaSession.setActionHandler('pause', () => { void pause('已手动暂停') })
@@ -1091,6 +1107,8 @@ async function initPlayer(selection?: WaitingSelection) {
   if (selection?.pick) {
     const pick = selection.pick
     await select(pick, pick.episodeId, selection.play, selection.turnId)
+    if (selection.reason === 'turn-ended' && series?.id === pick.id && video.paused && !preparing)
+      notice('推荐所属任务已结束，点击播放继续观看')
     return
   }
   el('home').hidden = false
@@ -1106,6 +1124,7 @@ async function initPlayer(selection?: WaitingSelection) {
 function closePlayer() {
   const stopped = suspend()
   playerReady = false
+  pendingRecommendationTurn = undefined
   if (navigator.mediaSession) {
     navigator.mediaSession.setActionHandler('pause', null)
     navigator.mediaSession.setActionHandler('play', null)

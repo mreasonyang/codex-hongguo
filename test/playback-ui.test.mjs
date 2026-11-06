@@ -17,17 +17,24 @@ class Element extends EventTarget {
   replaceChildren(...children) { this.children = children }
   append(...children) { this.children.push(...children) }
   querySelectorAll() { return [] }
+  focus() {}
+  removeAttribute() {}
 }
 class Video extends Element {
   paused = true; ended = false; duration = 60; currentTime = 12; plays = 0
+  muted = false; requireMuted = false
   pause() { this.paused = true; this.onpause?.() }
-  async play() { this.plays++; this.paused = false; this.onplay?.(); this.onplaying?.() }
+  load() { this.paused = true }
+  async play() {
+    if (this.requireMuted && !this.muted) throw new DOMException('A reused page cannot autoplay with sound','NotAllowedError')
+    this.plays++; this.paused = false; this.onplay?.(); this.onplaying?.()
+  }
 }
 // Export controls only in the test copy. The production poll, settings handlers,
 // start and pause paths run unchanged against a real Service and SQLite store.
 const source = readFileSync(new URL('../src/ui/player.ts', import.meta.url), 'utf8') + `
 export const fixture = {
-  poll, pause, suspend,
+  poll, pause, suspend, start, select,
   selected() {
     context = { identified: true }; pageActive = playerReady = loaded = true;
     series = { id: 'hg-1', title: 'Test' };
@@ -52,7 +59,7 @@ function setup(t) {
     getElementById(id) { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id) },
     querySelector: () => video, querySelectorAll: () => [], createElement: () => new Element(),
   })
-  const window = Object.assign(new EventTarget(), { setInterval: () => 1, clearInterval() {} })
+  const window = Object.assign(new EventTarget(), { setInterval: () => 1, clearInterval() {}, scrollTo() {} })
   const api = {
     browser: false, connect: async () => {}, hostLocale: () => 'zh',
     call: (name, args = {}) => service.call(panel, name, args),
@@ -64,6 +71,8 @@ function setup(t) {
       if (name === './api') return api
       if (name === './locale') return { tr: value => value }
       if (name === './playback-turn') return turnHelpers
+      if (name === './media-startup') return mediaHelpers
+      if (name === './panel-stream') return { panelStream(video) { queueMicrotask(()=>video.dispatchEvent(new Event('loadedmetadata'))); return ()=>{} } }
       if (name === './ui-kit') return { setIcon() {}, fill() {}, icon: () => new Element() }
       return {}
     },
@@ -73,7 +82,7 @@ function setup(t) {
   ui.selected()
   let at = Date.now()
   return {
-    store, peer, service, panel, video, document, ui, elements,
+    store, peer, service, panel, video, document, window, ui, elements,
     event(turn, kind = 'UserPromptSubmit', session = 'A') {
       peer.event({ session_id: session, turn_id: turn, hook_event_name: kind }, ++at)
     },
@@ -82,6 +91,7 @@ function setup(t) {
   }
 }
 const turnHelpers = await import('../src/ui/playback-turn.ts')
+const mediaHelpers = await import('../src/ui/media-startup.ts')
 
 test('global playback switches default for older settings, synchronize across chats and survive restart', async t => {
   const f = setup(t)
@@ -226,4 +236,77 @@ test('a delayed automatic start cannot play after its task has ended, even with 
   f.event('two', 'Stop')
   release(); await flush()
   assert.equal(f.video.plays, 0)
+})
+
+test('a recommendation starts muted when a reused player was previously unmuted', async t=>{
+  const f=setup(t)
+  f.event('one'); await f.poll()
+  f.video.muted=false; f.video.requireMuted=true
+  await f.ui.start('one')
+  assert.equal(f.video.paused,false)
+  assert.equal(f.video.muted,true)
+  assert.equal(f.video.plays,1)
+})
+
+test('an ended recommendation stays paused and explains that manual playback is available', async t=>{
+  const f=setup(t)
+  f.event('one'); await f.poll()
+  f.event('one','Stop'); await f.poll()
+  await f.ui.start('one')
+  assert.equal(f.video.plays,0)
+  assert.equal(f.video.paused,true)
+  assert.match(f.elements.get('notice').textContent,/任务已结束.*播放/)
+})
+
+test('a recommendation still starts when the host hides and shows the same iframe during episode loading', async t=>{
+  const f=setup(t)
+  f.event('one'); await f.poll()
+  let release
+  const episodes=new Promise(resolve=>{release=resolve})
+  f.service.catalog={episodes:()=>episodes,prepare:()=>({status:'ready',stream:'test-stream',manifest:'test manifest'}),panelMedia:{pin(){},unpin(){}}}
+  const selected=f.ui.select({id:'hg-1',title:'Test'},undefined,true,'one')
+  await flush()
+  await f.ui.suspend()
+  f.window.dispatchEvent(new Event('pageshow'))
+  release({items:[{id:'hg-11',label:'1',number:1,codec:'h264',playable:true}]})
+  await selected; await flush()
+  assert.equal(f.video.plays,1)
+  assert.equal(f.video.paused,false)
+  assert.equal(f.video.muted,true)
+})
+
+for (const cancellation of ['none','stop','manual']) test(`a pending recommendation survives page activation without ignoring ${cancellation} cancellation`, async t=>{
+  const f=setup(t)
+  f.event('one'); await f.poll()
+  const call=f.service.call.bind(f.service)
+  let release,checks=0
+  const gate=new Promise(resolve=>{release=resolve})
+  f.service.call=async(scope,name,args)=>{
+    if(name==='get_run_state'&&!args.playerInstance&&++checks===1)await gate
+    return call(scope,name,args)
+  }
+  const starting=f.ui.start('one')
+  await flush()
+  if(cancellation==='manual')await f.ui.pause('已手动暂停')
+  await f.ui.suspend()
+  if(cancellation==='stop')f.event('one','Stop')
+  f.window.dispatchEvent(new Event('pageshow'))
+  await flush()
+  release(); await starting; await flush()
+  assert.equal(f.video.plays,cancellation==='none'?1:0)
+  assert.equal(f.video.paused,cancellation!=='none')
+})
+
+test('a host autoplay denial explains the required click and does not retry on its own', async t=>{
+  const f=setup(t)
+  f.event('one'); await f.poll()
+  const play=f.video.play.bind(f.video)
+  f.video.play=async()=>{throw new DOMException('Host blocked autoplay','NotAllowedError')}
+  await f.ui.start('one')
+  assert.match(f.elements.get('notice').textContent,/宿主阻止了自动播放.*点击播放/)
+  f.video.play=play
+  await f.ui.suspend();f.window.dispatchEvent(new Event('pageshow'));await flush()
+  assert.equal(f.video.plays,0)
+  await f.ui.start()
+  assert.equal(f.video.plays,1)
 })

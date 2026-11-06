@@ -108,7 +108,9 @@ test('a late catalog response or a stop between the click and mounting never sta
   await current
   await call(b, 'select_waiting_pick', { seriesId: 'hg-2' })
   event('B', 'b', 'Stop')
-  assert.equal((await call(b, 'activate_waiting_player')).play, false)
+  const ended = await call(b, 'activate_waiting_player')
+  assert.equal(ended.play, false)
+  assert.equal(ended.reason, 'turn-ended')
 })
 
 const shows = (...numbers) => numbers.map(n => ({ id: 'hg-' + n, title: '剧' + n }))

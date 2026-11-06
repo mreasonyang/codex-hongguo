@@ -11,6 +11,7 @@ type Setup = {
 }
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 let generation = 0
+let locallyDismissed = false
 
 function render(data: Setup) {
   const ready = data.hooks.status === 'ready'
@@ -53,12 +54,13 @@ export async function showSetup(force = true) {
   try {
     const data = await call<Setup>('get_setup_status')
     if (ticket !== generation) return
+    locallyDismissed = data.dismissed
     render(data)
     const needsAttention = !data.database || !data.ffmpeg || data.hooks.status === 'needs_attention'
-    el('setupGuide').hidden = !(force || needsAttention)
+    el('setupGuide').hidden = !(force || !data.dismissed || needsAttention)
   } catch {
     if (ticket !== generation) return
-    el('setupGuide').hidden = !force
+    el('setupGuide').hidden = !(force || !locallyDismissed)
     el('setupRows').replaceChildren()
     el('setupHelp').textContent = tr('检查未完成，请稍后重试或在 Codex 设置 → Hooks 核对回合联动。')
     el('setupGuide').querySelector<HTMLElement>('.setupHooks')!.hidden = false
@@ -72,6 +74,7 @@ export function initOnboarding(notify: (message: string) => void) {
   el('setupCheck').onclick = () => void showSetup()
   el('setupDone').onclick = async () => {
     ++generation
+    locallyDismissed = true
     const done = el<HTMLButtonElement>('setupDone')
     done.disabled = true
     try { await call('set_setup_dismissed', { dismissed: true }) }

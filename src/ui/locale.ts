@@ -5,8 +5,10 @@ const en: Record<string, string> = {
   开始使用红果: 'Welcome to Hongguo',
   重新检查: 'Check again',
   '点剧名即可播放，默认静音；打开扬声器出声。': 'Choose a show to play. Playback starts muted; use the speaker to turn on sound.',
-  '回合联动需要在 Codex 设置 → Hooks 审查并信任红果的 UserPromptSubmit、Stop、Interrupt。':
-    'For automatic pausing, review and trust Hongguo’s UserPromptSubmit, Stop and Interrupt in Codex Settings → Hooks.',
+  '回合联动需要在 Codex 设置 → Hooks 审查、信任并启用红果的 UserPromptSubmit、Stop、Interrupt。':
+    'For task-linked playback, review, trust and enable Hongguo’s UserPromptSubmit, Stop and Interrupt in Codex Settings → Hooks.',
+  '推荐所属任务已结束，点击播放继续观看': 'The recommended task has ended. Click Play to keep watching.',
+  '宿主阻止了自动播放，请点击播放继续': 'The host blocked autoplay. Click Play to continue.',
   开始选剧: 'Browse shows',
   已配置: 'Configured',
   待确认: 'Unverified',

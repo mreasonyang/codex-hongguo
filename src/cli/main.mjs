@@ -114,12 +114,13 @@ export async function main(argv = process.argv.slice(2)) {
     }
     install({ run: codexRunner(codex), source, update: action === 'update', dryRun })
     if (!dryRun) {
+      console.log('回合联动需要手动授权：打开 Codex 设置 → Hooks → 红果短剧，审查、信任并启用 UserPromptSubmit、Stop、Interrupt。')
       const hooks = await inspectHooks({ command: codex, installedId: pluginId })
       const names = { userPromptSubmit: 'UserPromptSubmit', stop: 'Stop', interrupt: 'Interrupt' }
       const pending = hooks.events.filter(row => row.status !== 'ready').map(row => names[row.event])
-      if (hooks.status === 'ready') console.log('三个回合 Hooks 均已信任并启用。')
-      else if (hooks.status === 'unknown') console.log('暂未读到授权状态。请打开 Codex 设置 → Hooks → 红果短剧，或在播放器的使用指南中重新检查。')
-      else console.log('需要处理回合 Hooks。请打开 Codex 设置 → Hooks → 红果短剧，审查并启用 ' + pending.join('、') + '。')
+      if (hooks.status === 'ready') console.log('三个回合 Hooks 均已信任并启用，无需重复授权。')
+      else if (hooks.status === 'unknown') console.log('暂未确认 Hooks 授权状态。请按上方步骤核对，再从播放器「设置 → 使用指南」重新检查。')
+      else console.log('还需完成 ' + pending.join('、') + ' 的信任或启用。完成后从播放器「设置 → 使用指南」重新检查。')
     }
   } catch (error) {
     console.error(error.message)
