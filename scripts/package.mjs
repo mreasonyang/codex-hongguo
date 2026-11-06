@@ -13,7 +13,7 @@ await writeFile(join(release, 'marketplace/.agents/plugins/marketplace.json'), J
 await rm(npmRoot, { recursive: true, force: true })
 await rm(offline, { recursive: true, force: true })
 await mkdir(npmRoot, { recursive: true })
-for (const file of ['.codex-plugin/plugin.json', '.mcp.json', 'hooks/hooks.json', 'bin', 'skills', 'dist', 'LICENSE', 'docs/images']) {
+for (const file of ['.codex-plugin/plugin.json', '.mcp.json', 'hooks/hooks.json', 'assets', 'bin', 'skills', 'dist', 'LICENSE', 'docs/images']) {
   await mkdir(dirname(join(npmRoot, file)), { recursive: true })
   await cp(file, join(npmRoot, file), { recursive: true })
 }
@@ -29,7 +29,7 @@ await writeFile(join(npmRoot, 'package.json'), JSON.stringify({
   repository: { type: 'git', url: 'git+https://github.com/mreasonyang/codex-hongguo.git' },
   homepage: 'https://github.com/mreasonyang/codex-hongguo#readme',
   bin: { 'codex-hongguo': './bin/codex-hongguo.mjs' },
-  files: ['.codex-plugin/', '.mcp.json', 'hooks/', 'skills/', 'bin/', 'dist/', 'licenses/', 'LICENSE', 'README.md', 'README.en.md', 'docs/images/'],
+  files: ['.codex-plugin/', '.mcp.json', 'hooks/', 'skills/', 'assets/', 'bin/', 'dist/', 'licenses/', 'LICENSE', 'README.md', 'README.en.md', 'docs/images/'],
   publishConfig: { access: 'public', registry: 'https://registry.npmjs.org' },
 }, null, 2) + '\n')
 const guides = {}
@@ -71,6 +71,7 @@ for (const [name, guide] of Object.entries(guides)) await writeFile(join(offline
 await cp('LICENSE', join(offline, 'LICENSE'))
 await mkdir(join(offline, 'docs'), { recursive: true })
 await cp('docs/images', join(offline, 'docs/images'), { recursive: true })
+await cp('assets', join(offline, 'assets'), { recursive: true })
 const entries = {}
 async function collect(dir, base) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {

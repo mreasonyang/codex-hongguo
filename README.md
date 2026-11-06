@@ -1,5 +1,7 @@
 # 红果短剧 (codex-hongguo)
 
+<img src="assets/logo.png" width="96" height="96" alt="codex-hongguo 独立插件图标：石墨灰底、米白代码括号与珊瑚色播放键">
+
 中文 · [English](README.en.md)
 
 在 Codex 桌面会话右侧看红果短剧，边看边等任务。默认在新任务开始时续播已选剧集，任务结束或中断时暂停并保存进度；两个行为都可在设置中独立关闭。插件用于使用本机执行器的 Codex 桌面对话。

@@ -33,6 +33,7 @@ MCP 使用同名的 `bin/run-node` / Windows `bin/run-node.exe` 入口，Hooks �
 源码根目录 `package.json` 的 `private: true` 用于阻止误发开发目录，公开包在 `release/npm/codex-hongguo/` 单独生成，包含：
 
 - `.codex-plugin/plugin.json`、`.mcp.json`、`hooks/` 和 `skills/`。
+- `assets/` 中的原创插件图标，兼容清单通过 `composerIcon` 和 `logo` 引用；便携源码清单使用相同资源。
 - `bin/`、预构建的 `dist/cli/`、`dist/server/`、`dist/hooks/`、`dist/setup/` 和 `dist/ui/`。
 - `dist/vendor/openhongguo/`，包括 WASM。
 - 截取后的中英文 README、项目 MIT 许可证 `LICENSE` 和 `licenses/` 第三方许可声明。

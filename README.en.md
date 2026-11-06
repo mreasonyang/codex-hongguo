@@ -1,5 +1,7 @@
 # Hongguo Short Dramas (codex-hongguo)
 
+<img src="assets/logo.png" width="96" height="96" alt="Independent codex-hongguo plugin icon: ivory code brackets and a coral play button on graphite">
+
 [中文](README.md) · English
 
 Watch Hongguo short dramas in the right-hand panel while Codex works on a task. By default, a new task resumes the selected episode; finishing or interrupting the task pauses playback and saves your position. You can turn off either behavior independently in Settings. The plugin supports local-executor Codex Desktop conversations.
