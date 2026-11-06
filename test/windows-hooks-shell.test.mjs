@@ -9,6 +9,7 @@ import { Store } from '../src/server/store.mjs'
 
 const windows = process.platform === 'win32'
 const definitions = JSON.parse(readFileSync(new URL('../hooks/hooks.json', import.meta.url), 'utf8')).hooks
+const bootstrap = readFileSync(new URL('../hooks/windows-bootstrap.ps1', import.meta.url), 'utf8')
 const system = process.env.SystemRoot || 'C:\\Windows'
 const shells = [
   { name: 'CMD', command: join(system, 'System32', 'cmd.exe'), args: ['/d', '/s', '/c'], cmd: true },
@@ -38,6 +39,8 @@ for (const shell of shells) test(`packaged hooks run through ${shell.name} with 
     const definition = definitions[event][0].hooks[0]
     const session = 'shell-session', turn = 'shell-' + event
     const command = definition.commandWindows
+    assert.equal(Buffer.from(command.split(' -EncodedCommand ')[1], 'base64').toString('utf16le'), bootstrap,
+      'The actual hook command must execute the packaged, reviewable PowerShell source')
     const result = run(command, JSON.stringify({ session_id: session, turn_id: turn, hook_event_name: event }), definition.timeout * 1000)
     const categories = [
       ['parser_error', /Unexpected token|ParserError|SplattingNotPermitted/i],

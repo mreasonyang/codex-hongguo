@@ -13,7 +13,7 @@ await writeFile(join(release, 'marketplace/.agents/plugins/marketplace.json'), J
 await rm(npmRoot, { recursive: true, force: true })
 await rm(offline, { recursive: true, force: true })
 await mkdir(npmRoot, { recursive: true })
-for (const file of ['.codex-plugin/plugin.json', '.mcp.json', 'hooks/hooks.json', 'bin', 'skills', 'dist', 'LICENSE', 'docs/images']) {
+for (const file of ['.codex-plugin/plugin.json', '.mcp.json', 'hooks', 'bin', 'skills', 'dist', 'LICENSE', 'docs/images']) {
   await mkdir(dirname(join(npmRoot, file)), { recursive: true })
   await cp(file, join(npmRoot, file), { recursive: true })
 }

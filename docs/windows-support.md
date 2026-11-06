@@ -65,7 +65,7 @@ ZIP 包含插件程序，首次准备播放组件仍需联网。更新时切换�
 
 0.0.30 的 ARM64 运行路径按用户要求仅构建打包，本次未执行运行验证，实机验收由用户完成。
 
-0.0.32 修复 Windows 回合钩子的 Shell 命令：旧版使用 `"%PLUGIN_ROOT%\bin\run-node.exe" hook`，在 PowerShell 下会报 `Unexpected token 'hook'`。新版显式调用 Windows PowerShell，使用调用运算符 `&` 执行原生启动器；插件路径在执行时从环境中读取，不把路径拼进 Shell 源码，兼容空格、中文及特殊字符。外层会话可以使用 CMD、Windows PowerShell 5.1 或 PowerShell 7。修改钩子命令后，需要在桌面版重新审查并信任更新后的三个 Hooks。
+0.0.32 修复 Windows 回合钩子的 Shell 命令：旧版使用 `"%PLUGIN_ROOT%\bin\run-node.exe" hook`，在 PowerShell 下会报 `Unexpected token 'hook'`。新版显式调用 Windows PowerShell，使用调用运算符 `&` 执行原生启动器；插件路径在执行时从 `$env:PLUGIN_ROOT` 读取，不把路径拼进 Shell 源码，兼容空格、中文及特殊字符。可审查的源码随包提供在 `hooks/windows-bootstrap.ps1`，构建时将该固定源码转换为 `-EncodedCommand` 的 UTF-16LE 参数，避免外层 Shell 再次解析。外层会话可以使用 CMD、Windows PowerShell 5.1 或 PowerShell 7。修改钩子命令后，需要在桌面版重新审查并信任更新后的三个 Hooks。
 
 同版将 Windows 的 Node 版本与 SQLite 检查和钩子程序合并到一个 Node 进程，避免每次先探测再重启 Node。`UserPromptSubmit` 的超时从 2 秒改为 10 秒；`Stop` 和 `Interrupt` 为 3 秒，后者符合宿主的超时上限。旧版 2 秒的整体预算小于启动器 3 秒的单次 Node 探测预算，在冷启动和 ARM64 转交时可能来不及输出推荐卡片指令。
 
