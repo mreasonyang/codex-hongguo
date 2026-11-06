@@ -24,10 +24,10 @@ test('Windows .cmd discovery and both process APIs preserve Chinese, spaces and 
   const command = findExecutable('hongguo-probe', undefined, { env: { Path: `relative;"${tools}"` }, home: dir })
   assert.equal(command, shim)
   const args = ['中文 路径', 'a&b', '(test)', 'x^y', 'quote"here', 'trailing\\']
-  const result = spawnSync(command, args, { encoding: 'utf8', windowsHide: true })
+  const result = spawnSync(command, args, { encoding: 'utf8', windowsHide: true, timeout: 5000 })
   assert.equal(result.status, 0)
   assert.deepEqual(JSON.parse(result.stdout), args)
-  const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true })
+  const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true, timeout: 5000 })
   let stdout = ''
   child.stdout.on('data', chunk => { stdout += chunk })
   await new Promise((ok, fail) => { child.once('error', fail); child.once('close', code => code === 0 ? ok() : fail(Error('probe failed'))) })
