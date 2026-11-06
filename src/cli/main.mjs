@@ -53,7 +53,7 @@ export function install({ run, source = defaultSource, update = false, dryRun = 
     }
     throw error
   }
-  log('红果短剧已安装。重新打开播放器即可使用新版。')
+  log('红果短剧已安装。请在新的本地聊天中使用；更新时先关闭旧播放器。')
 }
 
 export async function main(argv = process.argv.slice(2)) {

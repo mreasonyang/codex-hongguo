@@ -73,6 +73,7 @@ try {
   env.HONGGUO_DATA_DIR = defaultData
   const setupOutput = run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
   assert.match(setupOutput, /审查.*信任.*UserPromptSubmit.*Stop.*Interrupt/, '安装完成时必须明确告知 Hooks 信任步骤')
+  assert.match(setupOutput, /新的本地聊天/, '安装完成时必须提示打开新聊天，避免复用旧播放器连接')
   commands.ffmpeg = findExecutable('ffmpeg', undefined, { env, home: tmp })
   assert.ok(commands.ffmpeg.startsWith(tmp), '播放组件必须位于隔离用户缓存')
   await access(commands.ffmpeg)
