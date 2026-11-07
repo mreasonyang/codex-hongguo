@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { dataRoot } from './paths.mjs'
+import { sourceId, seriesPattern, belongsTo, idGlob } from './sources/ids.mjs'
 
 export function validId(value) {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value)
@@ -13,7 +14,7 @@ export function callerId(meta = {}) {
 function rankedTitles(rows) {
   const titles = new Map()
   for (const { id, title } of rows) {
-    if (/^hg-\d{1,32}$/.test(id) && typeof title === 'string' && title.trim() && !titles.has(id))
+    if (seriesPattern.test(id) && typeof title === 'string' && title.trim() && !titles.has(id))
       titles.set(id, { id, title })
     if (titles.size === 48) break
   }
@@ -37,6 +38,10 @@ export class Store {
         session_id TEXT NOT NULL, turn_id TEXT NOT NULL, PRIMARY KEY(session_id,turn_id));
       CREATE TABLE IF NOT EXISTS recommendation_feed (
         id INTEGER PRIMARY KEY CHECK(id=1), items TEXT NOT NULL, updated_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS source_recommendation_feed (
+        source TEXT PRIMARY KEY, items TEXT NOT NULL, updated_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS recommendation_source (
+        session_id TEXT NOT NULL, turn_id TEXT NOT NULL, source TEXT NOT NULL, PRIMARY KEY(session_id,turn_id));
       CREATE TABLE IF NOT EXISTS catalog_cache (
         key TEXT PRIMARY KEY, value TEXT, updated_at INTEGER NOT NULL DEFAULT 0,
         retry_at INTEGER NOT NULL DEFAULT 0, failures INTEGER NOT NULL DEFAULT 0,
@@ -64,6 +69,12 @@ export class Store {
         PRAGMA user_version=1;
         COMMIT;`)
     }
+    if (this.db.prepare('PRAGMA user_version').get().user_version < 2) {
+      this.db.exec(`BEGIN IMMEDIATE;
+        INSERT OR IGNORE INTO source_recommendation_feed
+          SELECT 'hongguo',items,updated_at FROM recommendation_feed WHERE id=1;
+        PRAGMA user_version=2; COMMIT;`)
+    }
   }
   preferences() {
     this.db.exec('CREATE TABLE IF NOT EXISTS player_preferences(id INTEGER PRIMARY KEY, body TEXT NOT NULL)')
@@ -71,7 +82,7 @@ export class Store {
     const defaults = {
       autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
       defaultMuted: true, volume: 0.7,
-      searchTerms: ['总裁', '重生', '逆袭'],
+      searchTerms: ['总裁', '重生', '逆袭'], defaultSource: 'hongguo',
     }
     return row ? { ...defaults, ...JSON.parse(row.body) } : defaults
   }
@@ -89,6 +100,7 @@ export class Store {
       this.db.prepare('INSERT OR REPLACE INTO player_preferences VALUES(1,?)').run(JSON.stringify(updated))
       if (JSON.stringify(previous.searchTerms) !== JSON.stringify(updated.searchTerms)) {
         this.db.exec('DELETE FROM recommendation_feed')
+        this.db.exec('DELETE FROM source_recommendation_feed')
         this.db.exec("DELETE FROM catalog_cache WHERE key LIKE 'feed:%'")
       }
       return updated
@@ -167,8 +179,12 @@ export class Store {
       'UPDATE visible_player SET seen_at=? WHERE session_id=? AND instance=? AND seen_at<?',
     ).run(Date.now(), sessionId, instance, Date.now() - 1800)
   }
-  waitingFeed(includeExpired = false) {
-    const row = this.db.prepare('SELECT items, updated_at FROM recommendation_feed WHERE id=1').get()
+  waitingFeed(includeExpired = false, source = 'hongguo') {
+    sourceId(source)
+    // The legacy Hongguo table remains canonical while older processes are alive.
+    const row = source === 'hongguo'
+      ? this.db.prepare('SELECT items, updated_at FROM recommendation_feed WHERE id=1').get()
+      : this.db.prepare('SELECT items, updated_at FROM source_recommendation_feed WHERE source=?').get(source)
     if (row && !includeExpired && row.updated_at <= Date.now() - 15 * 60000) return []
     return row ? JSON.parse(row.items) : []
   }
@@ -200,7 +216,7 @@ export class Store {
       const saved = this.db.prepare(`UPDATE catalog_cache SET value=?,updated_at=?,retry_at=0,failures=0,
         lease_owner=NULL,lease_until=0,touched_at=? WHERE key=? AND lease_owner=? AND lease_until>?`)
         .run(JSON.stringify(value), now, now, key, owner, now).changes === 1
-      if (saved && feed) this.saveWaitingFeed(value.titles, now)
+      if (saved && feed) this.saveWaitingFeed(value.titles, now, feed === true ? 'hongguo' : feed)
       if (saved) this.pruneCatalogCache(key, now)
       return saved
     })
@@ -222,11 +238,20 @@ export class Store {
       SELECT key FROM catalog_cache WHERE key<>? AND lease_until<=? ORDER BY touched_at DESC,key LIMIT -1 OFFSET 127)`)
       .run(keep, now)
   }
-  saveWaitingFeed(rows, now = Date.now()) {
-    const items = rankedTitles(rows)
-    if (items.length) this.db.prepare('INSERT OR REPLACE INTO recommendation_feed VALUES(1,?,?)')
-      .run(JSON.stringify(items), now)
+  saveWaitingFeed(rows, now = Date.now(), source = 'hongguo') {
+    sourceId(source)
+    const items = rankedTitles(rows).filter(row => belongsTo(row.id, source))
+    if (items.length) {
+      const json = JSON.stringify(items)
+      this.db.prepare('INSERT OR REPLACE INTO source_recommendation_feed VALUES(?,?,?)').run(source, json, now)
+      if (source === 'hongguo') this.db.prepare('INSERT OR REPLACE INTO recommendation_feed VALUES(1,?,?)').run(json, now)
+    }
     return items
+  }
+  recommendationSource(sessionId, turnId, preferred = this.preferences().defaultSource) {
+    sourceId(preferred)
+    this.db.prepare('INSERT OR IGNORE INTO recommendation_source VALUES(?,?,?)').run(sessionId, turnId, preferred)
+    return this.db.prepare('SELECT source FROM recommendation_source WHERE session_id=? AND turn_id=?').get(sessionId, turnId).source
   }
   turnPicks(sessionId, turnId) {
     const row = this.db.prepare('SELECT items FROM turn_picks WHERE session_id=? AND turn_id=?').get(sessionId, turnId)
@@ -311,7 +336,9 @@ export class Store {
       return { saved: true }
     })
   }
-  history(seriesId, episodeId, limit = 30) {
+  history(seriesId, episodeId, limit = 30, source = 'hongguo') {
+    sourceId(source)
+    const seriesGlob = idGlob(source), episodeGlob = idGlob(source, 'episode')
     const fields =
       'series_id AS seriesId,episode_id AS episodeId,title,label,position_ms AS positionMs,duration_ms AS durationMs,updated_at AS updatedAt'
     const meaningful = '(position_ms>0 OR (series_id,episode_id) IN (SELECT series_id,episode_id FROM watch_restart))'
@@ -332,10 +359,10 @@ export class Store {
         'SELECT ' +
           fields +
           ` FROM (SELECT *, row_number() OVER(PARTITION BY series_id ORDER BY updated_at DESC,rowid DESC) AS rank
-            FROM watch_progress WHERE ${meaningful} AND series_id GLOB 'hg-*' AND episode_id GLOB 'hg-*')
+            FROM watch_progress WHERE ${meaningful} AND series_id GLOB ? AND episode_id GLOB ?)
             WHERE rank=1 ORDER BY updated_at DESC LIMIT ?`,
       )
-      .all(limit)
+      .all(seriesGlob, episodeGlob, limit)
   }
   removeHistory(seriesId) {
     return this.transaction(() => {

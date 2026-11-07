@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "checkedAt": "2026-11-07T18:20:16.142Z",
+  "runtime": "v26.11.0",
+  "compiledServerSha256": "9ed6b64dba15eef0e44d61872fac85f9134ee58c161b555fc34b285d501c9ae7",
+  "providers": [
+    {
+      "source": "hongguo",
+      "fullEpisodeDecoded": true,
+      "attemptedShows": 1,
+      "catalogItems": 8,
+      "episodeCount": 63,
+      "durationMs": 123483,
+      "assets": 63,
+      "chunkCalls": 271,
+      "bytes": 47234310,
+      "historySaved": true,
+      "elapsedMs": 9072
+    },
+    {
+      "source": "hghub",
+      "fullEpisodeDecoded": true,
+      "attemptedShows": 1,
+      "catalogItems": 16,
+      "episodeCount": 21,
+      "durationMs": 207935,
+      "assets": 42,
+      "chunkCalls": 378,
+      "bytes": 70208756,
+      "historySaved": true,
+      "elapsedMs": 19212
+    }
+  ],
+  "desktopPlaybackObserved": false,
+  "isolatedState": true,
+  "historyIsolated": true,
+  "status": "pass"
+}

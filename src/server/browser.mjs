@@ -135,6 +135,7 @@ export class BrowserServer {
         identified: !!session.sessionId,
         turnId: session.fixedTurn,
         selection: session.selection,
+        source: session.source,
       })
     if (route.startsWith('api/') && req.method === 'POST')
       return json(await this.service.call(session, route.slice(4), await body(req), true))

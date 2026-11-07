@@ -13,6 +13,8 @@
 
 Watch Hongguo short dramas in the right-hand panel of Codex Desktop, with browsing, search, resume and autoplay next. By default, a new task resumes the selected episode; finishing or interrupting the task pauses playback and saves your position. You can turn off either behavior independently in Settings. The plugin supports local-executor Codex Desktop conversations.
 
+Use the source selector to switch between Hongguo and Huangguo. Hongguo remains the default. Recommendations, search, history and cache identities are separate for each source; switching saves your position and stops playback. Explicitly installed local sources can use the [Provider plugin API](docs/providers.md) (Chinese).
+
 This is an independent, unofficial plugin with original icon artwork. The red fruit echoes the name Hongguo ("red fruit"), while the leaf and play button form the plugin's own mark.
 
 After installation and Hook review, continue working normally. The optional **Watch while you wait** card offers up to three shows per turn. It prioritizes **Continue watching**, or **Watch next** when the saved episode is complete and another episode is available. Other slots rotate unwatched shows. Clicking a title opens the player in that chat and uses your default-mute setting.

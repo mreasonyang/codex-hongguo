@@ -1,0 +1,129 @@
+{
+  "schema": 1,
+  "checkedAt": "2026-11-07T17:38:59.413Z",
+  "upstream": "0013315087149b1f717e6a260524de0dce0d1485",
+  "runtime": "v26.11.0",
+  "baselineCommit": "5033523ca1a39bfb01ac3ad447fe788aa4db99a4",
+  "probeSha256": "e48c39deb3d5098e3c82f1bde8dfc8daa0b233e041842833e76c3f2b3cadf28f",
+  "scope": "isolated feasibility probe; no application integration or desktop observation",
+  "results": [
+    {
+      "name": "upstream-sdk-integrity",
+      "status": "pass",
+      "elapsedMs": 1,
+      "sourceVerified": true
+    },
+    {
+      "name": "current-boundaries-confirmed",
+      "status": "pass",
+      "elapsedMs": 52,
+      "sourceSchemaBlocksHghub": true,
+      "idSchemaBlocksHghub": true,
+      "cdnBlocksHghub": true,
+      "historyListOmitsHghub": true
+    },
+    {
+      "name": "page-and-identity-contract",
+      "status": "pass",
+      "elapsedMs": 1,
+      "nextPageRoundTrip": true,
+      "foreignSourceRejected": true,
+      "changedQueryRejected": true,
+      "compositeEpisodeRoundTrip": true
+    },
+    {
+      "name": "existing-runtime-and-fixture",
+      "status": "pass",
+      "elapsedMs": 64,
+      "segments": 4
+    },
+    {
+      "name": "encrypted-hls-explicit-iv",
+      "status": "pass",
+      "elapsedMs": 45,
+      "segments": 4,
+      "keyRequests": 4,
+      "bytes": 118064,
+      "existingAdaptiveRejects": true,
+      "decoded": true
+    },
+    {
+      "name": "encrypted-hls-sequence-iv",
+      "status": "pass",
+      "elapsedMs": 37,
+      "segments": 4,
+      "keyRequests": 4,
+      "bytes": 118064,
+      "existingAdaptiveRejects": true,
+      "decoded": true
+    },
+    {
+      "name": "encrypted-hls-rotating-keys",
+      "status": "pass",
+      "elapsedMs": 90,
+      "segments": 4,
+      "keyRequests": 4,
+      "bytes": 118064,
+      "existingAdaptiveRejects": true,
+      "decoded": true,
+      "panelModule": {
+        "assets": 5,
+        "chunkCalls": 5,
+        "durationMs": 6275,
+        "decoded": true
+      }
+    },
+    {
+      "name": "live-feed-line-1",
+      "status": "pass",
+      "elapsedMs": 728,
+      "items": 2,
+      "total": 3292,
+      "authenticated": false
+    },
+    {
+      "name": "live-detail-and-search",
+      "status": "pass",
+      "elapsedMs": 808,
+      "episodes": 21,
+      "searchItems": 2,
+      "playableEpisodes": 21
+    },
+    {
+      "name": "live-cover",
+      "status": "pass",
+      "elapsedMs": 146,
+      "mime": "image/jpeg",
+      "bytes": 174813
+    },
+    {
+      "name": "live-playback-locator",
+      "status": "pass",
+      "elapsedMs": 395,
+      "locatorReturned": true,
+      "alternateHevcAvailable": true
+    },
+    {
+      "name": "live-bounded-media-and-panel",
+      "status": "pass",
+      "elapsedMs": 1259,
+      "segments": 2,
+      "keyRequests": 2,
+      "bytes": 3601140,
+      "panelModule": {
+        "assets": 3,
+        "chunkCalls": 20,
+        "durationMs": 11090,
+        "decoded": true
+      },
+      "sampleOnly": true,
+      "fullEpisodeTested": false
+    }
+  ],
+  "desktopPlaybackObserved": false,
+  "realMediaDecoded": true,
+  "liveRequestCount": 10,
+  "liveBytes": 3800383,
+  "passed": 12,
+  "failed": 0
+}

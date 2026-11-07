@@ -1,5 +1,10 @@
 // The catalog supplies show names and episode titles. Translate player chrome only.
 const en: Record<string, string> = {
+  视频源: 'Video source', 红果: 'Hongguo', 黄果: 'Huangguo',
+  '片源暂时没有返回推荐剧目': 'The source returned no recommendations.',
+  '片源暂时不可达，请稍后重试': 'The source is temporarily unavailable. Try again later.',
+  '选源已变更，请重新选剧': 'The source changed. Choose a show again.',
+  '视频源暂未切换，请重试': 'Could not switch the video source. Try again.',
   '推荐所属任务已结束，点击播放继续观看': 'The recommended task has ended. Click Play to keep watching.',
   '宿主阻止了自动播放，请点击播放继续': 'The host blocked autoplay. Click Play to continue.',
   设置: 'Settings',

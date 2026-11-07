@@ -1508,3 +1508,4 @@ h1 {
     animation: none !important;
   }
 }
+.sourcePicker { max-width: 7rem; min-height: 32px; padding: 4px 8px; border: 1px solid var(--border, #8885); border-radius: 8px; background: transparent; color: inherit; font: inherit; }

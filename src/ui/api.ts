@@ -2,12 +2,15 @@ import { App, applyDocumentTheme, applyHostStyleVariables } from '@modelcontextp
 import { trackInlineSize } from './inline-size'
 import pkg from '../../package.json' with { type: 'json' }
 export type Context = {
+  source?: SourceId
   identified: boolean
   waitingTurn?: string
   turnId?: string
   selection?: { seriesId: string; episodeId?: string; title?: string }
 }
+export type SourceId = string
 export type Preferences = {
+  defaultSource: SourceId
   autoPrompt: boolean
   autoplayNext: boolean
   autoPauseOnFinish: boolean
@@ -51,7 +54,9 @@ export async function connect(ready: (c: Context) => void, teardown: () => Promi
     if (typeof r._meta?.panel !== 'string') return
     panel = r._meta.panel
     const waitingTurn = typeof r._meta.waitingTurn === 'string' ? r._meta.waitingTurn : undefined
-    ready({ identified: !!r.structuredContent?.identified || !!waitingTurn, waitingTurn })
+    const source = r.structuredContent?.source
+    ready({ identified: !!r.structuredContent?.identified || !!waitingTurn, waitingTurn,
+      ...(typeof source === 'string' && /^[a-z][a-z0-9-]{0,31}$/.test(source) ? { source } : {}) })
   }
   app!.onteardown = async () => {
     inlineSizing?.dispose()

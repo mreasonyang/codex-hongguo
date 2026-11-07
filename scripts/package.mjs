@@ -21,6 +21,8 @@ await chmod(join(npmRoot, 'bin/codex-hongguo.mjs'), 0o755)
 await chmod(join(npmRoot, 'bin/run-node'), 0o755)
 await cp('dist/launcher/run-node.exe', join(npmRoot, 'bin/run-node.exe'))
 await cp('dist/launcher/run-node-arm64.exe', join(npmRoot, 'bin/run-node-arm64.exe'))
+await mkdir(join(npmRoot, 'docs'), { recursive: true })
+await cp('docs/providers.md', join(npmRoot, 'docs/providers.md'))
 await rm(join(npmRoot, 'dist/launcher'), { recursive: true })
 // Keep the tested compatibility manifest canonical until portable hook discovery is qualified.
 await writeFile(join(npmRoot, 'package.json'), JSON.stringify({
@@ -29,7 +31,7 @@ await writeFile(join(npmRoot, 'package.json'), JSON.stringify({
   repository: { type: 'git', url: 'git+https://github.com/mreasonyang/codex-hongguo.git' },
   homepage: 'https://github.com/mreasonyang/codex-hongguo#readme',
   bin: { 'codex-hongguo': './bin/codex-hongguo.mjs' },
-  files: ['.codex-plugin/', '.mcp.json', 'hooks/', 'skills/', 'assets/', 'bin/', 'dist/', 'licenses/', 'LICENSE', 'README.md', 'README.en.md', 'docs/images/'],
+  files: ['.codex-plugin/', '.mcp.json', 'hooks/', 'skills/', 'assets/', 'bin/', 'dist/', 'licenses/', 'LICENSE', 'README.md', 'README.en.md', 'docs/images/', 'docs/providers.md'],
   publishConfig: { access: 'public', registry: 'https://registry.npmjs.org' },
 }, null, 2) + '\n')
 const guides = {}
@@ -49,6 +51,7 @@ for (const name of ['README.md', 'README.en.md']) {
 const notices = join(npmRoot, 'licenses')
 await mkdir(notices)
 await cp('third_party/ffmpeg', join(notices, 'ffmpeg'), { recursive: true })
+await cp('third_party/hghub', join(notices, 'hghub'), { recursive: true })
 await cp('src/runtime/ffmpeg-artifacts.json', join(notices, 'ffmpeg/ffmpeg-artifacts.json'))
 const lock = JSON.parse(await readFile('package-lock.json', 'utf8'))
 for (const [path, dependency] of Object.entries(lock.packages)) {

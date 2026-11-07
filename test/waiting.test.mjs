@@ -185,7 +185,7 @@ test('cold cards share multi-page discovery and cache ranked public titles acros
   const catalog = new Catalog(store), next = new Catalog(peer)
   const requests = []
   const secondPage = Promise.withResolvers()
-  t.mock.method(catalog, 'sdkCall', async (method, { cursor }) => {
+  t.mock.method(catalog.sources.get('hongguo'), 'sdkCall', async (method, { cursor }) => {
     assert.equal(method, 'discover')
     requests.push(cursor)
     if (cursor) await secondPage.promise
@@ -196,7 +196,7 @@ test('cold cards share multi-page discovery and cache ranked public titles acros
       has_more: !cursor, cursor: 'second',
     }
   })
-  t.mock.method(next, 'sdkCall', () => assert.fail('the warm card should not contact the provider'))
+  t.mock.method(next.sources.get('hongguo'), 'sdkCall', () => assert.fail('the warm card should not contact the provider'))
   const expected = shows(...Array.from({ length: 29 }, (_, i) => i + 1))
   const loading = Promise.all([catalog.waitingRecommendations(), catalog.waitingRecommendations()])
   const preview = await catalog.list({ preview: true })
@@ -299,7 +299,7 @@ test('completed series are skipped; the next playable episode follows real pagin
   catalog.ffmpeg = true
   t.mock.method(catalog, 'waitingRecommendations', async () => pool)
   const reads = []
-  t.mock.method(catalog, 'sdkCall', async (method, id, { cursor }) => {
+  t.mock.method(catalog.sources.get('hongguo'), 'sdkCall', async (method, id, { cursor }) => {
     assert.equal(method, 'listEpisodes')
     reads.push([id, cursor])
     if (id === '9') return { items: [{ id: '84', number: 1 }] }

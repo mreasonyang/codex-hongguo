@@ -17,6 +17,7 @@ class Element extends EventTarget {
   replaceChildren(...children) { this.children = children }
   append(...children) { this.children.push(...children) }
   querySelectorAll() { return [] }
+  querySelector() { return null }
   focus() {}
   removeAttribute() {}
 }
@@ -34,7 +35,8 @@ class Video extends Element {
 // start and pause paths run unchanged against a real Service and SQLite store.
 const source = readFileSync(new URL('../src/ui/player.ts', import.meta.url), 'utf8') + `
 export const fixture = {
-  poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer,
+  poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer, changeSource, list, history,
+  sourceState() { return { source: activeSource, cards: cards.map(row => row.id), watched: watched.map(row => row.seriesId) } },
   selected() {
     context = { identified: true }; pageActive = playerReady = loaded = true;
     series = { id: 'hg-1', title: 'Test' };
@@ -75,7 +77,7 @@ function setup(t) {
       if (name === './playback-turn') return turnHelpers
       if (name === './media-startup') return mediaHelpers
       if (name === './panel-stream') return { panelStream(video) { queueMicrotask(()=>video.dispatchEvent(new Event('loadedmetadata'))); return ()=>{} } }
-      if (name === './ui-kit') return { setIcon() {}, fill() {}, icon: () => new Element() }
+      if (name === './ui-kit') return { setIcon() {}, fill() {}, icon: () => new Element(), coverArt: () => new Element(), setCover() {} }
       return {}
     },
   })
@@ -94,6 +96,44 @@ function setup(t) {
 }
 const turnHelpers = await import('../src/ui/playback-turn.ts')
 const mediaHelpers = await import('../src/ui/media-startup.ts')
+
+test('switching providers saves progress, stops playback and discards the old catalog response', async t => {
+  const f = setup(t), old = Promise.withResolvers()
+  f.service.catalog = { list: async options => options.source === 'hghub'
+    ? { items: [{ id: 'hh-1', title: 'Yellow' }] } : old.promise }
+  const initial = f.ui.list()
+  await flush()
+  await f.ui.changeSource('hghub')
+  assert.equal(f.ui.sourceState().source, 'hghub')
+  assert.deepEqual([...f.ui.sourceState().cards], ['hh-1'])
+  assert.equal(f.ui.episodeId(), undefined)
+  assert.equal(f.video.paused, true)
+  assert.equal(f.store.history('hg-1', 'hg-11')[0].positionMs, 12000)
+  old.resolve({ items: [{ id: 'hg-1', title: 'Late red' }] })
+  await initial; await flush()
+  assert.deepEqual([...f.ui.sourceState().cards], ['hh-1'])
+  assert.equal(f.panel.source, 'hghub')
+})
+test('global default changes do not switch an existing player and stale history cannot cross sources', async t => {
+  const f = setup(t), delayed = Promise.withResolvers(), call = f.service.call.bind(f.service)
+  let deferRed = true
+  f.service.call = async (scope, name, args = {}) => {
+    if (name === 'get_history' && args.source === 'hongguo' && deferRed) return delayed.promise
+    return call(scope, name, args)
+  }
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  const history = f.ui.history(); await flush()
+  await f.ui.changeSource('hghub')
+  deferRed = false
+  delayed.resolve({ items: [{ seriesId: 'hg-1', episodeId: 'hg-11', title: 'late', label: '1', positionMs: 1, durationMs: 10 }] })
+  await history
+  assert.equal(f.ui.sourceState().watched.length, 0)
+  const other = f.service.panel(f.service.open({ threadId: 'C' }).panel)
+  await f.service.call(other, 'set_source', { source: 'hongguo' })
+  await f.poll()
+  assert.equal(f.ui.sourceState().source, 'hghub')
+  assert.equal(f.store.preferences().defaultSource, 'hongguo')
+})
 
 test('global playback switches default for older settings, synchronize across chats and survive restart', async t => {
   const f = setup(t)

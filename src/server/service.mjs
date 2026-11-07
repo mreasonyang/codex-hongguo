@@ -3,10 +3,13 @@ import { z } from 'zod'
 import { callerId } from './store.mjs'
 import { PlayerError } from './errors.mjs'
 import { manualHooks } from './setup.mjs'
+import { providerPattern, seriesPattern, episodePattern, parseId, matchesSeries } from './sources/ids.mjs'
 
 export const secret = () => randomBytes(24).toString('base64url')
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/)
-const dramaId = z.string().regex(/^hg-[0-9]{1,32}$/)
+const dramaId = z.string().regex(seriesPattern)
+const episodeId = z.string().regex(episodePattern)
+const source = z.string().regex(providerPattern)
 const cursor = z.string().max(4096).optional()
 const short = z.string().min(1).max(320)
 const ms = z
@@ -28,36 +31,38 @@ export const schemas = {
   list_sessions: z.object({}),
   select_session: z.object({ choice: id }),
   list_series: z.object({
-    source: z.literal('hongguo').optional(),
+    source: source.optional(),
     preview: z.literal(true).optional(),
     query: z.string().max(120).optional(),
     cursor,
   }),
   get_cover: z.object({ seriesId: dramaId }),
   get_episodes: z.object({ seriesId: dramaId, cursor }),
-  get_history: z.object({ seriesId: dramaId.optional(), episodeId: dramaId.optional() }),
+  set_source: z.object({ source, remember: z.boolean().optional() }),
+  get_history: z.object({ seriesId: dramaId.optional(), episodeId: episodeId.optional(), source: source.optional() }),
   save_progress: z.object({
     seriesId: dramaId,
-    episodeId: dramaId,
+    episodeId,
     title: short,
     label: short,
     positionMs: ms,
     durationMs: ms.positive(),
     reset: z.literal(true).optional(),
   }),
-  prepare_playback: z.object({ episodeId: dramaId, retry: z.boolean().optional() }),
-  preload_playback: z.object({ episodeId: dramaId }),
+  prepare_playback: z.object({ episodeId, retry: z.boolean().optional() }),
+  preload_playback: z.object({ episodeId }),
   create_browser_pairing: z.object({
     follow: z.boolean().optional(),
     turnId: id.optional(),
     seriesId: dramaId.optional(),
-    episodeId: dramaId.optional(),
+    episodeId: episodeId.optional(),
     title: short.optional(),
   }),
   get_health: z.object({}),
   get_setup_status: z.object({}),
   set_setup_dismissed: z.object({ dismissed: z.boolean() }),
   get_preferences: z.object({}),
+  get_providers: z.object({}),
   set_preferences: z.object({
     autoPrompt: z.boolean().optional(),
     searchTerms: z.array(z.string().trim().min(1).max(30)).min(1).max(6).optional(),
@@ -68,7 +73,7 @@ export const schemas = {
     volume: z.number().positive().max(1).optional(),
   }),
   read_panel_chunk: z.object({
-    episodeId: dramaId,
+    episodeId,
     stream: id,
     asset: z.string().max(32),
     offset: z
@@ -77,7 +82,7 @@ export const schemas = {
       .nonnegative()
       .max(32 * 1024 * 1024),
   }),
-  read_panel_manifest: z.object({ episodeId: dramaId, stream: id }),
+  read_panel_manifest: z.object({ episodeId, stream: id }),
   remove_history: z.object({ seriesId: dramaId }),
 }
 export class Service {
@@ -88,11 +93,11 @@ export class Service {
   }
   open(meta) {
     const key = secret(),
-      scope = { sessionId: callerId(meta), choices: new Map(), lastSeen: Date.now() }
+      scope = { sessionId: callerId(meta), choices: new Map(), lastSeen: Date.now(), source: this.catalog.defaultSource?.() ?? this.store.preferences().defaultSource }
     for (const [k, v] of this.panels) if (Date.now() - v.lastSeen > 12 * 3600000) this.panels.delete(k)
     scope.caller = scope.sessionId
     this.panels.set(key, scope)
-    return { panel: key, state: this.store.state(scope.sessionId), identified: !!scope.sessionId }
+    return { panel: key, state: this.store.state(scope.sessionId), identified: !!scope.sessionId, source: scope.source }
   }
   openWaiting(meta, turnId) {
     const sessionId = callerId(meta)
@@ -102,9 +107,9 @@ export class Service {
     this.panels.get(initial.panel).waiting = { turnId, selected: null, taken: false }
     return initial
   }
-  async resumePick() {
-    for (const row of this.store.history(undefined, undefined, -1)) {
-      if (!dramaId.safeParse(row.seriesId).success || !dramaId.safeParse(row.episodeId).success) continue
+  async resumePick(source = 'hongguo') {
+    for (const row of this.store.history(undefined, undefined, -1, source)) {
+      if (!dramaId.safeParse(row.seriesId).success || !episodeId.safeParse(row.episodeId).success) continue
       const show = { id: row.seriesId, title: row.title }
       if (row.positionMs < row.durationMs) return { ...show, episodeId: row.episodeId, kind: 'resume' }
       try {
@@ -117,12 +122,13 @@ export class Service {
     }
     return null
   }
-  async waitingPicks(sessionId, turnId, inView, eligible) {
+  async waitingPicks(sessionId, turnId, inView, eligible, preferred) {
     if (!eligible()) return { items: [] }
     const pinned = this.store.turnPicks(sessionId, turnId)
     if (pinned.length) return { items: pinned }
+    const source = this.store.recommendationSource(sessionId, turnId, preferred)
     const [feed, resume] = await Promise.all([
-      this.catalog.waitingRecommendations().catch(() => []), this.resumePick(),
+      this.catalog.waitingRecommendations(source).catch(() => []), this.resumePick(source),
     ])
     return { items: this.store.allocatePicks(sessionId, turnId, resume, feed, inView, eligible) }
   }
@@ -169,7 +175,7 @@ export class Service {
           ? this.store.activeTurn(scope.sessionId, turnId) && this.store.preferences().autoPrompt && !this.store.picksDismissed(scope.sessionId, turnId)
           : this.store.offerable(scope.sessionId, turnId)
         if (name === 'mark_waiting_picks_shown') return this.store.markPicksShown(scope.sessionId, turnId, eligible)
-        return this.waitingPicks(scope.sessionId, turnId, !!p.inView, eligible)
+        return this.waitingPicks(scope.sessionId, turnId, !!p.inView, eligible, scope.source)
       }
       case 'select_waiting_pick':
       case 'confirm_waiting_playback':
@@ -186,6 +192,7 @@ export class Service {
           if (!pick) throw new PlayerError('请从本轮推荐中选剧', 403)
           this.store.markPicksShown(scope.sessionId, card.turnId, () => this.store.offerable(scope.sessionId, card.turnId))
           card.selected = pick
+          scope.source = parseId(pick.id).source
           card.taken = false
           card.browsing = false
           card.played = false
@@ -245,17 +252,34 @@ export class Service {
         scope.choices.clear()
         return this.store.state(scope.sessionId)
       case 'list_series':
-        return this.catalog.list(p)
+        return this.catalog.list({ ...p, source: p.source ?? scope.source })
+      case 'set_source':
+        await this.catalog.sources?.ready
+        this.catalog.sources?.get(p.source)
+        if (p.remember !== false) {
+          if (!this.store.persistent) throw new PlayerError('本机设置目录不可写', 503)
+          this.store.setPreferences({ defaultSource: p.source })
+        }
+        scope.source = p.source
+        scope.sourceRevision = (scope.sourceRevision || 0) + 1
+        scope.allowed?.clear()
+        scope.grants?.clear()
+        this.catalog.panelMedia?.unpin(scope.playing, scope)
+        scope.streams?.clear()
+        scope.playing = null
+        return { source: p.source }
       case 'get_cover':
         return this.catalog.cover(p.seriesId)
       case 'get_episodes': {
+        const revision = scope.sourceRevision
         const page = await this.catalog.episodes(p)
+        if (scope.sourceRevision !== revision) throw new PlayerError('选源已变更，请重新选剧')
         scope.allowed ??= new Set()
-        for (const ep of page.items) if (ep.playable) scope.allowed.add(ep.id)
+        for (const ep of page.items) if (ep.playable && matchesSeries(p.seriesId, ep.id)) scope.allowed.add(ep.id)
         return page
       }
       case 'get_history':
-        return { items: this.store.history(p.seriesId, p.episodeId) }
+        return { items: this.store.history(p.seriesId, p.episodeId, 30, p.source ?? scope.source) }
       case 'remove_history':
         return this.store.removeHistory(p.seriesId)
       case 'read_panel_chunk':
@@ -265,6 +289,7 @@ export class Service {
         if (name === 'read_panel_manifest') return this.catalog.panelMedia.manifest(p.episodeId, p.stream)
         return this.catalog.panelMedia.chunk(p.episodeId, p.stream, p.asset, p.offset)
       case 'save_progress':
+        if (!matchesSeries(p.seriesId, p.episodeId)) throw new PlayerError('剧目与分集来源不匹配')
         if (!this.store.persistent) throw new PlayerError('本机进度目录不可写', 503)
         this.catalog.cache?.hold(p.episodeId)
         return this.store.save(p)
@@ -295,6 +320,11 @@ export class Service {
       }
       case 'get_preferences':
         return this.store.preferences()
+      case 'get_providers':
+        await this.catalog.sources?.ready
+        return { items: this.catalog.sources?.list() ?? [
+          { id: 'hongguo', name: '红果', available: true }, { id: 'hghub', name: '黄果', available: true },
+        ] }
       case 'set_preferences': {
         if (!this.store.persistent) throw new PlayerError('本机设置目录不可写', 503)
         const previous = this.store.preferences()
@@ -327,11 +357,13 @@ export class Service {
         return this.store.setSetupDismissed(p.dismissed)
       case 'create_browser_pairing': {
         if (browser) throw new PlayerError('请从会话面板打开分屏', 403)
+        if (p.seriesId && p.episodeId && !matchesSeries(p.seriesId, p.episodeId)) throw new PlayerError('剧目与分集来源不匹配')
         const state = p.follow && this.store.state(scope.sessionId, p.turnId)
         if (p.follow && (!p.turnId || state.state !== 'submitted'))
           throw new PlayerError('当前回合无法绑定，请选择手动播放')
         return this.pair({
           sessionId: p.follow === false ? null : scope.sessionId,
+          source: p.seriesId ? parseId(p.seriesId).source : scope.source,
           fixedTurn: p.follow ? p.turnId : null,
           selection: p.seriesId ? { seriesId: p.seriesId, episodeId: p.episodeId, title: p.title } : null,
         })

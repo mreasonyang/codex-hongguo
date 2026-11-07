@@ -1,34 +1,23 @@
-import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
-import { Writable } from 'node:stream'
-import { pipeline } from 'node:stream/promises'
-import { projectRoot } from './paths.mjs'
 import { PlayerError } from './errors.mjs'
-import { cdn, hasFfmpeg, MediaCache, runFfmpeg } from './media.mjs'
+import { hasFfmpeg, MediaCache, runFfmpeg } from './media.mjs'
 import { ensureFfmpeg } from '../runtime/ffmpeg-runtime.mjs'
 import { createHash } from 'node:crypto'
 import { SharedCatalogCache } from './catalog-cache.mjs'
 
 import { PanelMedia } from './panel-media.mjs'
-
-function sdkError(e) {
-  const labels = {
-    ANONYMOUS_LIMITED: '上游暂时限制匿名播放',
-    RATE_LIMITED: '请求过于频繁',
-    AUTHENTICATION_REQUIRED: '片源需要登录',
-    CONTENT_UNAVAILABLE: '片源暂不可用',
-  }
-  return new PlayerError((labels[e?.code] || '红果片源暂时不可达') + '，请稍后重试', 503)
-}
+import { SourceRegistry } from './sources/registry.mjs'
+import { sourceId, qualify, parseId } from './sources/ids.mjs'
+import { decodeCursor, sourceCall } from './sources/contracts.mjs'
 export class Catalog {
-  constructor(store) {
+  constructor(store, { sources = new SourceRegistry(store.root) } = {}) {
     this.store = store
+    this.sources = sources
     this.ffmpeg = hasFfmpeg()
     this.covers = new Map()
     this.coverLookups = new Map()
     this.metadata = new SharedCatalogCache(store)
     this.firstPages = new Map()
-    this.coverJobs = 0
+    this.coverJobs = new Map()
     void this.prepareMediaRuntime().catch(() => {})
   }
   prepareMediaRuntime() {
@@ -38,55 +27,33 @@ export class Catalog {
     }).finally(() => { this.preparingRuntime = null })
     return this.preparingRuntime
   }
-  async sdk() {
-    this.client ??= import(pathToFileURL(join(projectRoot, 'dist/vendor/openhongguo/index.js')).href)
-      .then((mod) =>
-        mod.createClient({
-          profile: process.env.HONGGUO_PROFILE_PATH || join(this.store.root, 'device', 'anonymous.json'),
-          timeoutMs: 10000,
-          retryAttempts: 2,
-          deviceResets: 2,
-        }),
-      )
-      .catch((e) => {
-        this.client = null
-        throw sdkError(e)
-      })
-    return this.client
+  defaultSource() { return this.sources.fallback(this.store.preferences().defaultSource) }
+  async list({ source = this.defaultSource(), query = '', cursor, preview } = {}) {
+    if (!this.sources.loaded) await this.sources.ready
+    source = sourceId(source)
+    if (!query) return { items: await this.recommendations(preview, source), cursor: null }
+    const page = await sourceCall(() => this.sources.get(source).listSeries({ query, cursor, pageSize: 16 }))
+    return { items: this.rows(page, true, source), cursor: page.cursor }
   }
-  async sdkCall(method, ...args) {
-    try {
-      return await (await this.sdk())[method](...args)
-    } catch (e) {
-      throw sdkError(e)
-    }
-  }
-  async list({ query = '', cursor, preview } = {}) {
-    if (!query) return { items: await this.recommendations(preview), cursor: null }
-    const page = await this.sdkCall('search', query, {
-      cursor,
-      pageSize: 16,
-      filters: ['content_type_short_play'],
-    })
-    return { items: this.rows(page, true), cursor: page.has_more ? page.cursor || null : null }
-  }
-  async recommendations(preview = false) {
+  async recommendations(preview = false, source = this.defaultSource()) {
+    if (!this.sources.loaded) await this.sources.ready
+    source = sourceId(source)
     const terms = this.store.preferences().searchTerms
-    const key = 'feed:' + createHash('sha256').update(JSON.stringify(terms)).digest('hex')
+    const key = 'feed:' + source + ':' + createHash('sha256').update(JSON.stringify(terms)).digest('hex')
     const cached = this.store.catalogCache(key)?.value
-    const titles = preview && !cached ? this.store.waitingFeed(true) : []
+    const titles = preview && !cached ? this.store.waitingFeed(true, source) : []
     const refresh = this.metadata.get(key, async () => {
       const firstPage = Promise.withResolvers()
       this.firstPages.set(key, firstPage.promise)
       try {
-        const rows = await this.collectFeed(firstPage.resolve, terms)
-        if (!rows.length) throw new PlayerError('红果片源暂时不可达，请稍后重试', 503)
+        const rows = await this.collectFeed(firstPage.resolve, terms, source)
+        if (!rows.length) throw new PlayerError('片源暂时不可达，请稍后重试', 503)
         const covered = rows.filter(row => row.hasCover)
         return { items: (covered.length >= 12 ? covered : rows).slice(0, 48),
           titles: rows.map(({ id, title }) => ({ id, title })),
           covers: rows.flatMap(({ id }) => this.covers.get(id)?.url ? [[id, this.covers.get(id).url]] : []) }
       } finally { this.firstPages.delete(key) }
-    }, { feed: true }).then(value => this.feedItems(value))
+    }, { feed: source }).then(value => this.feedItems(value))
     if (preview && (cached || titles.length)) {
       void refresh.catch(() => {})
       return cached ? this.feedItems(cached) : titles
@@ -101,33 +68,34 @@ export class Catalog {
     while (this.covers.size > 160) this.covers.delete(this.covers.keys().next().value)
     return value.items
   }
-  async waitingRecommendations() {
-    const cached = this.store.waitingFeed()
+  async waitingRecommendations(source = this.defaultSource()) {
+    const cached = this.store.waitingFeed(false, source)
     if (cached.length) return cached
-    const previous = this.store.waitingFeed(true)
-    const refresh = this.recommendations()
+    const previous = this.store.waitingFeed(true, source)
+    const refresh = this.recommendations(false, source)
     if (previous.length) {
       void refresh.catch(() => {})
       return previous
     }
     await refresh
-    return this.store.waitingFeed(true)
+    return this.store.waitingFeed(true, source)
   }
-  async collectFeed(onFirstPage, terms = this.store.preferences().searchTerms) {
+  async collectFeed(onFirstPage, terms = this.store.preferences().searchTerms, source = 'hongguo') {
+    const adapter = this.sources.get(source)
     const rows = new Map(),
       seen = new Set()
     const merge = (page) => {
       const wasEmpty = !rows.size
-      for (const row of this.rows(page))
+      for (const row of this.rows(page, false, source))
         if (!rows.has(row.id) || (!rows.get(row.id).hasCover && row.hasCover)) rows.set(row.id, row)
       if (wasEmpty && rows.size) onFirstPage([...rows.values()])
     }
     let cursor, lastError
     for (let i = 0; i < 6 && rows.size < 48; i++) {
       try {
-        const page = await this.sdkCall('discover', { cursor })
+        const page = await sourceCall(() => adapter.listSeries({ cursor, pageSize: 16 }))
         merge(page)
-        cursor = page.has_more && page.cursor
+        cursor = page.cursor
         if (!cursor || seen.has(cursor)) break
         seen.add(cursor)
       } catch (e) {
@@ -138,7 +106,7 @@ export class Catalog {
     for (const term of terms) {
       if (rows.size >= 24) break
       try {
-        merge(await this.sdkCall('search', term, { filters: ['content_type_short_play'] }))
+        merge(await sourceCall(() => adapter.listSeries({ query: term, pageSize: 16 })))
       } catch (e) {
         lastError = e
       }
@@ -146,17 +114,18 @@ export class Catalog {
     if (!rows.size && lastError) throw lastError
     return [...rows.values()]
   }
-  rows(page, lookupCover = false) {
+  rows(page, lookupCover = false, source = 'hongguo') {
     const items = (page.items || [])
-      .filter((s) => /^\d{1,32}$/.test(s.id))
-      .map((s) => {
-        const id = 'hg-' + s.id
-        if (s.cover_url && this.covers.get(id)?.url !== s.cover_url) this.covers.set(id, { url: s.cover_url })
+      .flatMap((s) => {
+        let id
+        try { id = qualify(source, s.id) } catch { return [] }
+        if (typeof s.title !== 'string' || !s.title.trim() || s.title.length > 320) return []
+        if (s.coverURL && this.covers.get(id)?.url !== s.coverURL) this.covers.set(id, { url: s.coverURL })
         return {
           id,
           title: s.title,
           description: s.description || '',
-          episodes: s.episode_count || null,
+          episodes: s.episodes || null,
           hasCover: !!this.covers.get(id)?.url,
           ...(lookupCover ? { lookupCover: true } : {}),
         }
@@ -169,10 +138,11 @@ export class Catalog {
     const entry = this.covers.get(id)
     if (entry?.cover !== undefined) return { cover: entry.cover }
     if (this.coverLookups.has(id)) return this.coverLookups.get(id)
-    if (this.coverJobs >= 3) return { cover: null }
-    this.coverJobs++
+    const { source } = parseId(id)
+    if ((this.coverJobs.get(source) || 0) >= 3) return { cover: null }
+    this.coverJobs.set(source, (this.coverJobs.get(source) || 0) + 1)
     const job = this.loadCover(id).finally(() => {
-      this.coverJobs--
+      this.coverJobs.set(source, this.coverJobs.get(source) - 1)
       this.coverLookups.delete(id)
     })
     this.coverLookups.set(id, job)
@@ -181,25 +151,12 @@ export class Catalog {
   async loadCover(id) {
     let entry = this.covers.get(id)
     try {
-      if (!entry?.url) {
-        const detail = await this.sdkCall('getSeries', id.slice(3))
-        if (!detail?.cover_url) return { cover: null }
-        entry = { url: detail.cover_url }
-        this.covers.set(id, entry)
-        while (this.covers.size > 160) this.covers.delete(this.covers.keys().next().value)
-      }
-      const { body, limit } = await cdn(entry.url, 3 * 1024 * 1024, 7000)
-      const chunks = []
-      await pipeline(
-        body,
-        limit,
-        new Writable({
-          write(chunk, enc, next) {
-            chunks.push(chunk)
-            next()
-          },
-        }),
-      )
+      const { adapter, id: raw } = this.sources.forId(id)
+      const image = await sourceCall(() => adapter.getCover(raw, { url: entry?.url }))
+      if (!image) return { cover: null }
+      entry ||= {}
+      this.covers.set(id, entry)
+      while (this.covers.size > 160) this.covers.delete(this.covers.keys().next().value)
       const jpeg = await runFfmpeg(
         [
           '-protocol_whitelist',
@@ -216,7 +173,7 @@ export class Catalog {
           'mjpeg',
           'pipe:1',
         ],
-        Buffer.concat(chunks),
+        image.bytes,
         true,
       )
       entry.cover = 'data:image/jpeg;base64,' + jpeg.toString('base64')
@@ -226,23 +183,25 @@ export class Catalog {
     return { cover: entry.cover }
   }
   async episodes({ seriesId, cursor }) {
-    const key = 'episodes:' + JSON.stringify([seriesId, cursor ?? null])
+    const ref = parseId(seriesId)
+    const key = 'episodes:v2:' + JSON.stringify([seriesId, decodeCursor(cursor, ref.source, 'episodes', ref.id) ?? null])
     const page = await this.metadata.get(key, () => this.loadEpisodes(seriesId, cursor))
     return { ...page, items: page.items.map(ep => ({ ...ep, playable: ep.playable && this.ffmpeg })) }
   }
   async loadEpisodes(seriesId, cursor) {
-    const page = await this.sdkCall('listEpisodes', seriesId.slice(3), { cursor, pageSize: 120 })
+    if (!this.sources.loaded) await this.sources.ready
+    const { adapter, id, source } = this.sources.forId(seriesId)
+    const page = await sourceCall(() => adapter.listEpisodes(id, { cursor, pageSize: 120 }))
     return {
       items: (page.items || [])
-        .filter((ep) => /^\d{1,32}$/.test(ep.id))
         .map((ep) => ({
-          id: 'hg-' + ep.id,
+          id: qualify(source, ep.id, 'episode'),
           number: ep.number,
-          label: ep.title || '第 ' + ep.number + ' 集',
+          label: ep.label,
           codec: '',
           playable: ep.playable !== false,
         })),
-      cursor: page.has_more ? page.cursor || null : null,
+      cursor: page.cursor,
     }
   }
   async nextEpisode(seriesId, episodeId) {
@@ -271,7 +230,7 @@ export class Catalog {
       void this.prepareMediaRuntime().catch(() => {})
       return { status: 'preparing' }
     }
-    this.cache ??= new MediaCache(this.store, (ep) => this.sdkCall('resolvePlayback', ep))
+    this.cache ??= new MediaCache(this.store, (ep) => this.sources.resolvePlayback(ep))
     const result = this.cache.prepare(id, retry)
     if (result.status !== 'ready') return result
     if (browser) return { ...result, src: 'media/' + id }

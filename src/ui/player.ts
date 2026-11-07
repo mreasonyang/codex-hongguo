@@ -3,7 +3,7 @@ import { coverArt, fill, icon, setCover, setIcon } from './ui-kit'
 import { panelStream } from './panel-stream'
 import { mediaErrorMessage, waitForMetadata } from './media-startup'
 import { finishedTurn, startedTurn } from './playback-turn'
-import { browser, call, connect, hostLocale, type Context, type State, type Preferences } from './api'
+import { browser, call, connect, hostLocale, type Context, type State, type Preferences, type SourceId } from './api'
 import { pickLabel, showWaitingPicks, waitingCard, type WaitingSelection } from './waiting'
 
 type Series = {
@@ -57,6 +57,12 @@ let activeQuery = '',
   cursor: string | undefined,
   cards: Series[] = [],
   loaded = false
+let activeSource: SourceId = 'hongguo', sourceGeneration = 0
+let sourceUpdate = Promise.resolve()
+const sourceOf = (id: string): SourceId => id.startsWith('p.') ? id.split('.')[1] : id.startsWith('hh-') ? 'hghub' : 'hongguo'
+let providers: Array<{ id: string; name: string; available: boolean }> = [
+  { id: 'hongguo', name: '红果', available: true }, { id: 'hghub', name: '黄果', available: true },
+]
 let action = 0,
   selection = 0,
   listing = 0,
@@ -69,7 +75,7 @@ let lastSave = 0,
 let prefs: Preferences = {
   autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
   defaultMuted: true, volume: 0.7,
-  searchTerms: ['总裁', '重生', '逆袭'],
+  searchTerms: ['总裁', '重生', '逆袭'], defaultSource: 'hongguo',
 }
 let playback: 'idle' | 'playing' | 'finished' = 'idle'
 type InterruptedPlayback = { action: number; lastPosition?: number }
@@ -246,6 +252,13 @@ function drawEpisodes() {
   syncButtons()
 }
 async function select(s: Series, requested?: string, playNow = false, waitingTurn?: string) {
+  const nextSource = sourceOf(s.id), changingSource = nextSource !== activeSource
+  if (changingSource) {
+    activeSource = nextSource
+    ++sourceGeneration; ++listing
+    cards = []; watched = []; cursor = undefined; activeQuery = ''
+    el<HTMLSelectElement>('source').value = activeSource
+  }
   const exactEpisode = waitingTurn && requested
   el('home').hidden = true
   el('watch').hidden = false
@@ -269,6 +282,12 @@ async function select(s: Series, requested?: string, playNow = false, waitingTur
   drawEpisodes()
   syncCards()
   await saved
+  if (ticket !== selection) return
+  if (changingSource) {
+    sourceUpdate = sourceUpdate.catch(() => {}).then(() => call('set_source', { source: nextSource, remember: false })).then(() => {})
+  }
+  await sourceUpdate
+  if (ticket !== selection) return
   const [first, recent] = await Promise.all([
     call<Page<Episode>>('get_episodes', { seriesId: s.id }),
     call<Page<Progress>>('get_history', { seriesId: s.id }),
@@ -579,7 +598,7 @@ async function list(more = false, query = activeQuery) {
   let liveResults = false
   if (!more && !query) {
     // Paint cached titles (or the first discovery page) while the full catalog loads.
-    void call<Page<Series>>('list_series', { preview: true }, 90000).then(page => {
+    void call<Page<Series>>('list_series', { source: activeSource, preview: true }, 90000).then(page => {
       if (t !== listing || liveResults || !page.items.length) return
       cards = page.items
       drawCards()
@@ -594,7 +613,7 @@ async function list(more = false, query = activeQuery) {
     while (fetchFirst || (results.length < needed && cursor && !visited.has(cursor))) {
       fetchFirst = false
       if (cursor) visited.add(cursor)
-      const page = await call<Page<Series>>('list_series', { query, cursor }, 90000)
+      const page = await call<Page<Series>>('list_series', { source: activeSource, query, cursor }, 90000)
       if (t !== listing) return
       const known = new Set(results.map((s) => s.id))
       for (const item of page.items)
@@ -616,7 +635,7 @@ async function list(more = false, query = activeQuery) {
     drawCards()
     if (cards.length) catalogState('')
     else if (query) catalogState('empty', '没有找到相符的剧目')
-    else catalogState('error', '红果暂时没有返回推荐剧目')
+    else catalogState('error', '片源暂时没有返回推荐剧目')
     el('more').hidden = pages <= 1 && !cursor
   } catch (e) {
     if (t === listing) {
@@ -626,7 +645,10 @@ async function list(more = false, query = activeQuery) {
   }
 }
 async function history() {
-  watched = (await call<Page<Progress>>('get_history')).items
+  const source = activeSource, generation = sourceGeneration
+  const page = await call<Page<Progress>>('get_history', { source })
+  if (source !== activeSource || generation !== sourceGeneration) return
+  watched = page.items
   drawContinue()
   el('history').replaceChildren(
     ...watched.map((p) => {
@@ -1038,6 +1060,41 @@ queryInput.addEventListener('compositionstart', () => { composing = true; schedu
 queryInput.addEventListener('compositionend', () => { composing = false; scheduleSearch() })
 el('search').onsubmit = (e) => { e.preventDefault(); searchNow() }
 el('more').onclick = () => void list(true)
+async function changeSource(next: SourceId) {
+  if (next === activeSource || !playerReady) return
+  const generation = ++sourceGeneration
+  ++listing; ++selection
+  const control = el<HTMLSelectElement>('source')
+  control.disabled = true
+  const pending = pause()
+  release()
+  series = null; episode = null; episodes = []; epCursor = undefined
+  cards = []; watched = []; cursor = undefined; activeQuery = ''; batch = group = 0
+  promptTurn = null; promptRender?.abort()
+  el('prompt').hidden = true
+  el('home').hidden = false; el('watch').hidden = true
+  el('link').hidden = true; el<HTMLInputElement>('linkValue').value = ''
+  el<HTMLInputElement>('query').value = ''
+  drawCards()
+  try {
+    await pending
+    sourceUpdate = sourceUpdate.catch(() => {}).then(() => call('set_source', { source: next })).then(() => {})
+    await sourceUpdate
+    if (generation !== sourceGeneration || !playerReady) return
+    activeSource = next; context.source = next
+    await Promise.all([list(false, ''), history()])
+  } catch {
+    if (generation === sourceGeneration) {
+      notice('视频源暂未切换，请重试')
+      catalogState('error', '视频源暂未切换，请重试')
+    }
+  }
+  finally { control.value = activeSource; control.disabled = false }
+}
+el<HTMLSelectElement>('source').onchange = () => {
+  const next = el<HTMLSelectElement>('source').value
+  if (providers.some(provider => provider.available && provider.id === next)) void changeSource(next)
+}
 async function openPairing() {
   const show = series
   const ep = episode
@@ -1191,6 +1248,7 @@ window.addEventListener('pageshow', activatePage)
 
 async function initPlayer(selection?: WaitingSelection) {
   if (playerReady) return
+  const generation = sourceGeneration
   playerReady = true
   pendingRecommendationTurn = undefined
   waitingPlaybackId = selection?.play ? selection.playbackId : undefined
@@ -1204,7 +1262,17 @@ async function initPlayer(selection?: WaitingSelection) {
   current = null
   displayState()
   activatePage()
-  void openingPreferences().catch(e => notice(explain(e)))
+  await openingPreferences()
+  if (!playerReady || generation !== sourceGeneration) return
+  providers = (await call<{ items: typeof providers }>('get_providers')).items.filter(provider => provider.available)
+  if (!playerReady || generation !== sourceGeneration) return
+  el<HTMLSelectElement>('source').replaceChildren(...providers.map(provider => {
+    const option = document.createElement('option')
+    option.value = provider.id; option.textContent = tr(provider.name)
+    return option
+  }))
+  activeSource = context.source ?? prefs.defaultSource ?? 'hongguo'
+  el<HTMLSelectElement>('source').value = activeSource
   if (selection?.pick) {
     const pick = selection.pick
     await select(pick, pick.episodeId, selection.play, selection.turnId)
@@ -1236,6 +1304,7 @@ function closePlayer() {
   }
   window.clearInterval(timer)
   ++selection
+  ++listing; ++sourceGeneration
   release()
   return stopped
 }

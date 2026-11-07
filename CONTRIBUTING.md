@@ -49,8 +49,9 @@ node scripts/verify-install.mjs --playback
 | `src/hooks/write.mjs` | 读取回合事件，写入允许的状态字段；符合条件时提示模型调用一次可选推荐工具。 |
 | `src/server/store.mjs` | SQLite 进度、回合、设置、推荐轮换和播放器可见性记录。 |
 | `src/server/service.mjs` | 会话/回合绑定、面板能力、推荐领取、分集授权和应用工具调用。 |
-| `src/server/index.mjs` | 注册 MCP 工具及 `ui://hongguo/v19/player`、`ui://hongguo/v19/waiting` 两个 UI 资源。 |
-| `src/server/catalog.mjs` | 匿名 SDK 片库、搜索、分集和封面处理。 |
+| `src/server/index.mjs` | 注册 MCP 工具及 `ui://hongguo/v20/player`、`ui://hongguo/v20/waiting` 两个 UI 资源，兼容旧 URI。 |
+| `src/server/catalog.mjs` | 统一片库、推荐、搜索、分集、封面与缓存编排。 |
+| `src/server/sources/`、`providers/` | 适配契约、限定 ID、红果/黄果驱动与内置/本地 Provider 注册、发现和生命周期；接口见 [Provider 插件](docs/providers.md)。 |
 | `src/server/media.mjs`、`adaptive.mjs` | 整集获取、授权媒体解密/重封装、HLS/DASH 输入和主媒体缓存。 |
 | `src/server/panel-media.mjs`、`mp4-duration.mjs` | 面板 H.264/AAC 准备、硬件转码及软件回退、渐进 fMP4 分片、完整时长及分块读取。 |
 | `src/server/browser.mjs` | 一次性本机分屏配对、会话与媒体访问控制。 |
@@ -65,6 +66,7 @@ node scripts/verify-install.mjs --playback
 - 播放器只跟随所属聊天。全局自动暂停与任务开始自动播放均默认开启；关闭自动暂停后可持续播放。自动播放只在观察到新的运行回合时启动已选剧集，首次打开、重复快照、状态失联、关闭面板和其他聊天的事件不能误触发；延迟准备完成前须重查回合及开关，手动暂停不能被当前回合的轮询撤销。升级时保留用户明确保存的关闭设置。
 - 每回合最多创建一张推荐卡片。候选在该回合内固定，实际可见后才推进轮换；同一数据目录下跨对话共享轮换，已有观看记录的剧不作为新剧再次推荐。
 - 切到下一集、恢复后期分页中的分集或重建播放器时，保持原始会话与点击意图，过期点击不能开播。
+- 红果旧 ID、历史和媒体文件保持可读；每个面板独立选源，默认来源只影响后续打开。切源时丢弃旧请求结果、清除旧媒体授权并停止预取；固定回合候选保持来源。Provider 加载失败不得覆盖内置来源。
 - 进度写入失败必须向用户说明；不能把内存降级存储说成已保存。安装、更新和来源变更保留观看数据；卸载删除进度、设置、缓存和设备档案。
 - 主缓存 `media/` 的 40 集/1 GiB 策略不包含 `panel-media/` 临时分片。分片按活动状态与空闲时间独立回收，不能把主缓存上限描述成整个数据目录的大小上限。
 - 不把媒体密钥、源媒体地址或面板能力值写入日志。媒体解密信息通过内存与 FFmpeg 标准输入传递，不放进进程参数。
@@ -93,6 +95,7 @@ npm run version:patch
 | `HONGGUO_RUNTIME_DIR` | 指定播放组件缓存根目录，插件使用其下的 `codex-hongguo/` 专属命名空间。 |
 | `HONGGUO_CODEX` | 安装、更新和卸载：指定 Codex CLI。 |
 | `HONGGUO_PROFILE_PATH` | Catalog：指定匿名 SDK 设备档案位置。 |
+| `HONGGUO_PROVIDERS_DIR` | 可选：显式指定本地 Provider 插件父目录，启动时读取；不设置时只加载内置红果、黄果。 |
 
 覆盖项必须在实际启动服务、Hook 或 Setup 的进程环境中可见。只在运行 npx 的终端里设置，不代表桌面宿主或其子进程继承了这些值；安装器不会把它们写进发布包。
 

@@ -152,13 +152,13 @@ test('episode pagination survives new Catalog instances, respects runtime readin
   const a = new Catalog(store), b = new Catalog(peer)
   a.ffmpeg = true; b.ffmpeg = false
   let reads = 0
-  t.mock.method(a, 'sdkCall', async (method, id, { cursor }) => {
+  t.mock.method(a.sources.get('hongguo'), 'sdkCall', async (method, id, { cursor }) => {
     assert.equal(method, 'listEpisodes'); assert.equal(id, '8'); reads++
     return cursor === 'done' ? { items: [] } : cursor
       ? { items: [{ id: '2', title: '第二集' }], has_more: true, cursor: 'done' }
       : { items: [{ id: '1', title: '第一集' }], has_more: true, cursor: 'next' }
   })
-  t.mock.method(b, 'sdkCall', () => assert.fail('persistent metadata must avoid another upstream call'))
+  t.mock.method(b.sources.get('hongguo'), 'sdkCall', () => assert.fail('persistent metadata must avoid another upstream call'))
   assert.equal((await a.nextEpisode('hg-8', 'hg-1')).episodeId, 'hg-2')
   assert.equal((await b.episodes({ seriesId: 'hg-8', cursor: 'next' })).items[0].playable, false)
   b.ffmpeg = true

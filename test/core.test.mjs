@@ -65,7 +65,7 @@ test('panel startup distinguishes policy, missing metadata, source and decode fa
 // Episode selection, cache lookup, panel streaming and browser grants use the normal service.
 function cachedCatalog(t, store, source = avcFixture, codec = 'h264') {
   const catalog = new Catalog(store)
-  t.mock.method(catalog, 'sdkCall', async (method, id) => {
+  t.mock.method(catalog.sources.get('hongguo'), 'sdkCall', async (method, id) => {
     assert.equal(method, 'listEpisodes')
     assert.equal(id, '10')
     return { items: [{ id: '101', number: 1, title: '第1集', playable: true }] }
@@ -287,7 +287,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   })
   assert.equal(data.isError, true)
   const resources = (await client.listResources()).resources
-  const playerUri = 'ui://hongguo/v19/player', waitingUri = 'ui://hongguo/v19/waiting'
+  const playerUri = 'ui://hongguo/v20/player', waitingUri = 'ui://hongguo/v20/waiting'
   assert.equal(tools.find(t => t.name === 'show_waiting_picks')._meta.ui.resourceUri, waitingUri)
   assert.equal(tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri, playerUri)
   assert.deepEqual(resources.map(r => r.uri).sort(), [playerUri, waitingUri])
@@ -299,7 +299,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
     'ui://hongguo/v6/player', 'ui://hongguo/v6/waiting', 'ui://hongguo/v7/waiting',
     'ui://hongguo/v8/player', 'ui://hongguo/v9/waiting', 'ui://hongguo/v11/player', 'ui://hongguo/v12/waiting',
     'ui://hongguo/v16/player', 'ui://hongguo/v16/waiting', 'ui://hongguo/v17/player', 'ui://hongguo/v17/waiting',
-    'ui://hongguo/v18/player', 'ui://hongguo/v18/waiting']) {
+    'ui://hongguo/v18/player', 'ui://hongguo/v18/waiting', 'ui://hongguo/v19/player', 'ui://hongguo/v19/waiting']) {
     const read = (await client.readResource({ uri })).contents[0]
     assert.equal(read.uri, uri)
     assert.deepEqual(read._meta.ui.csp, policy)
@@ -365,7 +365,7 @@ test('media preparation deduplicates across database connections and protects ac
   let calls = 0
   const resolve = async () => {
     calls++
-    return { playback: { streams: [{ url: 'https://media.byteimg.com/example.mp4', codec: 'h264' }] } }
+    return { candidates: [{ kind: 'file', url: 'https://media.byteimg.com/example.mp4', codec: 'h264' }] }
   }
   const bytes = readFileSync(avcFixture)
   t.mock.method(globalThis, 'fetch', async () => new Response(bytes))
@@ -442,7 +442,7 @@ test('sparse feeds merge keyword results and reuse one cached request', async (t
   const { store } = setup(t),
     catalog = new Catalog(store)
   let requests = 0
-  catalog.sdkCall = async (method, ...args) => {
+  catalog.sources.get('hongguo').sdkCall = async (method, ...args) => {
     requests++
     return {
       items: [
@@ -465,8 +465,8 @@ test('search posters reuse known covers and lazily resolve missing details once 
   const { store } = setup(t), catalog = new Catalog(store)
   const jpeg = await runFfmpeg(['-f', 'lavfi', '-i', 'color=c=blue:s=24x32', '-frames:v', '1', '-f', 'image2pipe', '-c:v', 'mjpeg', 'pipe:1'], null, true)
   let details = 0, downloads = 0
-  catalog.rows({ items: [{ id: '2', title: '缓存剧', cover_url: 'https://cover.byteimg.com/known.jpg' }] })
-  t.mock.method(catalog, 'sdkCall', async (method, id) => {
+  catalog.rows({ items: [{ id: '2', title: '缓存剧', coverURL: 'https://cover.byteimg.com/known.jpg' }] })
+  t.mock.method(catalog.sources.get('hongguo'), 'sdkCall', async (method, id) => {
     if (method === 'search') return { items: [{ id: '1', title: '搜索剧' }, { id: '2', title: '缓存剧' }], has_more: true, cursor: 'more' }
     assert.equal(method, 'getSeries'); assert.equal(id, '1'); details++
     return { cover_url: 'https://cover.byteimg.com/detail.jpg' }
@@ -476,7 +476,7 @@ test('search posters reuse known covers and lazily resolve missing details once 
     return new Response(jpeg)
   })
   const results = await catalog.list({ query: '剧' })
-  assert.equal(results.cursor, 'more')
+  assert.match(results.cursor, /^v1\./)
   assert.equal(results.items[0].lookupCover, true)
   assert.equal(results.items[1].hasCover, true)
   const posters = await Promise.all([catalog.cover('hg-1'), catalog.cover('hg-1')])
@@ -491,19 +491,20 @@ test('empty or failed provider feeds cool down before retrying and never become 
   const catalog = new Catalog(store)
   let now = 1000000
   catalog.metadata.now = () => now
-  t.mock.method(catalog, 'sdkCall', async () => ({ items: [] }))
+  const provider = catalog.sources.get('hongguo')
+  t.mock.method(provider, 'sdkCall', async () => ({ items: [] }))
   await assert.rejects(catalog.list(), { status: 503 })
-  const requests = catalog.sdkCall.mock.callCount()
+  const requests = provider.sdkCall.mock.callCount()
   await assert.rejects(catalog.list(), { status: 503 })
-  assert.equal(catalog.sdkCall.mock.callCount(), requests)
+  assert.equal(provider.sdkCall.mock.callCount(), requests)
   now = store.db.prepare('SELECT retry_at FROM catalog_cache').get().retry_at
-  catalog.sdkCall.mock.mockImplementation(async () => {
+  provider.sdkCall.mock.mockImplementation(async () => {
     throw Error('provider unavailable')
   })
   await assert.rejects(catalog.list(), { status: 503 })
   assert.deepEqual(store.waitingFeed(true), [])
   now = store.db.prepare('SELECT retry_at FROM catalog_cache').get().retry_at
-  catalog.sdkCall.mock.mockImplementation(async () => ({ items: [{ id: '17', title: '返回的剧名' }] }))
+  provider.sdkCall.mock.mockImplementation(async () => ({ items: [{ id: '17', title: '返回的剧名' }] }))
   assert.deepEqual((await catalog.list()).items.map((s) => s.id), ['hg-17'])
 })
 test('MCP full episode segments require the preparing panel and bounded offsets', async (t) => {
@@ -747,7 +748,7 @@ for (const kind of ['hls', 'dash'])
       return new Response(readFileSync(join(dir, url.pathname.slice(1))))
     })
     const cache = new MediaCache(store, async () => ({
-      playback: { streams: [{ url: 'https://media.byteimg.com/' + filename, [kind]: true, codec: 'h264' }] },
+      candidates: [{ kind, url: 'https://media.byteimg.com/' + filename, codec: 'h264' }],
     }))
     let r
     for (let i = 0; i < 120; i++) {
