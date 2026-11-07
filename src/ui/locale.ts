@@ -7,7 +7,7 @@ const en: Record<string, string> = {
   任务结束自动暂停: 'Pause automatically when a task ends',
   任务开始自动播放: 'Play automatically when a task starts',
   默认静音: 'Mute by default',
-  '下次打开播放器时生效；关闭后恢复上次音量': 'Applies the next time you open the player. Turn off to restore the last volume.',
+  '修改后同步当前播放器；新打开时也沿用此设置': 'Changes apply to the current player and are remembered for new players.',
   '音量暂未保存，请检查本机服务': 'Could not save the volume. Check the local service.',
   '自动播放已选中的剧集，从上次位置继续': 'Play the selected episode from its saved position',
   当前回合进行时显示推荐: 'Suggest shows during a turn',

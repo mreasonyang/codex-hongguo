@@ -90,7 +90,7 @@ let promptTurn: string | null = null, promptRender: AbortController | undefined
 let waitingPlaybackId: number | undefined
 let pendingRecommendationTurn: string | undefined
 let openingPreferencesLoaded = false, openingPreferencesLoading: Promise<void> | undefined
-let preferencesGeneration = 0, lastVolume = 0.7, pendingVolume: number | undefined
+let preferencesGeneration = 0, lastVolume = 0.7, lastDefaultMuted = true, pendingVolume: number | undefined
 let volumeTimer: ReturnType<typeof setTimeout> | undefined, volumeSaved = Promise.resolve()
 function flushVolume() {
   clearTimeout(volumeTimer)
@@ -112,7 +112,7 @@ function openingPreferences() {
     prefs = settings
     lastVolume = Number.isFinite(prefs.volume) && prefs.volume > 0 && prefs.volume <= 1 ? prefs.volume : 0.7
     video.volume = lastVolume
-    video.muted = prefs.defaultMuted ?? true
+    video.muted = lastDefaultMuted = prefs.defaultMuted ?? true
     autoNext.checked = prefs.autoplayNext ?? true
     openingPreferencesLoaded = true
     el<HTMLButtonElement>('mute').disabled = false
@@ -120,6 +120,13 @@ function openingPreferences() {
   }).finally(() => { if (openingPreferencesLoading === work) openingPreferencesLoading = undefined })
   openingPreferencesLoading = work
   return work
+}
+function syncDefaultMute(settings: Preferences) {
+  const muted = settings.defaultMuted ?? true
+  if (!openingPreferencesLoaded || muted === lastDefaultMuted) return
+  lastDefaultMuted = muted
+  if (!muted && video.volume === 0) video.volume = lastVolume
+  video.muted = muted
 }
 function confirmWaitingPlayback() {
   pendingRecommendationTurn = undefined
@@ -719,6 +726,7 @@ async function readTurnState() {
     if (!pageActive) return
     if (state.preferences) {
       const promptChanged = prefs.autoPrompt !== state.preferences.autoPrompt
+      syncDefaultMute(state.preferences)
       prefs = state.preferences
       autoNext.checked = prefs.autoplayNext
       if (!autoNext.checked) cancelNextPreload()
@@ -1083,6 +1091,7 @@ el('prefs').onclick = async () => {
 }
 el('settings').onsubmit = (e) => {
   e.preventDefault()
+  const generation = preferencesGeneration
   const searchTerms = el<HTMLInputElement>('terms')
     .value.split(/[,，]/)
     .map((s) => s.trim())
@@ -1095,6 +1104,8 @@ el('settings').onsubmit = (e) => {
     searchTerms,
   })
     .then(async (updated) => {
+      if (generation !== preferencesGeneration || !playerReady) return
+      syncDefaultMute(updated)
       prefs = updated
       autoNext.checked = prefs.autoplayNext
       el('settings').hidden = true

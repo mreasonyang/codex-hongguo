@@ -76,9 +76,9 @@ Open **Settings** at the top right of the player, make your changes, and click *
 | --- | --- | --- |
 | Pause automatically when a task ends | On | Pause and save your position when a task in this chat finishes or is interrupted. Turn it off for continuous playback. |
 | Play automatically when a task starts | On | Play the selected episode from its current position when a new task starts in the same chat. |
-| Mute by default | On | Open new players muted. Turn off to use the last volume. Changes apply the next time you open the player. |
+| Mute by default | On | Set the initial mute state for new players. Changes immediately update the current player and sync to other open players. |
 
-Settings are independent, saved across restarts, and shared by all chats. Task playback switches sync to open players; default mute and remembered volume apply when opening a new player. Autoplay requires an open player with an episode selected; it does not choose a show or reopen a closed player. Manual pausing lasts for the current task; the autoplay switch determines whether the next task resumes playback. Updates preserve saved choices.
+Settings are independent, saved across restarts, and shared by all chats. Task playback switches and default mute sync to open players. The speaker button changes only the current player, leaving the default unchanged; repeated snapshots preserve that manual choice until the default changes. New players restore the remembered volume. Autoplay requires an open player with an episode selected; it does not choose a show or reopen a closed player. Manual pausing lasts for the current task; the autoplay switch determines whether the next task resumes playback. Updates preserve saved choices.
 
 ## Troubleshooting
 

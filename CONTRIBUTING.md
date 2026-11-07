@@ -49,7 +49,7 @@ node scripts/verify-install.mjs --playback
 | `src/hooks/write.mjs` | 读取回合事件，写入允许的状态字段；符合条件时提示模型调用一次可选推荐工具。 |
 | `src/server/store.mjs` | SQLite 进度、回合、设置、推荐轮换和播放器可见性记录。 |
 | `src/server/service.mjs` | 会话/回合绑定、面板能力、推荐领取、分集授权和应用工具调用。 |
-| `src/server/index.mjs` | 注册 MCP 工具及 `ui://hongguo/v18/player`、`ui://hongguo/v18/waiting` 两个 UI 资源。 |
+| `src/server/index.mjs` | 注册 MCP 工具及 `ui://hongguo/v19/player`、`ui://hongguo/v19/waiting` 两个 UI 资源。 |
 | `src/server/catalog.mjs` | 匿名 SDK 片库、搜索、分集和封面处理。 |
 | `src/server/media.mjs`、`adaptive.mjs` | 整集获取、授权媒体解密/重封装、HLS/DASH 输入和主媒体缓存。 |
 | `src/server/panel-media.mjs`、`mp4-duration.mjs` | 面板 H.264/AAC 准备、硬件转码及软件回退、渐进 fMP4 分片、完整时长及分块读取。 |

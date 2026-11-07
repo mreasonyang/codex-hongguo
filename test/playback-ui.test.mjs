@@ -300,18 +300,66 @@ test('volume changes flush on close, while muting and zero volume preserve the l
   assert.equal(f.video.muted, false)
 })
 
-test('updating global sound defaults never changes the sound in an already-open player', async t => {
+test('changing default mute synchronizes an open player once and preserves subsequent manual choices', async t => {
   const f = setup(t)
   await f.settings({ defaultMuted: false, volume: 0.42 })
   await f.ui.openingPreferences()
   await f.ui.start()
   await f.settings({ defaultMuted: true, volume: 0.81 })
   await f.poll()
-  assert.equal(f.video.muted, false)
+  assert.equal(f.video.muted, true)
   assert.equal(f.video.volume, 0.42)
+  assert.equal(f.video.plays, 1)
   f.elements.get('mute').onclick(); f.video.onvolumechange()
+  await f.poll(); await f.poll()
+  assert.equal(f.video.muted, false, 'unchanged preferences must preserve the manual unmute')
+  f.video.volume = 0; f.video.onvolumechange()
+  await f.settings({ defaultMuted: false })
+  await f.poll()
+  assert.equal(f.video.muted, false)
+  assert.equal(f.video.volume, 0.42, 'disabling default mute restores the local audible volume')
   await f.ui.suspend()
   assert.equal(f.peer.preferences().volume, 0.81, 'a mute event must not overwrite another player volume')
+})
+
+test('saving a changed default mute immediately updates sound without restarting playback', async t => {
+  const f = setup(t)
+  await f.ui.openingPreferences()
+  await f.ui.start()
+  assert.equal(f.video.muted, true)
+  await f.elements.get('prefs').onclick()
+  f.elements.get('defaultMuted').checked = false
+  f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
+  assert.equal(f.video.muted, false)
+  assert.equal(f.video.plays, 1)
+  f.elements.get('mute').onclick(); f.video.onvolumechange()
+  await f.elements.get('prefs').onclick()
+  f.elements.get('autoPrompt').checked = false
+  f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
+  assert.equal(f.video.muted, true, 'saving unrelated settings must preserve manual mute')
+  assert.equal(f.peer.preferences().defaultMuted, false)
+})
+
+test('a settings response arriving after polling cannot undo a newer manual sound choice', async t => {
+  const f = setup(t)
+  await f.ui.openingPreferences()
+  await f.ui.start()
+  const original = f.service.call.bind(f.service)
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  f.service.call = async (scope, name, args) => {
+    const result = await original(scope, name, args)
+    if (name === 'set_preferences') await gate
+    return result
+  }
+  await f.elements.get('prefs').onclick()
+  f.elements.get('defaultMuted').checked = false
+  f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
+  await f.poll()
+  assert.equal(f.video.muted, false)
+  f.elements.get('mute').onclick(); f.video.onvolumechange()
+  release(); await flush()
+  assert.equal(f.video.muted, true)
 })
 
 test('disabling default mute keeps recommendations audible and never silently mutes after a host rejection', async t => {
