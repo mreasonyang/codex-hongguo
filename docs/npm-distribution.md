@@ -55,7 +55,7 @@ npm run verify:install
 | `release/codex-hongguo-<版本>.zip` | 相同插件产物组成的离线本地市场。 |
 | `release/marketplace/.agents/plugins/marketplace.json` | 待采用的版本索引，npm 发布核实成功后复制到仓库。 |
 | `release/package-metadata.json` | 包名文件、版本和大小等打包元数据。 |
-| `release/verification.json` | 成功的安装回执，包含版本、全新安装检查项和 tgz 的 SHA-256。 |
+| `release/verification.json` | 本机为单平台安装回执；发布 CI 合并三平台回执，绑定同一源码与 tgz 哈希。 |
 
 隔离验证创建本地 HTTPS npm 测试仓库及临时 CA，在临时 HOME/Codex 配置下执行真实 npm exec/npx 和 Codex 原生 npm 下载；生产 TLS 策略不变。从空白 HOME/Codex 配置全新安装，检查进度、设置、宿主工具、两个 UI 资源、真实片库/分集、三个待信任 Hooks，以及卸载删除全部本地数据。
 
@@ -69,27 +69,31 @@ node scripts/verify-install.mjs --playback
 
 重新打包会使旧回执失效，需要重新安装验证。已发布的 npm 名称/版本不能覆盖，修改已发布内容应递增版本；见 [npm publish 文档](https://docs.npmjs.com/cli/v11/commands/npm-publish/)。
 
-## 首次上线
+## 版本与 CI 发布
 
-1. 确认默认 GitHub 仓库与 `src/cli/main.mjs`、打包元数据一致，将 `main` 推送到用户可访问的仓库，确认其中的市场清单可读取。
-2. 在自己的终端完成 `npm login --registry=https://registry.npmjs.org`，确认有目标包发布权限。账户认证在本机或 npm 网页完成，不把令牌和验证码写进聊天、证据文件或仓库。
-3. 完成上面的测试、打包和安装验证。发布对象是回执绑定的 tgz。
-4. 非交互环境可运行 `npm run release:publish`。脚本隐藏 npm 原始输出，不能代为完成交互式登录或双重认证。需要交互认证时，在自己的终端运行下方命令，将版本占位替换为实际版本：
+普通提交、PR 和本地候选安装不触发 npm 发布。一个待发布版本可以包含多次修改；只在准备下一次正式发布时递增版本，构建、测试和本地安装都不自动改版本号。已发布版本不能覆盖。
 
-   ```sh
-   npm publish "./release/kyun.si-codex-hongguo-<版本>.tgz" --access public --registry=https://registry.npmjs.org
-   npm run release:publish -- --index-only
-   ```
+发布由 `.github/workflows/publish.yml` 负责：
 
-5. 脚本回读 registry 中该版本的 SHA-512 完整性，与同一 tgz 比对后才更新仓库索引及中英文 README 的发布提示。发布和 `--index-only` 之间保留原 tgz，不重新打包。
-6. 将更新后的索引和 README 提交并推送到 `main`，再在干净环境实际执行公开 `npx ... setup`。公开入口验证完成后再调整 README 中对应的验收状态。
+1. 维护者确认发布后，为已提交到 `main` 的版本打标签，例如源码为 `0.0.34` 时使用 `v0.0.34`，再推送该标签。标签版本必须与该提交的 `package.json` 一致，且提交必须属于 `main` 历史。
+2. CI 固定标签指向的提交，只构建、打包一次，记录源码 SHA、tgz SHA-256/SHA-512、离线 ZIP 与待发布索引的哈希。
+3. macOS、Linux、Windows 下载同一份构建和 tgz，分别跑回归及原生 npm 隔离安装。三个回执必须对应同一源码与包哈希；Windows 仍验证 PowerShell 5.1/7，不跳过平台检查。
+4. 三平台通过后生成发布预览。正式发布 job 通过 OIDC 上传已经验收的 tgz，不再安装项目依赖、构建或打包。
+5. 回读 npm registry，确认公开包 SHA-512 与验收包一致，才记录发布成功。随后单独检出最新 `main`，更新市场索引及 `docs/releases/npm-<版本>.json`，并生成对应标签的 GitHub Release 说明。更新索引不会降低已发布版本。
 
-发布中断后，若 npm 已有同版本，用原 tgz 与回执执行 `--index-only` 核验并更新索引。若完整性不同，保留现场核对版本与产物；此时脚本不会推进市场索引。
+确认正式发布后执行，版本需与源码一致：
 
-## 后续 CI 发布
+```sh
+git tag v0.0.34
+git push origin v0.0.34
+```
 
-发布 workflow 为 `.github/workflows/publish.yml`，由维护者手动触发并检出 `main`。先按项目版本规则运行 `npm run version:patch` 并提交源码变更；版本递增不会提前更新发布索引。
+日常 `ci.yml` 也使用一次构建、三平台共享产物，但不发布。验证完整发布链路时，在 GitHub Actions 中手动运行 Publish，保持 `publish=false`，可留空 `tag` 验证所选提交。该预演会生成合并回执和发布计划，跳过 npm 上传、索引提交和 GitHub Release 创建。
 
-在 npm 包设置中为 `mreasonyang/codex-hongguo` 的 `publish.yml` 配置受信任发布者，并明确允许直接 `npm publish`，与现有 workflow 的命令一致。npm 要求 CLI >=11.5.1 和 Node >=22.14；当前 workflow 使用 Node 24、npm 11、GitHub 托管 runner 以及 `id-token: write`，通过 OIDC 发布而不保存 npm 长期令牌。配置字段与权限以 [npm 受信任发布者文档](https://docs.npmjs.com/trusted-publishers/) 为准。
+失败后优先在同一工作流中仅重跑失败的 job，复用原有验收包；也可以手动选择既有标签并明确勾选 `publish=true`。若 npm 已存在该版本，只有完整性完全一致才可继续收尾；若重新构建的内容不同，流程失败，不覆盖、不推进索引。不得移动已经发布的标签来替换内容。
 
-发布前先通过 `ci.yml` 的 macOS/Linux/Windows 三平台构建、回归、打包和隔离安装。Windows 使用正常 npm 平台检查，并通过 PowerShell 5.1 和 PowerShell 7 执行带引号的 `npx.cmd` 安装命令，不使用 `--force` 或 `npm_config_force`。发布 job 再测试、打包、隔离安装并上传验收产物，然后发布带 provenance 的 tgz；registry 完整性回读通过后提交并推送索引和 README。workflow 文件已提供，实际 Actions 执行及 npm 受信任发布者配置仍需上线时验证。
+## npm 受信任发布者
+
+在 npm 包设置中为 `mreasonyang/codex-hongguo` 的 `publish.yml` 配置受信任发布者，并允许直接 `npm publish`。流程使用 GitHub 托管 runner、Node 24、npm 11 和仅发布 job 的 `id-token: write`，不保存长期 npm token。配置要求以 [npm 受信任发布者文档](https://docs.npmjs.com/trusted-publishers/) 为准；预演不验证 npm 账户端的发布授权。
+
+`scripts/publish.mjs` 默认为预览；实际上传必须显式 `--publish`，且具备 CI OIDC、版本标签和三平台回执。本机 `npm run release:publish` 不再作为正式发布入口。`release/candidate.json` 绑定源码与产物，`release/qualifications/` 保存各平台安装回执，合并后的 `release/verification.json` 用于发布校验。公开用户安装和桌面实播仍需分别验收。

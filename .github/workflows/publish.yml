@@ -1,57 +1,162 @@
 name: Publish
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing version tag (required for publication)'
+        type: string
+        default: ''
+      publish:
+        description: 'Publish the qualified tagged package to npm'
+        type: boolean
+        default: false
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 concurrency:
   group: npm-release
   cancel-in-progress: false
 jobs:
-  qualify:
-    uses: ./.github/workflows/ci.yml
-    permissions:
-      contents: read
-  publish:
-    needs: qualify
+  resolve:
     runs-on: ubuntu-latest
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+      version: ${{ steps.source.outputs.version }}
+      release_tag: ${{ steps.source.outputs.release_tag }}
+      publish: ${{ steps.source.outputs.publish }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Resolve the exact release commit
+        id: source
+        run: node scripts/release-artifacts.mjs resolve
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+  qualify:
+    needs: resolve
+    uses: ./.github/workflows/ci.yml
+    with:
+      source_sha: ${{ needs.resolve.outputs.source_sha }}
+      release_tag: ${{ needs.resolve.outputs.release_tag }}
+      clean_build: true
+  bundle:
+    needs: [resolve, qualify]
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_name: ${{ steps.qualified.outputs.artifact_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.source_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.qualify.outputs.artifact_name }}
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: install-proof-*
+          path: release/qualifications
+          merge-multiple: true
+      - name: Require matching macOS, Linux and Windows receipts
+        id: qualified
+        run: node scripts/release-artifacts.mjs collect
+        env:
+          RELEASE_SOURCE_SHA: ${{ needs.resolve.outputs.source_sha }}
+      - name: Preview publication without uploading
+        run: npm run release:preview
+        env:
+          RELEASE_SOURCE_SHA: ${{ needs.resolve.outputs.source_sha }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.qualified.outputs.artifact_name }}
+          include-hidden-files: true
+          if-no-files-found: error
+          path: release/
+  publish:
+    needs: [resolve, bundle]
+    if: needs.resolve.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      receipt_artifact: ${{ steps.receipt.outputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.source_sha }}
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           registry-url: https://registry.npmjs.org
-          cache: npm
-      - uses: actions/setup-go@v5
+      - run: npm install --global npm@11
+      - uses: actions/download-artifact@v4
         with:
-          go-version: '1.25.x'
-          cache: false
-      - name: Install tools
-        run: |
-          npm install --global npm@11 @openai/codex@0.157.1
-          sudo apt-get update -qq
-          sudo apt-get install -y openssl
-      - run: npm ci
-      - run: npm test
-      - run: npm run package
-      - run: npm run verify:install
+          name: ${{ needs.bundle.outputs.artifact_name }}
+          path: release/
+      - name: Publish the qualified archive through npm OIDC
+        run: npm run release:publish
+        env:
+          RELEASE_SOURCE_SHA: ${{ needs.resolve.outputs.source_sha }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+          RELEASE_PUBLISH: 'true'
+      - id: receipt
+        run: echo "name=publication-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
-          name: qualified-release
-          path: |
-            release/*.tgz
-            release/*.zip
-            release/verification.json
-      - name: Publish through npm trusted publishing
-        run: npm run release:publish -- --provenance
-      - name: Advance the npm version index
+          name: ${{ steps.receipt.outputs.name }}
+          if-no-files-found: error
+          path: release/publication.json
+  finalize:
+    needs: [resolve, bundle, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.bundle.outputs.artifact_name }}
+          path: release/
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.publish.outputs.receipt_artifact }}
+          path: release/
+      - name: Confirm registry integrity and advance the index
+        run: node scripts/release-artifacts.mjs index
+      - name: Commit the published index and release receipt
+        env:
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .agents/plugins/marketplace.json README.md README.en.md
+          git add .agents/plugins/marketplace.json "docs/releases/npm-${RELEASE_VERSION}.json"
           if ! git diff --cached --quiet; then
-            git commit -m 'Update published npm plugin index'
+            git commit -m "Record npm release ${RELEASE_VERSION}"
+            git pull --rebase origin main
             git push origin HEAD:main
+          fi
+      - name: Create release notes for the published tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" --json tagName > /dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" --generate-notes
           fi

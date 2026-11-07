@@ -1,13 +1,75 @@
 name: Cross-platform qualification
 on:
   push:
+    branches: ['**']
   pull_request:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+      release_tag:
+        default: ''
+        type: string
+      clean_build:
+        default: false
+        type: boolean
+    outputs:
+      artifact_name:
+        value: ${{ jobs.build.outputs.artifact_name }}
+      source_sha:
+        value: ${{ jobs.build.outputs.source_sha }}
+      version:
+        value: ${{ jobs.build.outputs.version }}
 permissions:
   contents: read
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      artifact_name: ${{ steps.candidate.outputs.artifact_name }}
+      source_sha: ${{ steps.candidate.outputs.source_sha }}
+      version: ${{ steps.candidate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: ${{ !inputs.clean_build && 'npm' || '' }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - run: npm ci
+      - name: Build and package once
+        run: npm run package
+        timeout-minutes: 4
+      - name: Bind candidate to source and archive hashes
+        id: candidate
+        run: node scripts/release-artifacts.mjs prepare
+        env:
+          RELEASE_SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.candidate.outputs.artifact_name }}
+          include-hidden-files: true
+          if-no-files-found: error
+          path: |
+            dist/
+            release/*.tgz
+            release/*.zip
+            release/package-metadata.json
+            release/candidate.json
+            release/npm/codex-hongguo/package.json
+            release/marketplace/.agents/plugins/marketplace.json
   qualify:
+    needs: build
     strategy:
       fail-fast: false
       matrix:
@@ -16,14 +78,12 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build.outputs.source_sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: npm
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.25.x'
-          cache: false
+          cache: ${{ !inputs.clean_build && 'npm' || '' }}
       - name: Install CLI
         run: npm install --global @openai/codex@0.157.1
       - name: Install Linux media tools
@@ -41,9 +101,14 @@ jobs:
           if (-not $opensslDirectory) { throw 'OpenSSL was not found in the Windows runner image.' }
           $opensslDirectory >> $env:GITHUB_PATH
       - run: npm ci
-      - name: Build plugin and native launcher
-        run: npm run build
-        timeout-minutes: 4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: .
+      - name: Check the shared candidate
+        run: node --input-type=module -e "import {validateCandidate} from './scripts/release-artifacts.mjs'; await validateCandidate(process.cwd(), process.env.RELEASE_SOURCE_SHA)"
+        env:
+          RELEASE_SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
       - name: Prepare managed playback runtime
         run: node scripts/prepare-media.mjs
         timeout-minutes: 7
@@ -51,15 +116,18 @@ jobs:
         if: runner.os == 'Windows'
         run: node --test --test-timeout=120000 test/windows.test.mjs test/windows-hooks-shell.test.mjs test/distribution.test.mjs
         timeout-minutes: 2
-      - name: Run regression tests
+      - name: Run regression tests against the shared build
         run: node --test --test-timeout=180000 test/*.test.mjs
         timeout-minutes: 5
-      - run: npm run package
-      - run: npm run verify:install
+      - name: Install the shared npm archive
+        run: npm run verify:install
+      - name: Bind native installer receipt to source
+        run: node scripts/release-artifacts.mjs receipt
+        env:
+          RELEASE_SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
       - uses: actions/upload-artifact@v4
         with:
-          name: qualification-${{ matrix.os }}
-          path: |
-            release/*.tgz
-            release/*.zip
-            release/verification.json
+          name: install-proof-${{ matrix.os }}
+          overwrite: true
+          if-no-files-found: error
+          path: release/qualifications/*.json

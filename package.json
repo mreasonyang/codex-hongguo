@@ -16,7 +16,8 @@
     "test": "npm run build && node scripts/prepare-media.mjs && node --test --test-timeout=180000 test/*.test.mjs",
     "package": "npm run build && node scripts/package.mjs",
     "verify:install": "node scripts/verify-install.mjs",
-    "release:publish": "node scripts/publish.mjs"
+    "release:preview": "node scripts/publish.mjs --dry-run",
+    "release:publish": "node scripts/publish.mjs --publish"
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "1.7.5",

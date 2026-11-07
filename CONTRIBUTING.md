@@ -10,7 +10,7 @@
 - Go >=1.25：构建时交叉编译 Windows x64/ARM64 原生启动器，无 CGO；使用发行包不需要 Go。
 - OpenSSL：隔离安装脚本用它生成本地 HTTPS 测试仓库的临时证书。
 
-npm 包支持 macOS/Linux、Windows x64 和 Windows 11 ARM64。ARM64 0.0.30 此次按用户要求仅构建打包，运行验收由用户完成。三平台 CI 覆盖构建、回归、打包与隔离 npm 安装；Windows 另覆盖 PowerShell 5.1/7 安装命令。桌面画面、声音和自然回合联动需独立观察，详见 [Windows 支持](docs/windows-support.md)。
+npm 包支持 macOS/Linux、Windows x64 和 Windows 11 ARM64。ARM64 0.0.30 此次按用户要求仅构建打包，运行验收由用户完成。CI 只构建和打包一次，三平台共用该产物进行回归与隔离 npm 安装；Windows 另覆盖 PowerShell 5.1/7 安装命令。桌面画面、声音和自然回合联动需独立观察，详见 [Windows 支持](docs/windows-support.md)。
 
 ## 构建与验证
 
@@ -79,7 +79,9 @@ npm run version:patch
 
 版本格式为三段 0–999 的整数。此命令只递增第三位，并同步 `package.json`、lockfile、`plugin.json` 和 `.codex-plugin/plugin.json`。第三位达到 999 后停止自动递增，调整前两位由维护者明确指定。手工修改后可用 `node scripts/version.mjs --sync` 同步清单。
 
-构建和打包不会递增版本。已发布的 npm 版本不能被覆盖；修改已发布内容需使用新版本。市场索引在发布并核实 registry 完整性之后更新，不由版本递增命令提前推进。
+构建、打包、测试和本地候选安装不会递增版本。一个未发布版本可以累计多次修复，只在准备下一次正式发布时递增一次；已发布的 npm 版本不能被覆盖。
+
+普通提交只运行 CI。维护者确认后推送与版本一致的 `v<版本>` 标签，触发 CI 固定该提交、构建一次、三平台验收同一份包，再通过 npm OIDC 发布该 tgz。市场索引和发布记录只在 registry 完整性回读成功后更新。手动运行 Publish 且保持 `publish=false` 可预演完整流程；详见 [CI 发布说明](docs/npm-distribution.md#版本与-ci-发布)。
 
 ## 运行环境与诊断
 
