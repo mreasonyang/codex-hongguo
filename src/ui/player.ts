@@ -3,8 +3,9 @@ import { coverArt, fill, icon, setCover, setIcon } from './ui-kit'
 import { panelStream } from './panel-stream'
 import { mediaErrorMessage, waitForMetadata } from './media-startup'
 import { finishedTurn, startedTurn } from './playback-turn'
-import { browser, call, connect, hostLocale, type Context, type State, type Preferences } from './api'
+import { browser, call, connect, hostLocale, canEmbedDecoy, type Context, type State, type Preferences } from './api'
 import { pickLabel, showWaitingPicks, waitingCard, type WaitingSelection } from './waiting'
+import { createHoverDecoy } from './hover-decoy'
 
 type Series = {
   id: string
@@ -68,7 +69,7 @@ let lastSave = 0,
 
 let prefs: Preferences = {
   autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
-  defaultMuted: true, volume: 0.7,
+  defaultMuted: true, volume: 0.7, hoverDecoyEnabled: false, decoyUrl: '',
   searchTerms: ['总裁', '重生', '逆袭'],
 }
 let playback: 'idle' | 'playing' | 'finished' = 'idle'
@@ -92,6 +93,33 @@ let pendingRecommendationTurn: string | undefined
 let openingPreferencesLoaded = false, openingPreferencesLoading: Promise<void> | undefined
 let preferencesGeneration = 0, lastVolume = 0.7, lastDefaultMuted = true, pendingVolume: number | undefined
 let volumeTimer: ReturnType<typeof setTimeout> | undefined, volumeSaved = Promise.resolve()
+type HoverResume = { action: number; selection: number; episodeId: string; turn?: string; automatic: boolean }
+let hoverResume: HoverResume | undefined, activeStart: { turn?: string; automatic: boolean } | undefined
+let turnStateAvailable = false
+const decoy = createHoverDecoy({ canEmbed: canEmbedDecoy, changed: decoyChanged })
+function configureDecoy() {
+  decoy.configure(prefs)
+  text('decoyStatus', decoy.needsReopen ? '已保存，重新打开播放器后应用此网址' : '')
+}
+function decoyChanged(covered: boolean) {
+  if (covered) {
+    const resume = !!episode && (!video.paused || preparing || playback === 'playing')
+    const pending = preparing ? activeStart : undefined
+    void pause('', true, true)
+    if (resume) hoverResume = { action, selection, episodeId: episode!.id,
+      turn: pending?.turn, automatic: pending?.automatic ?? false }
+  } else {
+    const intent = hoverResume
+    hoverResume = undefined
+    if (!intent) return
+    const valid = () => !decoy.covered && pageActive && intent.action === action &&
+      intent.selection === selection && intent.episodeId === episode?.id
+    // Consume a terminal task transition before resuming a retained player.
+    void poll().then(() => {
+      if (valid() && turnStateAvailable) return start(intent.turn, intent.automatic)
+    })
+  }
+}
 function flushVolume() {
   clearTimeout(volumeTimer)
   volumeTimer = undefined
@@ -110,6 +138,7 @@ function openingPreferences() {
   const work = flushVolume().then(() => call<Preferences>('get_preferences')).then(settings => {
     if (generation !== preferencesGeneration || !playerReady) return
     prefs = settings
+    configureDecoy()
     lastVolume = Number.isFinite(prefs.volume) && prefs.volume > 0 && prefs.volume <= 1 ? prefs.volume : 0.7
     video.volume = lastVolume
     video.muted = lastDefaultMuted = prefs.defaultMuted ?? true
@@ -169,7 +198,8 @@ function save(reset = false) {
     .catch(() => notice('观看进度暂未写入，请检查本机服务'))
   return saved
 }
-function pause(reason = '', preserveRecommendation = false) {
+function pause(reason = '', preserveRecommendation = false, preserveHover = false) {
+  if (!preserveHover) hoverResume = undefined
   if (!preserveRecommendation) pendingRecommendationTurn = undefined
   if (reason === '已手动暂停') confirmWaitingPlayback()
   action++
@@ -724,10 +754,12 @@ async function readTurnState() {
       observeSession: true, playerInstance: document.hidden ? undefined : instance,
     }, 1800)
     if (!pageActive) return
+    turnStateAvailable = true
     if (state.preferences) {
       const promptChanged = prefs.autoPrompt !== state.preferences.autoPrompt
       syncDefaultMute(state.preferences)
       prefs = state.preferences
+      configureDecoy()
       autoNext.checked = prefs.autoplayNext
       if (!autoNext.checked) cancelNextPreload()
       if (promptChanged) renderPicks()
@@ -743,6 +775,7 @@ async function readTurnState() {
         video.paused && !preparing) void start(state.turnId!, true)
   } catch {
     if (!pageActive) return
+    turnStateAvailable = false
     el('lamp').classList.remove('on')
     text('state', '本机状态不可达')
   }
@@ -770,6 +803,12 @@ function playlistDuration(manifest: string) {
 }
 async function start(recommendationTurn?: string, automatic = false) {
   if (!episode?.playable || !series || !pageActive) return
+  activeStart = { turn: recommendationTurn, automatic }
+  if (decoy.covered) {
+    hoverResume = { action: ++action, selection, episodeId: episode.id, turn: recommendationTurn, automatic }
+    return
+  }
+  hoverResume = undefined
   pendingRecommendationTurn = automatic ? undefined : recommendationTurn
   const n = ++action,
     ep = episode,
@@ -866,6 +905,7 @@ async function start(recommendationTurn?: string, automatic = false) {
     video.playbackRate = parseFloat(el<HTMLSelectElement>('speed').value)
     try {
       await video.play()
+      if (decoy.covered || !pageActive) { video.pause(); return }
     } catch (error) {
       if (n !== action || !pageActive) return
       if (!(error instanceof DOMException && ['AbortError', 'NotAllowedError'].includes(error.name)) ||
@@ -929,8 +969,8 @@ video.onpause = () => {
   if (document.hidden || !document.hasFocus() || backgroundPlayback?.action === action)
     rememberBackgroundPlayback()
 }
-video.onplay = syncButtons
-video.onplaying = confirmWaitingPlayback
+video.onplay = () => { if (decoy.covered) video.pause(); syncButtons() }
+video.onplaying = () => { if (decoy.covered) video.pause(); else confirmWaitingPlayback() }
 video.onerror = () => {
   if (loaded) {
     void pause(mediaErrorMessage(video.error?.code))
@@ -979,7 +1019,7 @@ async function fullscreen() {
     return
   }
   try {
-    await stage.requestFullscreen()
+    await el('playerRoot').requestFullscreen()
   } catch {
     stage.classList.add('expanded')
     syncFullscreen()
@@ -1086,6 +1126,8 @@ el('prefs').onclick = async () => {
     el<HTMLInputElement>('autoPauseOnFinish').checked = prefs.autoPauseOnFinish
     el<HTMLInputElement>('autoPlayOnStart').checked = prefs.autoPlayOnStart
     el<HTMLInputElement>('defaultMuted').checked = prefs.defaultMuted
+    el<HTMLInputElement>('hoverDecoyEnabled').checked = prefs.hoverDecoyEnabled
+    el<HTMLInputElement>('decoyUrl').value = prefs.decoyUrl
     el<HTMLInputElement>('terms').value = prefs.searchTerms.join('，')
   } catch (error) { notice(explain(error)) }
 }
@@ -1101,12 +1143,16 @@ el('settings').onsubmit = (e) => {
     autoPauseOnFinish: el<HTMLInputElement>('autoPauseOnFinish').checked,
     autoPlayOnStart: el<HTMLInputElement>('autoPlayOnStart').checked,
     defaultMuted: el<HTMLInputElement>('defaultMuted').checked,
+    hoverDecoyEnabled: el<HTMLInputElement>('hoverDecoyEnabled').checked,
+    decoyUrl: el<HTMLInputElement>('decoyUrl').value.trim(),
     searchTerms,
   })
     .then(async (updated) => {
       if (generation !== preferencesGeneration || !playerReady) return
       syncDefaultMute(updated)
       prefs = updated
+      configureDecoy()
+      if (decoy.needsReopen) notice('已保存，重新打开播放器后应用此网址')
       autoNext.checked = prefs.autoplayNext
       el('settings').hidden = true
       el('prefs').setAttribute('aria-expanded', 'false')
@@ -1145,18 +1191,19 @@ async function suspend() {
   await Promise.all([pause('已暂停，点击播放继续', true), presence(false), flushVolume()])
 }
 function retryInterruptedPlayback(intent: InterruptedPlayback) {
-  if (intent.action !== action || !pageActive || !loaded || playback !== 'playing' ||
+  if (decoy.covered || intent.action !== action || !pageActive || !loaded || playback !== 'playing' ||
       !video.paused || video.ended || video.error) return
   const position = video.currentTime
   // If the host refuses to play, wait for focus to return instead of looping at the same frame.
   if (intent.lastPosition !== undefined && Math.abs(position - intent.lastPosition) < 0.25) return
   intent.lastPosition = position
   void video.play().then(() => {
+    if (decoy.covered || !pageActive) { video.pause(); return }
     if (intent.action === action && !video.paused) notice('正在播放')
   }).catch(() => {})
 }
 function rememberBackgroundPlayback() {
-  if (!pageActive || playback !== 'playing') return
+  if (decoy.covered || !pageActive || playback !== 'playing') return
   if (backgroundPlayback?.action !== action) backgroundPlayback = { action }
   retryInterruptedPlayback(backgroundPlayback)
 }
@@ -1247,4 +1294,4 @@ void connect(ctx => {
   context = ctx
   if (waiting) { if (ctx.waitingTurn) waiting.connected() }
   else void initPlayer().catch(e => notice(explain(e)))
-}, async () => { waiting?.dispose(); await closePlayer() }, () => waiting?.modeChanged()).catch(e => notice(explain(e)))
+}, async () => { waiting?.dispose(); await closePlayer(); decoy.dispose() }, () => waiting?.modeChanged()).catch(e => notice(explain(e)))

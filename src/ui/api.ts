@@ -13,6 +13,8 @@ export type Preferences = {
   autoPauseOnFinish: boolean
   autoPlayOnStart: boolean
   defaultMuted: boolean
+  hoverDecoyEnabled: boolean
+  decoyUrl: string
   volume: number
   searchTerms: string[]
 }
@@ -29,6 +31,13 @@ const app = browser ? null : new App({ name: '红果短剧', version: pkg.versio
 let inlineSizing: ReturnType<typeof trackInlineSize> | undefined
 export const hostLocale = () => app?.getHostContext()?.locale || navigator.language
 export const displayMode = () => app?.getHostContext()?.displayMode
+export function canEmbedDecoy(url: string) {
+  try {
+    const origin = new URL(url).origin
+    const approved = app?.getHostCapabilities()?.sandbox?.csp?.frameDomains
+    return approved ? approved.includes(origin) : document.documentElement.dataset.decoyOrigin === origin
+  } catch { return false }
+}
 export async function requestPlayerTab() {
   const result = await app?.requestDisplayMode({ mode: 'fullscreen' }, { timeout: 5000 })
   if (result?.mode !== 'fullscreen') throw Error('当前 Codex 无法在会话中打开播放器')

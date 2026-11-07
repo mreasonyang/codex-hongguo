@@ -104,6 +104,39 @@
   color-scheme: light;
 }
 
+/* The cover is part of the fullscreen root, and never fades out when concealing. */
+#decoy {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  overflow: auto;
+  background: var(--bg);
+  color: var(--text);
+  isolation: isolate;
+}
+html[data-surface='player']:not([data-decoy-ready]) #decoy,
+html[data-surface='player'][data-hover-decoy='on']:not([data-decoy-covered='false']) #decoy {
+  display: block;
+}
+html[data-surface='player']:not([data-decoy-ready]) #playerContent,
+html[data-surface='player'][data-hover-decoy='on']:not([data-decoy-covered='false']) #playerContent {
+  visibility: hidden;
+}
+html[data-surface='waiting'] #playerRoot { display: none; }
+.decoyNotes { width: min(100%, 720px); margin: 0 auto; padding: 42px 28px; }
+.decoyNotes h1 { font-size: 28px; font-weight: 650; margin: 12px 0 8px; }
+.decoyNotes h2 { font-size: 15px; margin: 34px 0 12px; }
+.decoyEyebrow, .decoyIntro { color: var(--text-2); }
+.decoyEyebrow { font-size: 11px; letter-spacing: 0.12em; }
+.decoyNotes ul { list-style: none; padding: 0; }
+.decoyNotes li { padding: 15px 0; border-bottom: 1px solid var(--line-2); }
+.decoyLines { height: 200px; background: repeating-linear-gradient(transparent 0 37px, var(--line) 37px 38px); }
+#decoyWebsite:not(:empty) { position: absolute; inset: 0; background: var(--bg); }
+#decoyWebsite iframe { display: block; border: 0; width: 100%; height: 100%; pointer-events: none; }
+#playerRoot:fullscreen { width: 100%; height: 100%; background: var(--bg); }
+#playerRoot:fullscreen .screen { position: fixed; inset: 0; width: 100%; height: 100%; max-height: none; border: 0; border-radius: 0; z-index: 100; }
+
 /* Base */
 *,
 *::before,

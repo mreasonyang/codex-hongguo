@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { callerId } from './store.mjs'
 import { PlayerError } from './errors.mjs'
 import { manualHooks } from './setup.mjs'
+import { normalizeDecoyUrl } from './decoy.mjs'
 
 export const secret = () => randomBytes(24).toString('base64url')
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/)
@@ -65,6 +66,13 @@ export const schemas = {
     autoPauseOnFinish: z.boolean().optional(),
     autoPlayOnStart: z.boolean().optional(),
     defaultMuted: z.boolean().optional(),
+    hoverDecoyEnabled: z.boolean().optional(),
+    decoyUrl: z.string().max(2048).transform((value, ctx) => {
+      try { return normalizeDecoyUrl(value) } catch {
+        ctx.addIssue({ code: 'custom', message: '替身网址无效' })
+        return z.NEVER
+      }
+    }).optional(),
     volume: z.number().positive().max(1).optional(),
   }),
   read_panel_chunk: z.object({

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-host="panel" data-surface="player">
+<html lang="zh-CN" data-host="panel" data-surface="player" data-hover-decoy="off">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -104,7 +104,8 @@
       <div id="waitingTitles"></div>
       <span id="waitingMessage" role="status"></span>
     </section>
-    <main>
+    <div id="playerRoot">
+    <main id="playerContent">
       <header class="topbar">
         <div class="brand">
           <span class="mark" aria-hidden="true">
@@ -143,6 +144,17 @@
           <input type="checkbox" id="defaultMuted" class="switch" />
         </label>
         <p class="settingsHint">修改后同步当前播放器；新打开时也沿用此设置</p>
+        <label class="switchRow">
+          <span>悬停时显示播放器</span>
+          <input type="checkbox" id="hoverDecoyEnabled" class="switch" />
+        </label>
+        <p class="settingsHint">移出红果面板显示替身并暂停，移回后继续；手动暂停保持不变</p>
+        <label class="field">
+          <span>替身网页</span>
+          <input id="decoyUrl" type="url" maxlength="2048" placeholder="留空使用内置工作笔记" autocomplete="off" />
+        </label>
+        <p class="settingsHint">部分网站禁止嵌入；更换网站后需重新打开播放器。清空网址可恢复默认替身。</p>
+        <p id="decoyStatus" class="settingsHint" role="status"></p>
         <label class="switchRow">
           <span>当前回合进行时显示推荐</span>
           <input type="checkbox" id="autoPrompt" class="switch" />
@@ -319,6 +331,19 @@
         </div>
       </section>
     </main>
+    <section id="decoy" aria-label="工作笔记" aria-hidden="true">
+      <div id="decoyNotes" class="decoyNotes">
+        <p class="decoyEyebrow">工作空间</p>
+        <h1>工作笔记</h1>
+        <p class="decoyIntro">计划、记录与待办事项</p>
+        <h2>本周计划</h2>
+        <ul><li>整理接口文档</li><li>核对测试结果</li><li>准备迭代评审</li></ul>
+        <h2>记录</h2>
+        <div class="decoyLines" aria-hidden="true"></div>
+      </div>
+      <div id="decoyWebsite"></div>
+    </section>
+    </div>
     <script nonce="__NONCE__">
       /*SCRIPT*/
     </script>

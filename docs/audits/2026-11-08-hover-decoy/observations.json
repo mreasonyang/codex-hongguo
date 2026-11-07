@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-08",
+  "surface": "Production browser UI with real Service/SQLite and synthetic local video; not an installed MCP App",
+  "checks": [
+    {
+      "check": "playing",
+      "duration": 120.24585,
+      "paused": false,
+      "time": 4.743276
+    },
+    {
+      "check": "covered-paused",
+      "paused": true,
+      "time": 4.750077
+    },
+    {
+      "check": "hover-resumed",
+      "paused": false,
+      "time": 9.795024
+    },
+    {
+      "check": "manual-pause-preserved",
+      "paused": true,
+      "time": 9.855643
+    },
+    {
+      "check": "custom-website-after-reload",
+      "visible": true
+    },
+    {
+      "check": "native-fullscreen-cover",
+      "fullscreenRoot": true,
+      "coverVisible": true,
+      "playerVisible": false
+    },
+    {
+      "check": "restore-built-in",
+      "visible": true
+    }
+  ]
+}

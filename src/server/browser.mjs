@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto'
 import { projectRoot } from './paths.mjs'
 import { PlayerError, message } from './errors.mjs'
 import { secret } from './service.mjs'
+import { decoyDocument, decoyOrigin } from './decoy.mjs'
 
 export function range(header, size) {
   if (header === undefined) return null
@@ -91,9 +92,10 @@ export class BrowserServer {
       throw new PlayerError('请求来源无效', 403)
     const path = req.url,
       nonce = randomBytes(16).toString('base64')
+    const settings = this.service.store.preferences(), frameOrigin = decoyOrigin(settings.decoyUrl)
     res.setHeader(
       'Content-Security-Policy',
-      `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`,
+      `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; frame-src ${frameOrigin || "'none'"}; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`,
     )
     const html = (text) => {
       res.setHeader('Content-Type', 'text/html; charset=utf-8')
@@ -125,7 +127,7 @@ export class BrowserServer {
     const route = match[2]
     if (!route && req.method === 'GET')
       return html(
-        readFileSync(join(projectRoot, 'dist/ui/player.html'), 'utf8').replace(
+        decoyDocument(readFileSync(join(projectRoot, 'dist/ui/player.html'), 'utf8'), settings, frameOrigin).replace(
           'data-host="panel"',
           'data-host="browser"',
         ),

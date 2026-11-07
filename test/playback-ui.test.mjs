@@ -35,6 +35,8 @@ class Video extends Element {
 const source = readFileSync(new URL('../src/ui/player.ts', import.meta.url), 'utf8') + `
 export const fixture = {
   poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer,
+  decoy,
+  unload() { loaded = false },
   selected() {
     context = { identified: true }; pageActive = playerReady = loaded = true;
     series = { id: 'hg-1', title: 'Test' };
@@ -46,6 +48,7 @@ export const fixture = {
   episodeId() { return episode?.id },
 };`
 const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code
+const decoyCode = transformSync(readFileSync(new URL('../src/ui/hover-decoy.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code
 const flush = async () => { for (let i = 0; i < 50; i++) await Promise.resolve() }
 
 function setup(t) {
@@ -57,13 +60,13 @@ function setup(t) {
   const otherPanel = other.panel(other.open({ threadId: 'B' }).panel)
   const video = new Video(), elements = new Map()
   const document = Object.assign(new EventTarget(), {
-    hidden: false, documentElement: { dataset: {} }, hasFocus: () => true,
+    hidden: false, documentElement: new Element(), hasFocus: () => true,
     getElementById(id) { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id) },
     querySelector: () => video, querySelectorAll: () => [], createElement: () => new Element(),
   })
-  const window = Object.assign(new EventTarget(), { setInterval: () => 1, clearInterval() {}, scrollTo() {} })
+  const window = Object.assign(new EventTarget(), { innerWidth: 900, innerHeight: 700, setInterval: () => 1, clearInterval() {}, scrollTo() {} })
   const api = {
-    browser: false, connect: async () => {}, hostLocale: () => 'zh',
+    browser: false, connect: async () => {}, hostLocale: () => 'zh', canEmbedDecoy: () => false,
     call: (name, args = {}) => service.call(panel, name, args),
   }
   const exports = {}, context = vm.createContext({
@@ -71,6 +74,11 @@ function setup(t) {
     AbortController, DOMException, setTimeout, clearTimeout,
     require(name) {
       if (name === './api') return api
+      if (name === './hover-decoy') {
+        const exports = {}, decoyContext = vm.createContext({ module: { exports }, exports, document, window, setTimeout, clearTimeout })
+        vm.runInContext(decoyCode, decoyContext)
+        return decoyContext.module.exports
+      }
       if (name === './locale') return { tr: value => value }
       if (name === './playback-turn') return turnHelpers
       if (name === './media-startup') return mediaHelpers
@@ -81,6 +89,7 @@ function setup(t) {
   })
   vm.runInContext(code, context)
   const ui = context.module.exports.fixture
+  t.after(() => ui.decoy.dispose())
   ui.selected()
   let at = Date.now()
   return {
@@ -121,6 +130,15 @@ test('global playback switches default for older settings, synchronize across ch
   finally { explicitlyDisabled.close() }
   await assert.rejects(f.settings({ autoPlayOnStart: 'yes' }), /参数无效/)
   await assert.rejects(f.settings({ defaultMuted: 'yes' }), /参数无效/)
+  assert.equal(f.peer.preferences().hoverDecoyEnabled, false)
+  assert.equal(f.peer.preferences().decoyUrl, '')
+  await f.settings({ hoverDecoyEnabled: true, decoyUrl: ' https://example.org/notes ' })
+  assert.equal(f.peer.preferences().decoyUrl, 'https://example.org/notes')
+  const decoySettings = new Store(f.store.root)
+  try { assert.equal(decoySettings.preferences().hoverDecoyEnabled, true) }
+  finally { decoySettings.close() }
+  for (const decoyUrl of ['javascript:alert(1)', 'data:text/html,hello', 'file:///tmp/notes', 'https://name:pass@example.org', 'invalid', 'x'.repeat(2049)])
+    await assert.rejects(f.settings({ decoyUrl }), /参数无效/)
   for (const volume of [0, -1, 1.01, NaN, Infinity]) await assert.rejects(f.settings({ volume }), /参数无效/)
 })
 
@@ -134,12 +152,159 @@ test('playback and default-mute settings load and save through the player form',
   f.elements.get('autoPauseOnFinish').checked = false
   f.elements.get('autoPlayOnStart').checked = false
   f.elements.get('defaultMuted').checked = false
+  f.elements.get('hoverDecoyEnabled').checked = true
+  f.elements.get('decoyUrl').value = 'https://example.org/notes'
   f.elements.get('settings').onsubmit({ preventDefault() {} })
   await flush()
   assert.equal(f.peer.preferences().autoPauseOnFinish, false)
   assert.equal(f.peer.preferences().autoPlayOnStart, false)
   assert.equal(f.peer.preferences().defaultMuted, false)
+  assert.equal(f.peer.preferences().hoverDecoyEnabled, true)
+  assert.equal(f.peer.preferences().decoyUrl, 'https://example.org/notes')
   assert.equal(f.elements.get('settings').hidden, true)
+})
+
+function movePointer(f, x = 40, y = 40) {
+  const event = new Event('pointermove')
+  Object.assign(event, { clientX: x, clientY: y, pointerType: 'mouse' })
+  f.document.dispatchEvent(event)
+}
+async function enterPanel(t, f) { movePointer(f); t.mock.timers.tick(150); await flush() }
+async function hoveringPlayer(t, playing = true) {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const f = setup(t)
+  movePointer(f)
+  f.event('one'); await f.poll()
+  await f.settings({ hoverDecoyEnabled: true }); await f.poll()
+  if (playing) await f.ui.start()
+  return f
+}
+test('leaving the panel pauses synchronously and returning preserves the player and its position', async t => {
+  const f = await hoveringPlayer(t)
+  f.document.documentElement.dispatchEvent(new Event('pointerleave'))
+  assert.equal(f.ui.decoy.covered, true)
+  assert.equal(f.video.paused, true)
+  assert.equal(f.elements.get('playerContent').inert, true)
+  assert.equal(f.video.currentTime, 12)
+  const plays = f.video.plays
+  movePointer(f); t.mock.timers.tick(149); await flush()
+  assert.equal(f.video.plays, plays)
+  t.mock.timers.tick(1); await flush()
+  assert.equal(f.ui.decoy.covered, false)
+  assert.equal(f.video.paused, false)
+  assert.equal(f.video.plays, plays + 1)
+  assert.equal(f.video.currentTime, 12)
+  assert.equal(f.elements.get('playerContent').inert, false)
+})
+for (const cancel of ['manual', 'Stop', 'Interrupt', 'close']) test(`hover return cannot undo ${cancel}`, async t => {
+  const f = await hoveringPlayer(t)
+  f.ui.decoy.conceal()
+  const plays = f.video.plays
+  if (cancel === 'manual') await f.ui.pause('已手动暂停')
+  else if (cancel === 'close') await f.ui.closePlayer()
+  else { f.event('one', cancel); await f.poll() }
+  await enterPanel(t, f)
+  assert.equal(f.video.paused, true)
+  assert.equal(f.video.plays, plays)
+})
+test('an already manually paused player does not resume just because the pointer returns', async t => {
+  const f = await hoveringPlayer(t)
+  await f.ui.pause('已手动暂停')
+  const plays = f.video.plays
+  f.ui.decoy.conceal(); await enterPanel(t, f)
+  assert.equal(f.video.paused, true)
+  assert.equal(f.video.plays, plays)
+})
+for (const stops of [false, true]) test(`new-task playback is deferred behind the cover and rechecks ended=${stops}`, async t => {
+  const f = await hoveringPlayer(t, false)
+  f.ui.decoy.conceal()
+  f.event('two'); await f.poll()
+  assert.equal(f.video.plays, 0)
+  if (stops) { f.event('two', 'Stop'); await f.poll() }
+  await enterPanel(t, f)
+  assert.equal(f.video.paused, stops)
+  assert.equal(f.video.plays, stops ? 0 : 1)
+})
+test('pointer capture outside the viewport, blur and page hiding all conceal without focus-only reveal', async t => {
+  const f = await hoveringPlayer(t)
+  movePointer(f, -1, 20)
+  assert.equal(f.video.paused, true)
+  await enterPanel(t, f)
+  assert.equal(f.video.paused, false)
+  f.window.dispatchEvent(new Event('blur'))
+  assert.equal(f.ui.decoy.covered, true)
+  f.window.dispatchEvent(new Event('focus')); await flush()
+  assert.equal(f.video.paused, true)
+  await enterPanel(t, f)
+  f.document.hidden = true
+  f.document.dispatchEvent(new Event('visibilitychange'))
+  assert.equal(f.video.paused, true)
+  f.document.hidden = false
+  f.document.dispatchEvent(new Event('visibilitychange')); await flush()
+  assert.equal(f.ui.decoy.covered, true)
+  await enterPanel(t, f)
+  assert.equal(f.video.paused, false)
+})
+test('startup preferences finishing after conceal cannot play until a fresh hover', async t => {
+  const f = await hoveringPlayer(t, false)
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  const call = f.service.call.bind(f.service)
+  f.service.call = async (scope, name, args) => {
+    if (name === 'get_preferences') await gate
+    return call(scope, name, args)
+  }
+  // Reset opening preferences without destroying the selected, loaded video.
+  await f.ui.closePlayer(); f.ui.selected()
+  const starting = f.ui.start()
+  await flush()
+  f.ui.decoy.conceal()
+  release(); await starting; await flush()
+  assert.equal(f.video.plays, 0)
+  await enterPanel(t, f)
+  assert.equal(f.video.plays, 1)
+})
+test('media preparation finishing behind the cover cannot attach or play until the pointer returns', async t => {
+  const f = await hoveringPlayer(t, false)
+  f.ui.unload()
+  f.service.catalog = { prepare: () => ({ status: 'ready', stream: 'cover-stream', manifest: 'manifest' }), panelMedia: { pin() {}, unpin() {} } }
+  f.panel.allowed = new Set(['hg-11'])
+  let release
+  const gate = new Promise(resolve => { release = resolve }), call = f.service.call.bind(f.service)
+  f.service.call = async (scope, name, args) => {
+    if (name === 'prepare_playback') await gate
+    return call(scope, name, args)
+  }
+  const starting = f.ui.start(); await flush()
+  f.ui.decoy.conceal()
+  release(); await starting; await flush()
+  assert.equal(f.video.plays, 0)
+  assert.equal(f.video.paused, true)
+  await enterPanel(t, f)
+  assert.equal(f.video.plays, 1)
+})
+test('disabling hover mode restores a covered player and later pointer exits keep normal playback', async t => {
+  const f = await hoveringPlayer(t)
+  f.ui.decoy.conceal()
+  await f.settings({ hoverDecoyEnabled: false }); await f.poll()
+  assert.equal(f.ui.decoy.covered, false)
+  assert.equal(f.video.paused, false)
+  f.document.documentElement.dispatchEvent(new Event('pointerleave'))
+  assert.equal(f.video.paused, false)
+})
+test('a late play promise and host media play events cannot restart a covered player', async t => {
+  const f = await hoveringPlayer(t, false)
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  const play = f.video.play.bind(f.video)
+  f.video.play = async () => { await play(); await gate }
+  const starting = f.ui.start(); await flush()
+  f.ui.decoy.conceal()
+  assert.equal(f.video.paused, true)
+  release(); await starting; await flush()
+  assert.equal(f.video.paused, true)
+  await play()
+  assert.equal(f.video.paused, true)
 })
 
 for (const autoPauseOnFinish of [false, true]) for (const autoPlayOnStart of [false, true]) {
