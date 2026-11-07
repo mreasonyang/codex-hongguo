@@ -1,0 +1,68 @@
+{
+  "date": "2026-11-08",
+  "environment": "Codex built-in browser; standalone synthetic sandbox iframe; not Hongguo MCP App",
+  "samples": [
+    {
+      "mode": "builtin",
+      "covered": false,
+      "paused": false,
+      "position": 1.736,
+      "sameVideo": true,
+      "starts": 1,
+      "lastEvent": "manual-play",
+      "lastError": null,
+      "frameLoads": 0,
+      "frameErrors": 0
+    },
+    {
+      "check": "allowed-frame",
+      "state": {
+        "mode": "allowed",
+        "covered": true,
+        "paused": true,
+        "position": 0,
+        "sameVideo": true,
+        "starts": 0,
+        "lastEvent": "initial",
+        "lastError": null,
+        "frameLoads": 1,
+        "frameErrors": 0
+      },
+      "rendered": true
+    },
+    {
+      "check": "website-denied",
+      "state": {
+        "mode": "denied",
+        "covered": true,
+        "paused": true,
+        "position": 0,
+        "sameVideo": true,
+        "starts": 0,
+        "lastEvent": "initial",
+        "lastError": null,
+        "frameLoads": 1,
+        "frameErrors": 0
+      },
+      "observed": "Nested frame shows refused to connect, but load fired and error did not."
+    },
+    {
+      "check": "host-csp-denied",
+      "state": {
+        "mode": "csp",
+        "covered": true,
+        "paused": true,
+        "position": 0,
+        "sameVideo": true,
+        "starts": 0,
+        "lastEvent": "initial",
+        "lastError": null,
+        "frameLoads": 1,
+        "frameErrors": 0
+      },
+      "observed": "Nested frame is blocked by frame-src none."
+    }
+  ],
+  "hoverExit": "Inconclusive: automated pointer-only movement did not reliably invoke the child-frame exit handler; requires real Codex panel validation.",
+  "productionPlaybackObserved": false
+}
