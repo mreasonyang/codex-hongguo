@@ -401,6 +401,33 @@ test('preloading finds the next playable episode across a page boundary', async 
   assert.equal(f.ui.episodeId(), 'hg-12')
 })
 
+test('a growing playlist keeps the full episode duration and waits for a deferred seek', async t => {
+  const f = setup(t)
+  f.video.duration = 5
+  f.service.catalog = {
+    episodes: async () => ({ items: preloadEpisodes }),
+    prepare: () => ({ status: 'ready', stream: 'growing', manifest: '#EXTM3U\n#EXTINF:5,\nseg00000.m4s', durationMs: 120000 }),
+    panelMedia: { pin() {}, unpin() {} },
+  }
+  await f.ui.select({ id: 'hg-1', title: 'Test' }, undefined, true)
+  f.video.currentTime = 4
+  f.video.ended = true
+  f.video.onended()
+  await f.ui.pause()
+  const progress = f.store.history('hg-1')[0]
+  assert.equal(progress.positionMs, 4000)
+  assert.equal(progress.durationMs, 120000)
+  const seek = f.elements.get('seek')
+  seek.value = '500'; seek.oninput()
+  seek.onchange(); await flush()
+  assert.equal(f.video.currentTime, 4, 'unavailable positions wait for the remaining fragments')
+  assert.equal(f.store.history('hg-1')[0].positionMs, 4000)
+  f.video.duration = 120; f.video.ondurationchange()
+  assert.equal(f.video.currentTime, 60)
+  await flush()
+  assert.equal(f.store.history('hg-1')[0].positionMs, 60000)
+})
+
 test('preloading and next playback share a pending episode page without switching after cancellation', async t => {
   const f = await preloadFixture(t)
   let resolve, pages = 0

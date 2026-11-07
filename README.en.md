@@ -49,7 +49,7 @@ Default installation and updates do not require Git. The command checks Node, np
 
 ![Hongguo show catalog with recommendations, search, Continue watching, and watch history](docs/images/codex-hongguo-catalog.png)
 
-**Player**: Watch beside your chat, choose episodes and autoplay the next episode. With autoplay next enabled, the player preloads one upcoming episode during the last roughly 30 seconds (or the final quarter of shorter episodes), reducing the wait between episodes. Preload failures do not interrupt playback.
+**Player**: Watch beside your chat, choose episodes and autoplay the next episode. Playback can start once the first local fragments are ready while the rest continue processing in the background. With autoplay next enabled, the player preloads one upcoming episode during the last roughly 30 seconds (or the final quarter of shorter episodes), reducing the wait between episodes. Preload failures do not interrupt playback.
 
 ![Watching Hongguo short dramas in the side panel while Codex works on a task](docs/images/codex-hongguo-player.png)
 

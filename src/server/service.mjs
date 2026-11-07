@@ -75,6 +75,7 @@ export const schemas = {
       .nonnegative()
       .max(32 * 1024 * 1024),
   }),
+  read_panel_manifest: z.object({ episodeId: dramaId, stream: id }),
   remove_history: z.object({ seriesId: dramaId }),
 }
 export class Service {
@@ -256,8 +257,10 @@ export class Service {
       case 'remove_history':
         return this.store.removeHistory(p.seriesId)
       case 'read_panel_chunk':
+      case 'read_panel_manifest':
         if (browser || scope.streams?.get(p.episodeId) !== p.stream)
           throw new PlayerError('请先准备当前分集', 403)
+        if (name === 'read_panel_manifest') return this.catalog.panelMedia.manifest(p.episodeId, p.stream)
         return this.catalog.panelMedia.chunk(p.episodeId, p.stream, p.asset, p.offset)
       case 'save_progress':
         if (!this.store.persistent) throw new PlayerError('本机进度目录不可写', 503)

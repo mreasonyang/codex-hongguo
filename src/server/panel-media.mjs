@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, readdirSync, rmSync, statSync, utimesSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, utimesSync } from 'node:fs'
 import { open, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { runFfmpeg } from './media.mjs'
 import { PlayerError } from './errors.mjs'
+import { mp4DurationMs } from './mp4-duration.mjs'
 
 const idle = 10 * 60_000
 const chunkSize = 192 * 1024
@@ -16,7 +17,7 @@ const hardwareEncoders = {
 }
 const hlsOutput = [
   '-f', 'hls', '-hls_time', String(segmentSeconds), '-hls_list_size', '0', '-hls_segment_type', 'fmp4',
-  '-hls_playlist_type', 'vod', '-hls_segment_filename', 'seg%05d.m4s', 'index.m3u8',
+  '-hls_playlist_type', 'event', '-hls_segment_filename', 'seg%05d.m4s', 'index.m3u8',
 ]
 
 async function mappedCodecs(run, input) {
@@ -106,15 +107,40 @@ export class PanelMedia {
         })
     }
     this.touch(e)
-    if (e.pending) return { status: 'preparing' }
     if (e.error) throw new PlayerError('侧栏分段准备失败，可使用同窗分屏')
-    return { status: 'ready', stream: e.stream, manifest: e.manifest, codec: e.codec }
+    if (e.pending && (!e.durationMs || !this.snapshot(e))) return { status: 'preparing' }
+    e.exposed = true
+    return { status: 'ready', stream: e.stream, manifest: e.manifest, codec: e.codec, durationMs: e.durationMs }
+  }
+  snapshot(e) {
+    try {
+      const path = join(e.dir, 'index.m3u8')
+      if (statSync(path).size > 256 * 1024) throw Error('playlist limit')
+      const manifest = readFileSync(path, 'utf8')
+      const fragments = manifest.match(/#EXTINF:/g)?.length || 0
+      if (!fragments || (fragments < 2 && !manifest.includes('#EXT-X-ENDLIST'))) return false
+      e.manifest = manifest
+      return true
+    } catch (error) {
+      if (error.code === 'ENOENT') return false
+      throw new PlayerError('侧栏分段准备失败，可使用同窗分屏')
+    }
+  }
+  manifest(id, stream) {
+    const e = this.entries.get(id)
+    if (!e || e.stream !== stream || e.error || !e.manifest)
+      throw new PlayerError('该播放分段已失效，请重新点播', 404)
+    if (e.pending) this.snapshot(e)
+    this.touch(e)
+    return { manifest: e.manifest }
   }
   async build(e, file, sourceCodec) {
     const input = ['-protocol_whitelist', 'file', '-f', 'mov', '-i', file, '-map', '0:v:0', '-map', '0:a:0?']
-    const tracks = await mappedCodecs(this.run, input)
+    const [tracks, durationMs] = await Promise.all([mappedCodecs(this.run, input), mp4DurationMs(file)])
+    e.durationMs = durationMs
     const audioEncoder = tracks.audio && tracks.audio !== 'aac' ? 'aac' : 'copy'
     const transcodeVideo = tracks.video === 'hevc' || /bytevc1|hevc|h\.?265|hvc1|hev1/i.test(sourceCodec ?? '')
+    e.codec = transcodeVideo ? 'h264' : tracks.video
     if (transcodeVideo) {
       for (const encoder of [...(hardwareEncoders[process.platform] ?? []), 'libx264']) {
         const device = encoder === 'h264_vaapi'
@@ -124,8 +150,8 @@ export class PanelMedia {
           await this.run([...device, ...input, ...options, ...hlsOutput], null, false, e.dir)
           break
         } catch (error) {
-          if (encoder === 'libx264') throw error
-          // A hardware encoder can fail after writing fragments. Publish only files from a successful attempt.
+          if (encoder === 'libx264' || e.exposed) throw error
+          // Retry only before a player has consumed this encoder's fragments.
           for (const partial of readdirSync(e.dir)) rmSync(join(e.dir, partial), { force: true })
         }
       }
@@ -135,12 +161,11 @@ export class PanelMedia {
     }
     const manifest = await readFile(join(e.dir, 'index.m3u8'), 'utf8')
     if (manifest.length > 256 * 1024) throw Error('playlist limit')
-    e.codec = transcodeVideo ? 'h264' : tracks.video
     e.manifest = manifest
   }
   async chunk(id, stream, asset, offset) {
     const e = this.entries.get(id)
-    if (!e || e.stream !== stream || !e.manifest || !assetName.test(asset))
+    if (!e || e.stream !== stream || e.error || !e.manifest || !assetName.test(asset))
       throw new PlayerError('该播放分段已失效，请重新点播', 404)
     this.touch(e)
     const f = await open(join(e.dir, asset), 'r')

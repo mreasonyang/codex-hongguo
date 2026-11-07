@@ -287,7 +287,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   })
   assert.equal(data.isError, true)
   const resources = (await client.listResources()).resources
-  const playerUri = 'ui://hongguo/v16/player', waitingUri = 'ui://hongguo/v16/waiting'
+  const playerUri = 'ui://hongguo/v17/player', waitingUri = 'ui://hongguo/v17/waiting'
   assert.equal(tools.find(t => t.name === 'show_waiting_picks')._meta.ui.resourceUri, waitingUri)
   assert.equal(tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri, playerUri)
   assert.deepEqual(resources.map(r => r.uri).sort(), [playerUri, waitingUri])
@@ -297,7 +297,8 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
     'ui://hongguo/v2/player', 'ui://hongguo/v2/waiting', 'ui://hongguo/v3/player', 'ui://hongguo/v3/waiting',
     'ui://hongguo/v4/player', 'ui://hongguo/v4/waiting', 'ui://hongguo/v5/player', 'ui://hongguo/v5/waiting',
     'ui://hongguo/v6/player', 'ui://hongguo/v6/waiting', 'ui://hongguo/v7/waiting',
-    'ui://hongguo/v8/player', 'ui://hongguo/v9/waiting', 'ui://hongguo/v11/player', 'ui://hongguo/v12/waiting']) {
+    'ui://hongguo/v8/player', 'ui://hongguo/v9/waiting', 'ui://hongguo/v11/player', 'ui://hongguo/v12/waiting',
+    'ui://hongguo/v16/player', 'ui://hongguo/v16/waiting']) {
     const read = (await client.readResource({ uri })).contents[0]
     assert.equal(read.uri, uri)
     assert.deepEqual(read._meta.ui.csp, policy)
@@ -539,6 +540,49 @@ test('MCP full episode segments require the preparing panel and bounded offsets'
   await assert.rejects(svc.call(a, 'read_panel_chunk', args, true))
   await assert.rejects(svc.call(a, 'read_panel_chunk', { ...args, asset: '../index.m3u8' }))
   await assert.rejects(svc.call(a, 'read_panel_chunk', { ...args, offset: chunk.size }))
+})
+
+test('a panel can decode its first fragment while the rest is still being prepared and refresh its manifest', async t => {
+  const { store } = setup(t), source = join(store.root, 'longer.mp4')
+  await runFfmpeg(['-stream_loop', '5', '-i', avcFixture, '-t', '6', '-c', 'copy', source])
+  const catalog = cachedCatalog(t, store, source)
+  let publish, finish
+  const published = new Promise(resolve => { publish = resolve })
+  const gate = new Promise(resolve => { finish = resolve })
+  t.after(() => finish())
+  catalog.panelMedia = new PanelMedia(store.root, async (...args) => {
+    const output = await runFfmpeg(...args)
+    if (args[0].at(-1) === 'index.m3u8') {
+      const path = join(args[3], 'index.m3u8'), complete = readFileSync(path, 'utf8')
+      writeFileSync(path, complete.replace('#EXT-X-ENDLIST', ''))
+      publish()
+      await gate
+      writeFileSync(path, complete)
+    }
+    return output
+  })
+  t.after(() => catalog.panelMedia.close())
+  const svc = new Service(store, catalog), scope = svc.panel(svc.open({}).panel), other = svc.panel(svc.open({}).panel)
+  await svc.call(scope, 'get_episodes', { seriesId: 'hg-10' })
+  assert.equal((await svc.call(scope, 'prepare_playback', { episodeId: 'hg-101' })).status, 'preparing')
+  await published
+  try {
+    const ready = await svc.call(scope, 'prepare_playback', { episodeId: 'hg-101' })
+    assert.equal(ready.status, 'ready')
+    assert.ok(ready.durationMs > 0)
+    assert.equal(catalog.panelMedia.entries.get('hg-101').pending, true)
+    const args = { episodeId: 'hg-101', stream: ready.stream }
+    assert.doesNotMatch((await svc.call(scope, 'read_panel_manifest', args)).manifest, /#EXT-X-ENDLIST/)
+    await assert.rejects(svc.call(other, 'read_panel_manifest', args))
+    await assert.rejects(svc.call(scope, 'read_panel_manifest', args, true))
+    const entry = catalog.panelMedia.entries.get('hg-101')
+    const fragment = join(store.root, 'first-fragment.mp4')
+    writeFileSync(fragment, Buffer.concat(['init.mp4', ready.manifest.match(/seg\d{5}\.m4s/)[0]].map(asset => readFileSync(join(entry.dir, asset)))))
+    await runFfmpeg(['-xerror', '-i', fragment, '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-'])
+    finish()
+    await entry.job
+    assert.match((await svc.call(scope, 'read_panel_manifest', args)).manifest, /#EXT-X-ENDLIST/)
+  } finally { finish(); await catalog.panelMedia.entries.get('hg-101').job }
 })
 
 test('next-episode preload preserves the active stream and reuses real prepared fragments', async t => {

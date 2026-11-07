@@ -27,7 +27,7 @@ type Progress = {
 }
 type Prepared =
   | { status: 'preparing' | 'error'; reason?: string }
-  | ({ status: 'ready'; codec?: string } & ({ stream: string; manifest: string } | { src: string }))
+  | ({ status: 'ready'; codec?: string; durationMs?: number } & ({ stream: string; manifest: string } | { src: string }))
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 const video = document.querySelector('video')!,
   seek = el<HTMLInputElement>('seek')
@@ -75,6 +75,7 @@ type InterruptedPlayback = { action: number; lastPosition?: number }
 let backgroundPlayback: InterruptedPlayback | undefined
 let closeStream: (() => void) | undefined
 let mediaLoad: AbortController | undefined
+let mediaDuration = 0, pendingSeek: number | undefined
 let nextPreload: { selection: number; episodeId: string } | undefined
 let episodePage: { selection: number; cursor: string; promise: Promise<boolean> } | undefined
 let group = 0,
@@ -112,14 +113,15 @@ function syncButtons() {
     .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.id === episode?.id)))
 }
 function save(reset = false) {
-  if (!loaded || !series || !episode || !Number.isFinite(video.duration) || !video.duration || (!video.currentTime && !reset)) return saved
+  const duration = totalDuration()
+  if (!loaded || !series || !episode || !Number.isFinite(duration) || !duration || (!video.currentTime && !reset)) return saved
   const p: Progress = {
     seriesId: series.id,
     episodeId: episode.id,
     title: series.title,
     label: episode.label,
-    positionMs: Math.round((playback === 'finished' || video.ended ? video.duration : video.currentTime) * 1000),
-    durationMs: Math.round(video.duration * 1000),
+    positionMs: Math.round((playback === 'finished' ? duration : video.currentTime) * 1000),
+    durationMs: Math.round(duration * 1000),
   }
   saved = saved
     .then(() => call('save_progress', { ...p, ...(reset && p.positionMs === 0 ? { reset: true } : {}) }, 1800))
@@ -145,6 +147,8 @@ function pause(reason = '', preserveRecommendation = false) {
 }
 function release() {
   cancelNextPreload()
+  mediaDuration = 0
+  pendingSeek = undefined
   loaded = false
   playback = 'idle'
   mediaLoad?.abort()
@@ -302,7 +306,7 @@ function cancelNextPreload() {
   nextPreload = undefined
 }
 function preloadNextEpisode() {
-  const duration = video.duration, remaining = duration - video.currentTime
+  const duration = totalDuration(), remaining = duration - video.currentTime
   if (!loaded || !episode || !pageActive || video.paused || !autoNext.checked ||
       !Number.isFinite(duration) || !Number.isFinite(remaining) || duration <= 0 || remaining <= 0 ||
       remaining > Math.min(30 * (video.playbackRate || 1), duration / 4)) return
@@ -703,11 +707,25 @@ async function readTurnState() {
   }
 }
 function updateTime() {
-  const dur = video.duration
+  const dur = totalDuration()
   if (!Number.isFinite(dur) || !loaded) return
   seek.value = String(Math.round((video.currentTime / dur) * 1000))
   fill(seek)
   text('time', clock(video.currentTime) + ' / ' + clock(dur))
+}
+function totalDuration() { return mediaDuration || video.duration }
+function seekTo(position: number) {
+  pendingSeek = position
+  applySeek()
+}
+function applySeek() {
+  if (pendingSeek !== undefined && Number.isFinite(video.duration) && pendingSeek <= video.duration) {
+    video.currentTime = pendingSeek
+    pendingSeek = undefined
+  }
+}
+function playlistDuration(manifest: string) {
+  return Array.from(manifest.matchAll(/#EXTINF:([\d.]+)/g), match => Number(match[1])).reduce((a, b) => a + b, 0)
 }
 async function start(recommendationTurn?: string, automatic = false) {
   if (!episode?.playable || !series || !pageActive) return
@@ -721,22 +739,38 @@ async function start(recommendationTurn?: string, automatic = false) {
   try {
     if (!loaded) {
       notice('正在准备播放…')
+      // Progress lookup can run while the server downloads and prepares the first fragment.
+      const recent = saved.then(() => call<Page<Progress>>('get_history', { seriesId: show.id, episodeId: ep.id }))
+      void recent.catch(() => {})
       let result = await call<Prepared>('prepare_playback', { episodeId: ep.id, retry: true })
       const until = Date.now() + 240000
       while (result.status === 'preparing' && n === action && Date.now() < until) {
-        notice('正在本机准备整集…')
-        await sleep(700)
+        notice('正在准备首批视频分段…')
+        await sleep(200)
         if (n !== action) return
         result = await call<Prepared>('prepare_playback', { episodeId: ep.id })
       }
       if (n !== action) return
       if (result.status !== 'ready') throw Error(result.reason || '准备超时，请重试')
+      const r = await recent
+      if (n !== action) return
+      const progress = r.items[0]
+      const pos = progress && progress.positionMs < progress.durationMs ? progress.positionMs / 1000 : 0
+      // A resumed position must exist in the growing playlist before HLS attaches.
+      while ('stream' in result && result.durationMs && pos > 0 && !result.manifest.includes('#EXT-X-ENDLIST') &&
+          playlistDuration(result.manifest) < pos + 3 && Date.now() < until) {
+        await sleep(200)
+        if (n !== action) return
+        result = await call<Prepared>('prepare_playback', { episodeId: ep.id })
+        if (n !== action) return
+        if (result.status !== 'ready') throw Error('分集续播位置尚未准备好，请重试')
+      }
+      if ('stream' in result && result.durationMs && pos > 0 && !result.manifest.includes('#EXT-X-ENDLIST') &&
+          playlistDuration(result.manifest) < pos + 3) throw Error('分集续播位置准备超时，请重试')
       const media = result
       if (browser !== ('src' in media)) throw Error('本集播放地址已失效，请重试')
-      await saved
-      const r = await call<Page<Progress>>('get_history', { seriesId: show.id, episodeId: ep.id })
-      if (n !== action) return
       release()
+      mediaDuration = Number.isFinite(media.durationMs) && media.durationMs! > 0 ? media.durationMs! / 1000 : 0
       const load = new AbortController()
       mediaLoad = load
       const metadata = waitForMetadata(video, load.signal)
@@ -762,9 +796,7 @@ async function start(recommendationTurn?: string, automatic = false) {
       }
       await metadata
       if (n !== action) return
-      const progress = r.items[0]
-      const pos = progress && progress.positionMs < progress.durationMs ? progress.positionMs / 1000 : 0
-      video.currentTime = pos > 0 && pos < video.duration - 5 ? pos : 0
+      seekTo(pos > 0 && pos < totalDuration() - 5 ? pos : 0)
       if (video.currentTime > 0) {
         text('resumeTime', '已从 ' + clock(pos) + ' 继续')
         el('resumed').hidden = false
@@ -784,7 +816,7 @@ async function start(recommendationTurn?: string, automatic = false) {
     }
     if (n !== action || !pageActive) return
     preparing = false
-    if (playback === 'finished') video.currentTime = 0
+    if (playback === 'finished') seekTo(0)
     playback = 'playing'
     video.playbackRate = parseFloat(el<HTMLSelectElement>('speed').value)
     // A host may reuse an iframe that the viewer previously unmuted. Opening
@@ -824,8 +856,9 @@ for (const control of [video, center, play, el('resumePlayback')]) {
   control.addEventListener('click', togglePlayback)
 }
 function finishEpisode() {
-  if (!loaded || playback !== 'playing' || !Number.isFinite(video.duration) ||
-      video.currentTime < video.duration - 1) return
+  const duration = totalDuration()
+  if (!loaded || playback !== 'playing' || !Number.isFinite(duration) ||
+      video.currentTime < duration - 1) return
   playback = 'finished'
   void save()
   if (autoNext.checked && pageActive) {
@@ -864,19 +897,25 @@ video.onerror = () => {
 }
 seek.oninput = () => {
   fill(seek)
-  if (loaded && Number.isFinite(video.duration)) {
+  if (loaded && Number.isFinite(totalDuration())) {
     if (playback === 'finished') playback = 'idle'
-    video.currentTime = (Number(seek.value) * video.duration) / 1000
+    seekTo((Number(seek.value) * totalDuration()) / 1000)
   }
 }
-seek.onchange = () => void save(video.currentTime === 0)
+seek.onchange = () => { if (pendingSeek === undefined) void save(video.currentTime === 0) }
 video.onloadedmetadata = () => {
   if (video.videoWidth && video.videoHeight)
     el('stage').style.aspectRatio = video.videoWidth + '/' + video.videoHeight
 }
+video.ondurationchange = () => {
+  const requested = pendingSeek
+  applySeek()
+  if (loaded && requested !== undefined && pendingSeek === undefined) void save(requested === 0)
+  updateTime()
+}
 el('restart').onclick = () => {
   if (playback === 'finished') playback = 'idle'
-  video.currentTime = 0
+  seekTo(0)
   el('resumed').hidden = true
   void save(true)
 }

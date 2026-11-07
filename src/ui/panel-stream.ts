@@ -18,6 +18,7 @@ export function panelStream(
   ended: () => void,
 ) {
   if (!Hls.isSupported()) throw Error('当前面板不支持分段解码，可使用同窗分屏')
+  let initialManifest = true
   class PanelLoader implements Loader<LoaderContext> {
     context: LoaderContext | null = null
     stats = new LoadStats()
@@ -33,7 +34,10 @@ export function panelStream(
       const receive = async () => {
         const asset = ctx.url.slice(base.length)
         if (!ctx.url.startsWith(base)) throw Error('无效媒体来源')
-        if (asset === 'index.m3u8') return manifest
+        if (asset === 'index.m3u8') {
+          if (initialManifest) { initialManifest = false; return manifest }
+          return (await call<{ manifest: string }>('read_panel_manifest', { episodeId, stream }, 8000)).manifest
+        }
         let offset = 0,
           buffer: Uint8Array<ArrayBuffer> | undefined
         do {
@@ -69,6 +73,7 @@ export function panelStream(
   const hls = new Hls({
     loader: PanelLoader,
     enableWorker: false,
+    startPosition: 0,
     maxBufferLength: 16,
     maxMaxBufferLength: 24,
     backBufferLength: 12,
