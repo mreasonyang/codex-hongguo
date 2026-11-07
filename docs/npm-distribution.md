@@ -26,7 +26,7 @@ npx "@kyun.si/codex-hongguo@latest" uninstall
 
 ## 运行环境与包内容
 
-npm 包的 `os` 为 darwin/linux/win32，Windows 需要 x64 或 ARM64 Node；ARM64 系统需要 Windows 11 和插件 >=0.0.30。Windows PowerShell 使用 `npx.cmd "@kyun.si/codex-hongguo@latest" setup`，详见 [Windows 支持](windows-support.md)。三平台的自动化安装验证与桌面播放观察分别记录。需要外部 Node.js >=22.16（含 npm）和 Codex CLI。播放组件由安装器自动从原始发行者下载到用户缓存，校验固定的 SHA-256 后使用；不需要全局安装 FFmpeg。包内提供 JavaScript 依赖、播放器、SDK/WASM、播放组件清单和许可说明。
+npm 包的 `os` 为 darwin/linux/win32，Windows 需要 x64 或 ARM64 Node；ARM64 系统需要 Windows 11 和插件 >=0.0.30。Windows PowerShell 使用 `npx.cmd "@kyun.si/codex-hongguo@latest" setup`，详见 [Windows 支持](windows-support.md)。三平台的自动化安装验证与桌面播放观察分别记录。需要外部 Node.js >=22.16（含 npm）和 Codex CLI。播放组件由安装器自动下载到用户缓存，校验固定的归档和可执行文件 SHA-256 后使用；不需要全局安装 FFmpeg。macOS 使用原始发行者的组件，Windows/Linux 使用本项目独立发布的精简组件。包内提供 JavaScript 依赖、播放器、SDK/WASM、播放组件清单和许可说明。
 
 MCP 使用同名的 `bin/run-node` / Windows `bin/run-node.exe` 入口，Hooks 按平台调用同一启动器。两者都检查 Node 版本及 `node:sqlite`；POSIX 保留 PATH、Homebrew、Volta、nvm、mise、fnm 查找，Windows 支持 PATH、常见 Node、Volta、nvm-windows 和 Scoop 位置。源码构建需 Go >=1.25，发行包使用者无需安装 Go。FFmpeg/Codex 通过 `src/runtime/executables.mjs` 查找，显式覆盖项见 [CONTRIBUTING](../CONTRIBUTING.md#运行环境与诊断)。覆盖值必须在实际宿主子进程的环境中可见。
 
@@ -37,6 +37,25 @@ MCP 使用同名的 `bin/run-node` / Windows `bin/run-node.exe` 入口，Hooks �
 - `bin/`、预构建的 `dist/cli/`、`dist/server/`、`dist/hooks/`、`dist/setup/` 和 `dist/ui/`。
 - `dist/vendor/openhongguo/`，包括 WASM。
 - 截取后的中英文 README、项目 MIT 许可证 `LICENSE` 和 `licenses/` 第三方许可声明。
+
+README 的界面截图以无损 WebP 留在源码仓库中，npm 包和离线 ZIP 均不携带截图。
+打包后的中英文 README 使用与发行版本标签绑定的 GitHub 图片地址，保留截图展示。
+安装验收检查安装目录中没有截图，且两份 README 的图片链接均指向该版本。
+
+播放组件下载的总时限为 30 分钟，最多三次尝试共用该时限；等待另一安装完成的时限为 32 分钟。
+安装过程每 30 秒更新锁的时间，避免旧版本将慢速下载误判为废弃安装。
+环境检查的外层时限覆盖等待、下载与解压校验，不会在原先的 15 秒处提前结束。
+
+Windows/Linux 精简组件由 `.github/workflows/ffmpeg-components.yml` 单独发布。
+流程先核对固定上游归档的完整 SHA-256，提取唯一的普通可执行文件，再保留其原始字节重打包。
+组件带 GPLv3、上游许可和来源说明；独立发行提供 FFmpeg 源码快照、固定构建脚本与依赖来源索引。
+Windows/Linux x64 通过实际 H.264/AAC、HEVC 转 H.264、JPEG 封面和 framehash 检查后才发布。
+ARM64 校验源归档、架构和可执行文件字节一致性；这些回执不代表 ARM64 实机播放验收。
+组件使用独立的 `ffmpeg-*` 预发布标签，不推进 npm 正式通道或正式市场索引。
+
+精简组件的 `cacheKey` 保持原缓存目录。升级复用旧回执时，必须匹配本插件所有者、回执版本和固定的可执行文件哈希，
+并重新校验实际文件；内存中的校验缓存也绑定该可执行文件身份。
+因此仅改变压缩归档不会触发同一程序的重复下载，损坏、身份不符或被替换的程序仍需重新安装。
 
 包不声明安装依赖或生命周期脚本，也不包含本机绝对路径、观看媒体、设备档案、测试数据和凭据。便携清单保留在源码，安装包采用已验证的兼容清单。项目采用 [MIT 许可证](../LICENSE)，npm 元数据使用 `MIT`；第三方依赖仍按各自许可分发。
 
@@ -71,7 +90,7 @@ node scripts/verify-install.mjs --playback
 
 ## 版本与 CI 发布
 
-普通提交、PR 和本地候选安装不触发 npm 发布。一个待发布版本可以包含多次修改；只在准备下一次正式发布时递增版本，构建、测试和本地安装都不自动改版本号。已发布版本不能覆盖。
+普通提交、PR 和本地候选安装不触发 npm 发布。一个待发布版本可以包含多次修改；正式版沿用三段数字（每段 0–999）；测试版使用下一正式版本加 `-beta.N`，N 从 1 开始。构建、测试和本地安装都不自动改版本号。已发布版本不能覆盖。
 
 发布由 `.github/workflows/publish.yml` 负责：
 
@@ -92,8 +111,20 @@ git push origin v0.0.34
 
 失败后优先在同一工作流中仅重跑失败的 job，复用原有验收包；也可以手动选择既有标签并明确勾选 `publish=true`。若 npm 已存在该版本，只有完整性完全一致才可继续收尾；若重新构建的内容不同，流程失败，不覆盖、不推进索引。不得移动已经发布的标签来替换内容。
 
+npm 上传成功与公开元数据可见可能相隔数分钟。发布脚本最多等待十分钟回读版本、完整性和渠道指向；若仍超时，先检查 registry，再重跑原工作流的失败 job。仅因回读延迟不需要递增版本或再次上传。
+
 ## npm 受信任发布者
 
 在 npm 包设置中为 `mreasonyang/codex-hongguo` 的 `publish.yml` 配置受信任发布者，并允许直接 `npm publish`。流程使用 GitHub 托管 runner、Node 24、npm 11 和仅发布 job 的 `id-token: write`，不保存长期 npm token。配置要求以 [npm 受信任发布者文档](https://docs.npmjs.com/trusted-publishers/) 为准；预演不验证 npm 账户端的发布授权。
 
 `scripts/publish.mjs` 默认为预览；实际上传必须显式 `--publish`，且具备 CI OIDC、版本标签和三平台回执。本机 `npm run release:publish` 不再作为正式发布入口。`release/candidate.json` 绑定源码与产物，`release/qualifications/` 保存各平台安装回执，合并后的 `release/verification.json` 用于发布校验。公开用户安装和桌面实播仍需分别验收。
+
+## Beta 发布
+
+`npm run version:beta` 从 `0.0.34` 生成 `0.0.35-beta.1`，再次执行生成 `0.0.35-beta.2`。版本脚本同步 package、lock 和两个插件清单。已发布版本不可覆盖；不要移动已发布标签。
+
+Beta 可以从功能分支发布。提交代码和版本后推送匹配标签（例如 `v0.0.35-beta.1`），沿用同一份产物的三平台回归和安装验收，再由原有 `publish.yml` 通过 OIDC 执行 `npm publish --tag beta`。发布脚本检查 beta 指向和包完整性，并确认 `latest` 未改变；不更新正式市场索引，也不向 main 提交 beta 发布记录。发布回执保存在 Actions 的 publication artifact。
+
+Windows 用户始终使用 `npx.cmd "@kyun.si/codex-hongguo@beta" setup` / `update`，无需知道具体 beta 编号。安装器将自身 beta 版本写入独立版本目录的本机索引，并固定安装该版本。卸载识别 beta 索引，切换至 `@latest setup` 保留进度和设置。
+
+准备转正式版时，`npm run version:patch` 将 `0.0.35-beta.N` 提升为 `0.0.35`，将正式源码合入 main 后再推送正式标签。正式发布仍要求 main 历史，并显式指定 `--tag latest`。发布渠道从版本推导，不能把 beta 版本标成 latest；已存在更新版本时拒绝回退渠道。

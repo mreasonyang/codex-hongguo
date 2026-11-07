@@ -4,9 +4,9 @@ import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isVersion, releaseChannel, compareVersions } from '../src/runtime/version.mjs'
 
 const name = '@kyun.si/codex-hongguo'
-const versionPattern = /^(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})$/
 const shaPattern = /^[a-f0-9]{40}$/
 const platforms = ['darwin', 'linux', 'win32']
 const requiredChecks = ['native-npm-source', 'progress-preserved', 'sound-preferences-preserved']
@@ -24,15 +24,16 @@ export function git(root, ...args) {
 export async function resolveRelease(root, { event, ref, sha, tag = '', publish = false }) {
   if (event === 'push' && ref?.startsWith('refs/tags/')) { tag = ref.slice(10); publish = true }
   check(shaPattern.test(sha), 'A full source SHA is required')
-  check(!tag || (tag.startsWith('v') && versionPattern.test(tag.slice(1))), 'Invalid release tag')
+  check(!tag || (tag.startsWith('v') && isVersion(tag.slice(1))), 'Invalid release tag')
   check(!publish || tag, 'Publishing requires an existing version tag')
   const source = git(root, 'rev-parse', (tag ? 'refs/tags/' + tag : sha) + '^{commit}')
   if (event === 'push' && ref?.startsWith('refs/tags/')) check(source === git(root, 'rev-parse', sha + '^{commit}'), 'Pushed tag source changed')
   const pkg = JSON.parse(git(root, 'show', source + ':package.json'))
-  check(pkg.name === name && versionPattern.test(pkg.version), 'Invalid package version')
+  check(pkg.name === name && isVersion(pkg.version), 'Invalid package version')
   check(!tag || tag === 'v' + pkg.version, 'Tag and package version differ')
-  if (publish) git(root, 'merge-base', '--is-ancestor', source, 'origin/main')
-  return { source_sha: source, version: pkg.version, release_tag: tag, publish: String(publish) }
+  const channel = releaseChannel(pkg.version)
+  if (publish && channel === 'latest') git(root, 'merge-base', '--is-ancestor', source, 'origin/main')
+  return { source_sha: source, version: pkg.version, channel, release_tag: tag, publish: String(publish) }
 }
 
 export async function validateCandidate(root, expectedSha) {
@@ -41,7 +42,8 @@ export async function validateCandidate(root, expectedSha) {
   const pkg = await json(resolve(root, 'release/npm/codex-hongguo/package.json'))
   check(candidate.schema === 1 && shaPattern.test(candidate.sourceCommit), 'Invalid candidate source')
   check(!expectedSha || candidate.sourceCommit === expectedSha, 'Candidate source differs')
-  check(candidate.name === name && versionPattern.test(candidate.version), 'Invalid candidate version')
+  check(candidate.name === name && isVersion(candidate.version), 'Invalid candidate version')
+  check(candidate.channel === releaseChannel(candidate.version), 'Candidate channel differs')
   check(!candidate.releaseTag || candidate.releaseTag === 'v' + candidate.version, 'Candidate tag differs')
   check(metadata.name === name && pkg.name === name && metadata.version === candidate.version && pkg.version === candidate.version, 'Package metadata differs')
   check(candidate.filename === `kyun.si-codex-hongguo-${candidate.version}.tgz` && metadata.filename === candidate.filename, 'Invalid archive name')
@@ -60,12 +62,12 @@ export async function prepareCandidate(root, expectedSha, releaseTag = '') {
   check(!git(root, 'status', '--porcelain'), 'Release source must be clean')
   const pkg = await json(resolve(root, 'package.json'))
   const metadata = await json(resolve(root, 'release/package-metadata.json'))
-  check(pkg.name === name && versionPattern.test(pkg.version) && metadata.version === pkg.version, 'Package version differs')
+  check(pkg.name === name && isVersion(pkg.version) && metadata.version === pkg.version, 'Package version differs')
   check(!releaseTag || (releaseTag === 'v' + pkg.version && git(root, 'rev-parse', 'refs/tags/' + releaseTag + '^{commit}') === expectedSha), 'Release tag differs')
   check(metadata.filename === `kyun.si-codex-hongguo-${pkg.version}.tgz`, 'Invalid archive name')
   const bytes = await readFile(resolve(root, 'release', metadata.filename))
   const candidate = {
-    schema: 1, name, version: pkg.version, sourceCommit: expectedSha, releaseTag, filename: metadata.filename,
+    schema: 1, name, version: pkg.version, channel: releaseChannel(pkg.version), sourceCommit: expectedSha, releaseTag, filename: metadata.filename,
     sha256: hash(bytes), integrity: 'sha512-' + hash(bytes, 'sha512', 'base64'),
     offlineSha256: hash(await readFile(resolve(root, `release/codex-hongguo-${pkg.version}.zip`))),
     indexSha256: hash(await readFile(resolve(root, 'release/marketplace/.agents/plugins/marketplace.json'))),
@@ -112,7 +114,7 @@ export async function qualifiedCandidate(root, expectedSha) {
 }
 
 export async function registryPackage(candidate, fetchImpl = fetch) {
-  const response = await fetchImpl('https://registry.npmjs.org/' + encodeURIComponent(candidate.name) + '/' + candidate.version, { signal: AbortSignal.timeout(10000) })
+  const response = await fetchImpl('https://registry.npmjs.org/' + candidate.name.replace('/', '%2f') + '/' + candidate.version, { headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(10000) })
   if (response.status === 404) return null
   check(response.ok, 'Registry request failed')
   const pkg = await response.json()
@@ -120,19 +122,33 @@ export async function registryPackage(candidate, fetchImpl = fetch) {
   return pkg
 }
 
+export async function registryTags(candidate, fetchImpl = fetch) {
+  // Query tags directly instead of a potentially stale package metadata document.
+  const response = await fetchImpl('https://registry.npmjs.org/-/package/' + candidate.name.replace('/', '%2f') + '/dist-tags', {
+    headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(10000),
+  })
+  if (response.status === 404) return {}
+  check(response.ok, 'Registry channel request failed')
+  const tags = await response.json()
+  check(tags && typeof tags === 'object' && !Array.isArray(tags), 'Invalid registry channels')
+  for (const channel of ['latest', 'beta']) check(tags[channel] === undefined ||
+    (isVersion(tags[channel]) && releaseChannel(tags[channel]) === channel), 'Invalid registry channel version')
+  return tags
+}
+
 export async function updatePublishedIndex(root, fetchImpl = fetch) {
   const candidate = await qualifiedCandidate(root)
   const publication = await json(resolve(root, 'release/publication.json'))
-  check(publication.registryConfirmed === true && publication.name === name && publication.version === candidate.version && publication.sourceCommit === candidate.sourceCommit && publication.integrity === candidate.integrity && publication.sha256 === candidate.sha256, 'Publication receipt differs')
+  check(publication.registryConfirmed === true && publication.channel === candidate.channel && publication.name === name && publication.version === candidate.version && publication.sourceCommit === candidate.sourceCommit && publication.integrity === candidate.integrity && publication.sha256 === candidate.sha256, 'Publication receipt differs')
   check(await registryPackage(candidate, fetchImpl), 'Package is not visible in npm')
   const indexPath = resolve(root, '.agents/plugins/marketplace.json')
   const current = (await json(indexPath)).plugins?.[0]?.source?.version
-  check(versionPattern.test(current), 'Invalid current marketplace version')
+  check(isVersion(current) && releaseChannel(current) === 'latest', 'Invalid current marketplace version')
   const recordPath = resolve(root, `docs/releases/npm-${candidate.version}.json`)
   const existing = await json(recordPath).catch(error => { if (error.code !== 'ENOENT') throw error })
   check(!existing || (existing.integrity === candidate.integrity && existing.sourceCommit === candidate.sourceCommit), 'Existing release record differs')
-  const numeric = version => version.split('.').reduce((total, part) => total * 1000 + Number(part), 0)
-  if (numeric(current) <= numeric(candidate.version)) await copyFile(resolve(root, 'release/marketplace/.agents/plugins/marketplace.json'), indexPath)
+  if (candidate.channel === 'latest' && compareVersions(current, candidate.version) <= 0)
+    await copyFile(resolve(root, 'release/marketplace/.agents/plugins/marketplace.json'), indexPath)
   await mkdir(resolve(root, 'docs/releases'), { recursive: true })
   if (!existing) await save(recordPath, publication)
 }

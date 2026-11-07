@@ -23,6 +23,7 @@ jobs:
     outputs:
       source_sha: ${{ steps.source.outputs.source_sha }}
       version: ${{ steps.source.outputs.version }}
+      channel: ${{ steps.source.outputs.channel }}
       release_tag: ${{ steps.source.outputs.release_tag }}
       publish: ${{ steps.source.outputs.publish }}
     steps:
@@ -110,6 +111,9 @@ jobs:
           RELEASE_SOURCE_SHA: ${{ needs.resolve.outputs.source_sha }}
           RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
           RELEASE_PUBLISH: 'true'
+      - name: Record beta without advancing the stable marketplace
+        if: needs.resolve.outputs.channel == 'beta'
+        run: node scripts/release-artifacts.mjs index
       - id: receipt
         run: echo "name=publication-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
@@ -119,6 +123,7 @@ jobs:
           path: release/publication.json
   finalize:
     needs: [resolve, bundle, publish]
+    if: needs.resolve.outputs.channel == 'latest'
     runs-on: ubuntu-latest
     permissions:
       contents: write

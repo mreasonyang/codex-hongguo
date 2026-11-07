@@ -1,0 +1,31 @@
+{
+  "environment": "Codex in-app browser; production HTTP UI; synthetic media and test-only save failures; native main window not tested",
+  "englishAutosaveChecked": true,
+  "enterSaveChecked": true,
+  "invalidKeywordsBlocked": true,
+  "invalidKeywordsKeptCover": true,
+  "failure": {
+    "stayedOpen": true,
+    "coverUnchanged": true,
+    "message": "设置未保存，请点击关闭或换一页重试"
+  },
+  "retry": {
+    "closed": true,
+    "coverChanged": true,
+    "video": {
+      "paused": false,
+      "time": 18.88302
+    }
+  },
+  "progressAfter": {
+    "paused": false,
+    "time": 33.809334
+  },
+  "reload": {
+    "closeButton": "关闭",
+    "pause": false,
+    "submitButtons": 0,
+    "terms": "接口，测试"
+  },
+  "blurSaveChecked": true
+}

@@ -1,0 +1,22 @@
+{
+  "version": "0.0.35-beta.4",
+  "releaseCandidate": "0.0.35-beta.5",
+  "browser": "Codex in-app browser",
+  "fixture": "Production HTTP UI with isolated Service/SQLite and synthetic media",
+  "checks": [
+    { "check": "Escape closes with hover enabled", "passed": true },
+    { "check": "Outside click closes with hover disabled without activating Play", "passed": true },
+    { "check": "Escape closes with hover disabled", "passed": true },
+    { "check": "Invalid keywords block outside-click dismissal", "passed": true },
+    { "check": "Failed saves keep Settings open with an error", "passed": true },
+    { "check": "Outside click retries the failed save before closing", "passed": true },
+    { "check": "Saved keywords persist after reopening", "passed": true },
+    { "check": "Moving into chat covers the panel without closing Settings", "passed": true },
+    { "check": "Returning restores the same open Settings", "passed": true },
+    { "check": "Outside click closes with hover enabled", "passed": true },
+    { "check": "Moving into chat with hover disabled keeps Settings visible", "passed": true },
+    { "check": "Escape closes the actual nested Settings with hover disabled", "passed": true }
+  ],
+  "passed": true,
+  "nativeDesktopPlaybackVerified": false
+}

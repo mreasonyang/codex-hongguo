@@ -5,6 +5,9 @@ import { mediaErrorMessage, waitForMetadata } from './media-startup'
 import { finishedTurn, startedTurn } from './playback-turn'
 import { browser, call, connect, hostLocale, type Context, type State, type Preferences } from './api'
 import { pickLabel, showWaitingPicks, waitingCard, type WaitingSelection } from './waiting'
+import { createHoverDecoy } from './hover-decoy'
+import { createCoverPage } from './cover-page'
+import { createSettings } from './settings'
 
 type Series = {
   id: string
@@ -68,7 +71,7 @@ let lastSave = 0,
 
 let prefs: Preferences = {
   autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
-  defaultMuted: true, volume: 0.7,
+  defaultMuted: true, volume: 0.7, hoverDecoyEnabled: false, coverStyle: 'random',
   searchTerms: ['总裁', '重生', '逆袭'],
 }
 let playback: 'idle' | 'playing' | 'finished' = 'idle'
@@ -91,7 +94,54 @@ let waitingPlaybackId: number | undefined
 let pendingRecommendationTurn: string | undefined
 let openingPreferencesLoaded = false, openingPreferencesLoading: Promise<void> | undefined
 let preferencesGeneration = 0, lastVolume = 0.7, lastDefaultMuted = true, pendingVolume: number | undefined
+let preferencesRevision = 0
 let volumeTimer: ReturnType<typeof setTimeout> | undefined, volumeSaved = Promise.resolve()
+type HoverResume = { action: number; selection: number; episodeId: string; turn?: string; automatic: boolean }
+let hoverResume: HoverResume | undefined, activeStart: { turn?: string; automatic: boolean } | undefined
+let turnStateAvailable = false
+const decoy = createHoverDecoy({ changed: decoyChanged })
+const coverPage = createCoverPage(el('decoy'))
+const settings = createSettings({
+  read: () => prefs,
+  save: patch => call<Preferences>('set_preferences', patch, 4000),
+  edited: () => { ++preferencesRevision },
+  applied: updated => {
+    ++preferencesRevision
+    const termsChanged = JSON.stringify(prefs.searchTerms) !== JSON.stringify(updated.searchTerms)
+    syncDefaultMute(updated)
+    prefs = updated
+    configureDecoy()
+    autoNext.checked = prefs.autoplayNext
+    if (!autoNext.checked) cancelNextPreload()
+    renderPicks()
+    if (termsChanged && !series) void list().catch(error => notice(explain(error)))
+  },
+  translate: tr,
+})
+function configureDecoy() {
+  coverPage.configure(prefs.coverStyle)
+  settings.sync()
+  decoy.configure(prefs)
+}
+function decoyChanged(covered: boolean) {
+  if (covered) {
+    const resume = !!episode && (!video.paused || preparing || playback === 'playing')
+    const pending = preparing ? activeStart : undefined
+    void pause('', true, true)
+    if (resume) hoverResume = { action, selection, episodeId: episode!.id,
+      turn: pending?.turn, automatic: pending?.automatic ?? false }
+  } else {
+    const intent = hoverResume
+    hoverResume = undefined
+    if (!intent) return
+    const valid = () => !decoy.covered && pageActive && intent.action === action &&
+      intent.selection === selection && intent.episodeId === episode?.id
+    // Consume a terminal task transition before resuming a retained player.
+    void poll().then(() => {
+      if (valid() && turnStateAvailable) return start(intent.turn, intent.automatic)
+    })
+  }
+}
 function flushVolume() {
   clearTimeout(volumeTimer)
   volumeTimer = undefined
@@ -110,6 +160,7 @@ function openingPreferences() {
   const work = flushVolume().then(() => call<Preferences>('get_preferences')).then(settings => {
     if (generation !== preferencesGeneration || !playerReady) return
     prefs = settings
+    configureDecoy()
     lastVolume = Number.isFinite(prefs.volume) && prefs.volume > 0 && prefs.volume <= 1 ? prefs.volume : 0.7
     video.volume = lastVolume
     video.muted = lastDefaultMuted = prefs.defaultMuted ?? true
@@ -169,7 +220,8 @@ function save(reset = false) {
     .catch(() => notice('观看进度暂未写入，请检查本机服务'))
   return saved
 }
-function pause(reason = '', preserveRecommendation = false) {
+function pause(reason = '', preserveRecommendation = false, preserveHover = false) {
+  if (!preserveHover) hoverResume = undefined
   if (!preserveRecommendation) pendingRecommendationTurn = undefined
   if (reason === '已手动暂停') confirmWaitingPlayback()
   action++
@@ -720,14 +772,17 @@ function poll() {
 }
 async function readTurnState() {
   try {
+    const revision = preferencesRevision
     const state = await call<State>('get_run_state', {
       observeSession: true, playerInstance: document.hidden ? undefined : instance,
     }, 1800)
     if (!pageActive) return
-    if (state.preferences) {
+    turnStateAvailable = true
+    if (state.preferences && revision === preferencesRevision) {
       const promptChanged = prefs.autoPrompt !== state.preferences.autoPrompt
       syncDefaultMute(state.preferences)
       prefs = state.preferences
+      configureDecoy()
       autoNext.checked = prefs.autoplayNext
       if (!autoNext.checked) cancelNextPreload()
       if (promptChanged) renderPicks()
@@ -743,6 +798,7 @@ async function readTurnState() {
         video.paused && !preparing) void start(state.turnId!, true)
   } catch {
     if (!pageActive) return
+    turnStateAvailable = false
     el('lamp').classList.remove('on')
     text('state', '本机状态不可达')
   }
@@ -770,6 +826,12 @@ function playlistDuration(manifest: string) {
 }
 async function start(recommendationTurn?: string, automatic = false) {
   if (!episode?.playable || !series || !pageActive) return
+  activeStart = { turn: recommendationTurn, automatic }
+  if (decoy.covered) {
+    hoverResume = { action: ++action, selection, episodeId: episode.id, turn: recommendationTurn, automatic }
+    return
+  }
+  hoverResume = undefined
   pendingRecommendationTurn = automatic ? undefined : recommendationTurn
   const n = ++action,
     ep = episode,
@@ -866,6 +928,7 @@ async function start(recommendationTurn?: string, automatic = false) {
     video.playbackRate = parseFloat(el<HTMLSelectElement>('speed').value)
     try {
       await video.play()
+      if (decoy.covered || !pageActive) { video.pause(); return }
     } catch (error) {
       if (n !== action || !pageActive) return
       if (!(error instanceof DOMException && ['AbortError', 'NotAllowedError'].includes(error.name)) ||
@@ -929,8 +992,8 @@ video.onpause = () => {
   if (document.hidden || !document.hasFocus() || backgroundPlayback?.action === action)
     rememberBackgroundPlayback()
 }
-video.onplay = syncButtons
-video.onplaying = confirmWaitingPlayback
+video.onplay = () => { if (decoy.covered) video.pause(); syncButtons() }
+video.onplaying = () => { if (decoy.covered) video.pause(); else confirmWaitingPlayback() }
 video.onerror = () => {
   if (loaded) {
     void pause(mediaErrorMessage(video.error?.code))
@@ -979,7 +1042,7 @@ async function fullscreen() {
     return
   }
   try {
-    await stage.requestFullscreen()
+    await el('playerRoot').requestFullscreen()
   } catch {
     stage.classList.add('expanded')
     syncFullscreen()
@@ -1074,46 +1137,14 @@ el('copy').onclick = async () => {
     notice('链接已选中，请复制并在 Codex 内置浏览器打开')
   }
 }
-el('settingsCancel').onclick = () => el('prefs').click()
 el('prefs').onclick = async () => {
   if (!playerReady) return
+  if (!el('settings').hidden) { await settings.finish(); return }
   try {
     await openingPreferences()
     if (!playerReady) return
-    el('settings').hidden = !el('settings').hidden
-    el('prefs').setAttribute('aria-expanded', String(!el('settings').hidden))
-    el<HTMLInputElement>('autoPrompt').checked = prefs.autoPrompt
-    el<HTMLInputElement>('autoPauseOnFinish').checked = prefs.autoPauseOnFinish
-    el<HTMLInputElement>('autoPlayOnStart').checked = prefs.autoPlayOnStart
-    el<HTMLInputElement>('defaultMuted').checked = prefs.defaultMuted
-    el<HTMLInputElement>('terms').value = prefs.searchTerms.join('，')
+    settings.open()
   } catch (error) { notice(explain(error)) }
-}
-el('settings').onsubmit = (e) => {
-  e.preventDefault()
-  const generation = preferencesGeneration
-  const searchTerms = el<HTMLInputElement>('terms')
-    .value.split(/[,，]/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-  void call<typeof prefs>('set_preferences', {
-    autoPrompt: el<HTMLInputElement>('autoPrompt').checked,
-    autoPauseOnFinish: el<HTMLInputElement>('autoPauseOnFinish').checked,
-    autoPlayOnStart: el<HTMLInputElement>('autoPlayOnStart').checked,
-    defaultMuted: el<HTMLInputElement>('defaultMuted').checked,
-    searchTerms,
-  })
-    .then(async (updated) => {
-      if (generation !== preferencesGeneration || !playerReady) return
-      syncDefaultMute(updated)
-      prefs = updated
-      autoNext.checked = prefs.autoplayNext
-      el('settings').hidden = true
-      el('prefs').setAttribute('aria-expanded', 'false')
-      renderPicks()
-      if (!series) await list()
-    })
-    .catch((err) => notice(explain(err)))
 }
 el('choose').onclick = async () => {
   try {
@@ -1145,18 +1176,19 @@ async function suspend() {
   await Promise.all([pause('已暂停，点击播放继续', true), presence(false), flushVolume()])
 }
 function retryInterruptedPlayback(intent: InterruptedPlayback) {
-  if (intent.action !== action || !pageActive || !loaded || playback !== 'playing' ||
+  if (decoy.covered || intent.action !== action || !pageActive || !loaded || playback !== 'playing' ||
       !video.paused || video.ended || video.error) return
   const position = video.currentTime
   // If the host refuses to play, wait for focus to return instead of looping at the same frame.
   if (intent.lastPosition !== undefined && Math.abs(position - intent.lastPosition) < 0.25) return
   intent.lastPosition = position
   void video.play().then(() => {
+    if (decoy.covered || !pageActive) { video.pause(); return }
     if (intent.action === action && !video.paused) notice('正在播放')
   }).catch(() => {})
 }
 function rememberBackgroundPlayback() {
-  if (!pageActive || playback !== 'playing') return
+  if (decoy.covered || !pageActive || playback !== 'playing') return
   if (backgroundPlayback?.action !== action) backgroundPlayback = { action }
   retryInterruptedPlayback(backgroundPlayback)
 }
@@ -1226,6 +1258,7 @@ function closePlayer() {
   const stopped = suspend()
   playerReady = false
   ++preferencesGeneration
+  settings.reset()
   openingPreferencesLoaded = false
   openingPreferencesLoading = undefined
   el<HTMLButtonElement>('mute').disabled = true
@@ -1243,8 +1276,10 @@ const waiting = isWaiting ? waitingCard(
   selected => { void initPlayer(selected).catch(e => notice(explain(e))) }, closePlayer,
 ) : null
 void connect(ctx => {
-  initLocale(hostLocale())
+  const locale = hostLocale()
+  initLocale(locale)
+  coverPage.initialize(locale)
   context = ctx
   if (waiting) { if (ctx.waitingTurn) waiting.connected() }
   else void initPlayer().catch(e => notice(explain(e)))
-}, async () => { waiting?.dispose(); await closePlayer() }, () => waiting?.modeChanged()).catch(e => notice(explain(e)))
+}, async () => { waiting?.dispose(); await closePlayer(); decoy.dispose() }, () => waiting?.modeChanged()).catch(e => notice(explain(e)))

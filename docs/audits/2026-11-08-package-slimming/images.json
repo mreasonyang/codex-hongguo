@@ -1,0 +1,23 @@
+{
+  "encoder": "ImageMagick, lossless WebP, exact transparent RGB",
+  "images": [
+    {
+      "image": "catalog",
+      "format": "webp",
+      "success": true,
+      "originalBytes": 5044124,
+      "compressedBytes": 2743180,
+      "pixelsIdentical": true,
+      "dimensionsIdentical": true
+    },
+    {
+      "image": "player",
+      "format": "webp",
+      "success": true,
+      "originalBytes": 4770214,
+      "compressedBytes": 2603448,
+      "pixelsIdentical": true,
+      "dimensionsIdentical": true
+    }
+  ]
+}

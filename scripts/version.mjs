@@ -1,12 +1,19 @@
 import { readFileSync, writeFileSync } from 'node:fs'
+import { isVersion, nextBetaVersion } from '../src/runtime/version.mjs'
+import { spawnSync, findExecutable } from '../src/runtime/executables.mjs'
 
 const read = (path) => JSON.parse(readFileSync(path, 'utf8'))
 const mode = process.argv[2]
 const current = read('package.json').version
+if (mode === '--beta') {
+  const result = spawnSync(findExecutable('npm'), ['version', nextBetaVersion(current), '--no-git-tag-version'], { stdio: 'inherit' })
+  if (result.status !== 0) throw Error('Beta 版本更新失败')
+  process.exit(0)
+}
 // npm supplies the proposed version before changing package.json or the lockfile.
 const version = mode === '--next' ? process.env.npm_new_version : current
-if (typeof version !== 'string' || !/^(?:0|[1-9]\d{0,2})(?:\.(?:0|[1-9]\d{0,2})){2}$/.test(version)) {
-  throw new Error('版本号须为三段 0–999 的整数。第三位达到 999 后，请由维护者明确指定下一版本。')
+if (!isVersion(version)) {
+  throw new Error('版本号须为三段 0–999 的整数，可附加 -beta.N（N 为正整数）。第三位达到 999 后，请明确指定下一版本。')
 }
 if (mode !== '--next') {
   const lock = read('package-lock.json')

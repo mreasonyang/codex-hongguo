@@ -1,0 +1,239 @@
+{
+  "candidate": "0.0.35-beta.10",
+  "summary": {
+    "coverTransitions": [
+      true,
+      false
+    ],
+    "settingsKeptOpen": true,
+    "outsideCoordinateEvents": 13
+  },
+  "trace": [
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "minutes",
+      "at": 77421.5,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "keydown",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "minutes",
+      "at": 77475.80000007153,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "minutes",
+      "at": 93713.10000002384,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "cover",
+      "covered": true,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 93809.89999997616,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "blur",
+      "covered": true,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 93810.20000004768,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "pointerout",
+      "covered": true,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 93849.89999997616,
+      "x": -160.59375,
+      "y": 175,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "root-leave",
+      "covered": true,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 93850.20000004768,
+      "x": -160.59375,
+      "y": 175,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "mouseout",
+      "covered": true,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 93850.30000007153,
+      "x": -161,
+      "y": 175,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "mouseleave",
+      "covered": true,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 93850.39999997616,
+      "x": -161,
+      "y": 175,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "mouseleave",
+      "covered": true,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 93850.5,
+      "x": -161,
+      "y": 175,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "mouseleave",
+      "covered": true,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 93850.39999997616,
+      "x": -161,
+      "y": 175,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "mouseleave",
+      "covered": true,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 93851.39999997616,
+      "x": -161,
+      "y": 175,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "mouseleave",
+      "covered": true,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 93851.39999997616,
+      "x": -161,
+      "y": 175,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "mouseleave",
+      "covered": true,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 93850.5,
+      "x": -161,
+      "y": 175,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "mouseleave",
+      "covered": true,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 93851.39999997616,
+      "x": -161,
+      "y": 175,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "mouseleave",
+      "covered": true,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 93851.5,
+      "x": -161,
+      "y": 175,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "mouseleave",
+      "covered": true,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 93851.10000002384,
+      "x": -161,
+      "y": 175,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "mouseleave",
+      "covered": true,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 93851.5,
+      "x": -161,
+      "y": 175,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": true,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 94628.30000007153,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "cover",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 94730.30000007153,
+      "width": 584,
+      "height": 707
+    }
+  ]
+}

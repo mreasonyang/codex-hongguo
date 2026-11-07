@@ -1,0 +1,12 @@
+{
+  "blankAreaCovered": "false",
+  "pureExitResult": {
+    "covered": "true",
+    "rootHeight": 800,
+    "settingsClosed": true,
+    "template": "minutes",
+    "viewportHeight": 800
+  },
+  "interaction": "mouse movement only on exit; no outside click",
+  "screenshot": "dismiss-exit-fixed.jpg"
+}

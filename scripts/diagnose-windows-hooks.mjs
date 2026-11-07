@@ -4,6 +4,7 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { findExecutable, spawn, spawnSync, stopChild } from '../src/runtime/executables.mjs'
+import { isVersion } from '../src/runtime/version.mjs'
 
 const pluginId = 'codex-hongguo@hongguo-local'
 const expectedEvents = ['UserPromptSubmit', 'Stop', 'Interrupt']
@@ -25,7 +26,7 @@ function installedState(command) {
   const result = commandJson(command, ['plugin', 'list', '--marketplace', 'hongguo-local', '--json'])
   if (result.error) return { error: result.error }
   const row = result.value?.installed?.find(p => p.pluginId === pluginId)
-  return row ? { installed: true, enabled: row.enabled === true, version: /^\d+\.\d+\.\d+$/.test(row.version) ? row.version : 'unknown' } : { installed: false }
+  return row ? { installed: true, enabled: row.enabled === true, version: isVersion(row.version) ? row.version : 'unknown' } : { installed: false }
 }
 function hookFeature(command) {
   const result = spawnSync(command, ['features', 'list'], { encoding: 'utf8', timeout, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] })
@@ -45,7 +46,7 @@ function cachedFiles(codexHome) {
     const hooks = jsonFile(join(root, 'hooks', 'hooks.json'))
     const manifest = portable ?? compatibility
     return {
-      version: /^\d+\.\d+\.\d+$/.test(manifest?.version) ? manifest.version : 'unknown',
+      version: isVersion(manifest?.version) ? manifest.version : 'unknown',
       portableManifestPresent: existsSync(join(root, 'plugin.json')),
       compatibilityManifestPresent: existsSync(join(root, '.codex-plugin', 'plugin.json')),
       expectedCompatibilityHookPath: compatibility?.hooks === './hooks/hooks.json',
