@@ -15,7 +15,7 @@ Watch Hongguo short dramas in the right-hand panel of Codex Desktop, with browsi
 
 This is an independent, unofficial plugin with original icon artwork. The red fruit echoes the name Hongguo ("red fruit"), while the leaf and play button form the plugin's own mark.
 
-After installation and Hook review, continue working normally. The optional **Watch while you wait** card offers up to three shows per turn. It prioritizes **Continue watching**, or **Watch next** when the saved episode is complete and another episode is available. Other slots rotate unwatched shows. Clicking a title opens the player in that chat and starts muted playback.
+After installation and Hook review, continue working normally. The optional **Watch while you wait** card offers up to three shows per turn. It prioritizes **Continue watching**, or **Watch next** when the saved episode is complete and another episode is available. Other slots rotate unwatched shows. Clicking a title opens the player in that chat and uses your default-mute setting.
 
 ## Installation & Setup
 
@@ -62,7 +62,7 @@ Default installation and updates do not require Git. The command checks Node, np
 | Watch independently | In Codex Desktop with the plugin installed, click [Open Hongguo Short Dramas](codex://plugins/codex-hongguo@hongguo-local/app/open_drama_panel) to open the standalone catalog. To play and pause automatically with tasks, open the player from the corresponding chat instead. |
 
 - **Browse & resume**: The catalog shows saved titles as it refreshes. On first use, titles appear as soon as the first batch arrives. Click any show title in Recommendations, Search results, or Watch history (`观看历史`) to start playing. Previously watched shows automatically resume from your last episode and timestamp, with a banner option to **Start over** (`从头播放`). Watch history is grouped by show and supports removing individual entries.
-- **Muted by default & playback controls**: Playback starts muted whenever you open the player; click the speaker button to unmute. On-screen controls support scrubbing, playback speed (`0.75×`–`2×`), and fullscreen. The episode selector groups episodes in sets of 50 with Previous, Next, and random episode buttons.
+- **Default mute & playback controls**: Turn off **Mute by default** in Settings to open new players at the last volume. When enabled, new players start muted and restore that volume when unmuted. The speaker button controls only the current player; switching episodes and resuming preserve its sound state. On-screen controls support scrubbing, playback speed (`0.75×`–`2×`), and fullscreen. The episode selector groups episodes in sets of 50 with Previous, Next, and random episode buttons.
 - **Watch while waiting**: Both the conversation card and catalog can offer up to 3 titles. Choices stay fixed within a turn. Chats share local rotation records, which advance after titles become visible. Disable suggestions or edit additional search keywords in **Settings**.
 - **Pause and resume.** Click the picture, center button or toolbar playback button to pause. Click again to resume from the same position, during or after a task.
 - **Background playback.** Playback continues when you switch windows or tabs. When automatic pausing is enabled, a task ending or being interrupted in this chat also pauses background playback. Closing the player saves your position.
@@ -76,8 +76,9 @@ Open **Settings** at the top right of the player, make your changes, and click *
 | --- | --- | --- |
 | Pause automatically when a task ends | On | Pause and save your position when a task in this chat finishes or is interrupted. Turn it off for continuous playback. |
 | Play automatically when a task starts | On | Play the selected episode from its current position when a new task starts in the same chat. |
+| Mute by default | On | Open new players muted. Turn off to use the last volume. Changes apply the next time you open the player. |
 
-The switches are independent, saved across restarts, and shared by all chats. Other open players sync saved settings. Autoplay requires an open player with an episode selected; it does not choose a show or reopen a closed player. Manual pausing lasts for the current task; the autoplay switch determines whether the next task resumes playback. Updates preserve saved choices.
+Settings are independent, saved across restarts, and shared by all chats. Task playback switches sync to open players; default mute and remembered volume apply when opening a new player. Autoplay requires an open player with an episode selected; it does not choose a show or reopen a closed player. Manual pausing lasts for the current task; the autoplay switch determines whether the next task resumes playback. Updates preserve saved choices.
 
 ## Troubleshooting
 

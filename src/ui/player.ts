@@ -68,6 +68,7 @@ let lastSave = 0,
 
 let prefs: Preferences = {
   autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
+  defaultMuted: true, volume: 0.7,
   searchTerms: ['总裁', '重生', '逆袭'],
 }
 let playback: 'idle' | 'playing' | 'finished' = 'idle'
@@ -88,6 +89,38 @@ let playerReady = false, timer: number | undefined
 let promptTurn: string | null = null, promptRender: AbortController | undefined
 let waitingPlaybackId: number | undefined
 let pendingRecommendationTurn: string | undefined
+let openingPreferencesLoaded = false, openingPreferencesLoading: Promise<void> | undefined
+let preferencesGeneration = 0, lastVolume = 0.7, pendingVolume: number | undefined
+let volumeTimer: ReturnType<typeof setTimeout> | undefined, volumeSaved = Promise.resolve()
+function flushVolume() {
+  clearTimeout(volumeTimer)
+  volumeTimer = undefined
+  const volume = pendingVolume
+  pendingVolume = undefined
+  if (volume !== undefined) volumeSaved = volumeSaved
+    .then(() => call('set_preferences', { volume }, 1800))
+    .then(() => {})
+    .catch(() => notice('音量暂未保存，请检查本机服务'))
+  return volumeSaved
+}
+function openingPreferences() {
+  if (openingPreferencesLoaded) return Promise.resolve()
+  if (openingPreferencesLoading) return openingPreferencesLoading
+  const generation = preferencesGeneration
+  const work = flushVolume().then(() => call<Preferences>('get_preferences')).then(settings => {
+    if (generation !== preferencesGeneration || !playerReady) return
+    prefs = settings
+    lastVolume = Number.isFinite(prefs.volume) && prefs.volume > 0 && prefs.volume <= 1 ? prefs.volume : 0.7
+    video.volume = lastVolume
+    video.muted = prefs.defaultMuted ?? true
+    autoNext.checked = prefs.autoplayNext ?? true
+    openingPreferencesLoaded = true
+    el<HTMLButtonElement>('mute').disabled = false
+    renderPicks()
+  }).finally(() => { if (openingPreferencesLoading === work) openingPreferencesLoading = undefined })
+  openingPreferencesLoading = work
+  return work
+}
 function confirmWaitingPlayback() {
   pendingRecommendationTurn = undefined
   const playbackId = waitingPlaybackId
@@ -737,6 +770,8 @@ async function start(recommendationTurn?: string, automatic = false) {
   syncButtons()
   el('stopped').hidden = true
   try {
+    const sound = openingPreferences()
+    void sound.catch(() => {})
     if (!loaded) {
       notice('正在准备播放…')
       // Progress lookup can run while the server downloads and prepares the first fragment.
@@ -803,6 +838,8 @@ async function start(recommendationTurn?: string, automatic = false) {
       }
       loaded = true
     }
+    await sound
+    if (n !== action || !pageActive) return
     // Delayed recommendations and turn-start autoplay must still belong to a
     // running turn. Ordinary Play on loaded media needs no host request.
     if (recommendationTurn) {
@@ -819,9 +856,6 @@ async function start(recommendationTurn?: string, automatic = false) {
     if (playback === 'finished') seekTo(0)
     playback = 'playing'
     video.playbackRate = parseFloat(el<HTMLSelectElement>('speed').value)
-    // A host may reuse an iframe that the viewer previously unmuted. Opening
-    // a recommendation crosses an async tab handoff, so start that click muted.
-    if (recommendationTurn && !automatic) video.muted = true
     try {
       await video.play()
     } catch (error) {
@@ -921,7 +955,7 @@ el('restart').onclick = () => {
 }
 el('mute').onclick = () => {
   if (video.volume === 0) {
-    video.volume = 0.7
+    video.volume = lastVolume
     video.muted = false
   } else video.muted = !video.muted
 }
@@ -968,8 +1002,14 @@ video.onvolumechange = () => {
   const silent = video.muted || video.volume === 0
   setIcon(el('mute'), silent ? 'mute' : 'volume', tr(silent ? '取消静音' : '静音'))
   el('mute').setAttribute('aria-pressed', String(silent))
+  if (openingPreferencesLoaded && Number.isFinite(video.volume) && video.volume > 0 && video.volume !== lastVolume) {
+    lastVolume = video.volume
+    prefs.volume = pendingVolume = lastVolume
+    clearTimeout(volumeTimer)
+    volumeTimer = setTimeout(() => { void flushVolume() }, 150)
+  }
 }
-video.volume = 0.7
+el<HTMLButtonElement>('mute').disabled = true
 el<HTMLSelectElement>('speed').onchange = (e) =>
   (video.playbackRate = parseFloat((e.target as HTMLSelectElement).value))
 const queryInput = el<HTMLInputElement>('query')
@@ -1027,13 +1067,19 @@ el('copy').onclick = async () => {
   }
 }
 el('settingsCancel').onclick = () => el('prefs').click()
-el('prefs').onclick = () => {
-  el('settings').hidden = !el('settings').hidden
-  el('prefs').setAttribute('aria-expanded', String(!el('settings').hidden))
-  el<HTMLInputElement>('autoPrompt').checked = prefs.autoPrompt
-  el<HTMLInputElement>('autoPauseOnFinish').checked = prefs.autoPauseOnFinish
-  el<HTMLInputElement>('autoPlayOnStart').checked = prefs.autoPlayOnStart
-  el<HTMLInputElement>('terms').value = prefs.searchTerms.join('，')
+el('prefs').onclick = async () => {
+  if (!playerReady) return
+  try {
+    await openingPreferences()
+    if (!playerReady) return
+    el('settings').hidden = !el('settings').hidden
+    el('prefs').setAttribute('aria-expanded', String(!el('settings').hidden))
+    el<HTMLInputElement>('autoPrompt').checked = prefs.autoPrompt
+    el<HTMLInputElement>('autoPauseOnFinish').checked = prefs.autoPauseOnFinish
+    el<HTMLInputElement>('autoPlayOnStart').checked = prefs.autoPlayOnStart
+    el<HTMLInputElement>('defaultMuted').checked = prefs.defaultMuted
+    el<HTMLInputElement>('terms').value = prefs.searchTerms.join('，')
+  } catch (error) { notice(explain(error)) }
 }
 el('settings').onsubmit = (e) => {
   e.preventDefault()
@@ -1045,6 +1091,7 @@ el('settings').onsubmit = (e) => {
     autoPrompt: el<HTMLInputElement>('autoPrompt').checked,
     autoPauseOnFinish: el<HTMLInputElement>('autoPauseOnFinish').checked,
     autoPlayOnStart: el<HTMLInputElement>('autoPlayOnStart').checked,
+    defaultMuted: el<HTMLInputElement>('defaultMuted').checked,
     searchTerms,
   })
     .then(async (updated) => {
@@ -1082,9 +1129,9 @@ function presence(visible: boolean) {
   return call('set_player_visible', { instance, visible }, 1800).catch(() => {})
 }
 async function suspend() {
-  if (!pageActive) return
+  if (!pageActive) return flushVolume()
   pageActive = false
-  await Promise.all([pause('已暂停，点击播放继续', true), presence(false)])
+  await Promise.all([pause('已暂停，点击播放继续', true), presence(false), flushVolume()])
 }
 function retryInterruptedPlayback(intent: InterruptedPlayback) {
   if (intent.action !== action || !pageActive || !loaded || playback !== 'playing' ||
@@ -1146,12 +1193,7 @@ async function initPlayer(selection?: WaitingSelection) {
   current = null
   displayState()
   activatePage()
-  void call<typeof prefs>('get_preferences').then(settings => {
-    if (!playerReady) return
-    prefs = settings
-    autoNext.checked = prefs.autoplayNext ?? true
-    renderPicks()
-  }).catch(e => notice(explain(e)))
+  void openingPreferences().catch(e => notice(explain(e)))
   if (selection?.pick) {
     const pick = selection.pick
     await select(pick, pick.episodeId, selection.play, selection.turnId)
@@ -1172,6 +1214,10 @@ async function initPlayer(selection?: WaitingSelection) {
 function closePlayer() {
   const stopped = suspend()
   playerReady = false
+  ++preferencesGeneration
+  openingPreferencesLoaded = false
+  openingPreferencesLoading = undefined
+  el<HTMLButtonElement>('mute').disabled = true
   pendingRecommendationTurn = undefined
   if (navigator.mediaSession) {
     navigator.mediaSession.setActionHandler('pause', null)

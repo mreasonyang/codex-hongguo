@@ -16,7 +16,7 @@ const root = join(tmp, '本地 市场'),
   profile = join(tmp, '独立配置')
 const npmMarket = join(tmp, 'npm 市场')
 const version = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version
-const playerUri = 'ui://hongguo/v17/player', waitingUri = 'ui://hongguo/v17/waiting'
+const playerUri = 'ui://hongguo/v18/player', waitingUri = 'ui://hongguo/v18/waiting'
 const commands = Object.fromEntries(['npm', 'codex', 'openssl'].map(name => [name, findExecutable(name)]))
 const env = {
   HOME: tmp,
@@ -98,7 +98,7 @@ try {
   await assert.rejects(access(env.HONGGUO_FORBIDDEN_FFMPEG), '不应调用系统 FFmpeg')
   const seeded = new Store(defaultData)
   seeded.save({ seriesId: 'hg-987654321', episodeId: 'hg-987654322', title: '安装验收进度', label: '2', positionMs: 12345, durationMs: 60000 })
-  seeded.setPreferences({ autoPrompt: true, searchTerms: ['总裁', '重生', '逆袭'] })
+  seeded.setPreferences({ autoPrompt: true, searchTerms: ['总裁', '重生', '逆袭'], defaultMuted: false, volume: 0.43 })
   seeded.setSetupDismissed(true)
   seeded.close()
   run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
@@ -258,6 +258,9 @@ try {
   assert.ok(!opened.isError && typeof opened._meta?.panel === 'string', '打开播放器失败')
   const history = await hostCall('get_history', { panel: opened._meta.panel })
   assert.equal(history._meta?.data?.items?.find(row => row.seriesId === 'hg-987654321')?.positionMs, 12345, '重复安装后观看进度丢失')
+  const preferences = (await hostCall('get_preferences', { panel: opened._meta.panel }))._meta?.data
+  assert.equal(preferences?.defaultMuted, false, '重复安装后默认静音设置丢失')
+  assert.equal(preferences?.volume, 0.43, '重复安装后音量记忆丢失')
   const firstSetup = await hostCall('get_setup_status', { panel: opened._meta.panel })
   assert.equal(firstSetup._meta?.data?.dismissed, true, '重复安装后引导设置丢失')
   assert.equal(firstSetup._meta.data.hooks.status, 'manual_check')
@@ -381,7 +384,7 @@ try {
     platform: process.platform, arch: process.arch,
     powershellInstall: process.platform === 'win32' ? ['5.1', '7'] : [],
     checkedAt: new Date().toISOString(),
-    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'progress-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'installation-trust-instructions', 'minimal-player-ui', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'npx-uninstall', 'uninstall-dry-run', 'repeat-uninstall', 'uninstall-without-media-runtime', 'uninstall-cleans-component-directory-and-partial-downloads', 'uninstall-preserves-external-executables', 'uninstall-deletes-all-local-data'],
+    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'progress-preserved', 'sound-preferences-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'installation-trust-instructions', 'minimal-player-ui', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'npx-uninstall', 'uninstall-dry-run', 'repeat-uninstall', 'uninstall-without-media-runtime', 'uninstall-cleans-component-directory-and-partial-downloads', 'uninstall-preserves-external-executables', 'uninstall-deletes-all-local-data'],
     mediaDecoded: process.argv.includes('--playback'), desktopPlaybackObserved: false,
   }, null, 2) + '\n')
 } finally {

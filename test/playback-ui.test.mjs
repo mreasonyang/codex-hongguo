@@ -34,7 +34,7 @@ class Video extends Element {
 // start and pause paths run unchanged against a real Service and SQLite store.
 const source = readFileSync(new URL('../src/ui/player.ts', import.meta.url), 'utf8') + `
 export const fixture = {
-  poll, pause, suspend, start, select, nextEpisode, home,
+  poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer,
   selected() {
     context = { identified: true }; pageActive = playerReady = loaded = true;
     series = { id: 'hg-1', title: 'Test' };
@@ -101,7 +101,9 @@ test('global playback switches default for older settings, synchronize across ch
   f.store.db.prepare('INSERT OR REPLACE INTO player_preferences VALUES(1,?)').run(JSON.stringify({ autoPrompt: false }))
   assert.equal(f.peer.preferences().autoPauseOnFinish, true)
   assert.equal(f.peer.preferences().autoPlayOnStart, true)
-  await f.settings({ autoPauseOnFinish: false, autoPlayOnStart: true })
+  assert.equal(f.peer.preferences().defaultMuted, true)
+  assert.equal(f.peer.preferences().volume, 0.7)
+  await f.settings({ autoPauseOnFinish: false, autoPlayOnStart: true, defaultMuted: false, volume: 0.42 })
   const snapshot = await f.service.call(f.panel, 'get_run_state', { observeSession: true })
   assert.equal(snapshot.preferences.autoPauseOnFinish, false)
   assert.equal(snapshot.preferences.autoPlayOnStart, true)
@@ -110,26 +112,33 @@ test('global playback switches default for older settings, synchronize across ch
     assert.equal(reopened.preferences().autoPauseOnFinish, false)
     assert.equal(reopened.preferences().autoPlayOnStart, true)
     assert.equal(reopened.preferences().autoPrompt, false)
+    assert.equal(reopened.preferences().defaultMuted, false)
+    assert.equal(reopened.preferences().volume, 0.42)
   } finally { reopened.close() }
   await f.settings({ autoPlayOnStart: false })
   const explicitlyDisabled = new Store(f.store.root)
   try { assert.equal(explicitlyDisabled.preferences().autoPlayOnStart, false) }
   finally { explicitlyDisabled.close() }
   await assert.rejects(f.settings({ autoPlayOnStart: 'yes' }), /参数无效/)
+  await assert.rejects(f.settings({ defaultMuted: 'yes' }), /参数无效/)
+  for (const volume of [0, -1, 1.01, NaN, Infinity]) await assert.rejects(f.settings({ volume }), /参数无效/)
 })
 
-test('the two settings controls load and save through the player form', async t => {
+test('playback and default-mute settings load and save through the player form', async t => {
   const f = setup(t)
   f.event('one'); await f.poll()
-  f.elements.get('prefs').onclick()
+  await f.elements.get('prefs').onclick()
   assert.equal(f.elements.get('autoPauseOnFinish').checked, true)
   assert.equal(f.elements.get('autoPlayOnStart').checked, true)
+  assert.equal(f.elements.get('defaultMuted').checked, true)
   f.elements.get('autoPauseOnFinish').checked = false
   f.elements.get('autoPlayOnStart').checked = false
+  f.elements.get('defaultMuted').checked = false
   f.elements.get('settings').onsubmit({ preventDefault() {} })
   await flush()
   assert.equal(f.peer.preferences().autoPauseOnFinish, false)
   assert.equal(f.peer.preferences().autoPlayOnStart, false)
+  assert.equal(f.peer.preferences().defaultMuted, false)
   assert.equal(f.elements.get('settings').hidden, true)
 })
 
@@ -240,7 +249,7 @@ test('a delayed automatic start cannot play after its task has ended, even with 
   assert.equal(f.video.plays, 0)
 })
 
-test('a recommendation starts muted when a reused player was previously unmuted', async t=>{
+test('a newly opened player applies default mute before a recommendation starts', async t=>{
   const f=setup(t)
   f.event('one'); await f.poll()
   f.video.muted=false; f.video.requireMuted=true
@@ -248,6 +257,94 @@ test('a recommendation starts muted when a reused player was previously unmuted'
   assert.equal(f.video.paused,false)
   assert.equal(f.video.muted,true)
   assert.equal(f.video.plays,1)
+})
+
+for (const defaultMuted of [false, true]) test(`new players restore volume and default mute=${defaultMuted}, while resume preserves manual choices`, async t => {
+  const f = setup(t)
+  await f.settings({ defaultMuted, volume: 0.42 })
+  await f.ui.openingPreferences()
+  assert.equal(f.video.volume, 0.42)
+  assert.equal(f.video.muted, defaultMuted)
+  f.elements.get('mute').onclick(); f.video.onvolumechange()
+  assert.equal(f.video.muted, !defaultMuted)
+  await f.ui.start()
+  await f.ui.pause('已手动暂停')
+  await f.ui.start()
+  f.event('one'); await f.poll()
+  assert.equal(f.video.muted, !defaultMuted)
+  assert.equal(f.video.volume, 0.42)
+  assert.equal(f.peer.preferences().defaultMuted, defaultMuted)
+  await f.ui.closePlayer()
+  f.ui.selected()
+  await f.ui.openingPreferences()
+  assert.equal(f.video.muted, defaultMuted)
+  assert.equal(f.video.volume, 0.42)
+})
+
+test('volume changes flush on close, while muting and zero volume preserve the last audible level', async t => {
+  const f = setup(t)
+  await f.settings({ defaultMuted: false, volume: 0.42 })
+  await f.ui.openingPreferences()
+  f.video.volume = 0.29; f.video.onvolumechange()
+  f.elements.get('mute').onclick(); f.video.onvolumechange()
+  f.video.volume = 0; f.video.onvolumechange()
+  await f.ui.closePlayer()
+  const reopened = new Store(f.store.root)
+  try {
+    assert.equal(reopened.preferences().volume, 0.29)
+    assert.equal(reopened.preferences().defaultMuted, false)
+  } finally { reopened.close() }
+  f.ui.selected()
+  await f.ui.openingPreferences()
+  assert.equal(f.video.volume, 0.29)
+  assert.equal(f.video.muted, false)
+})
+
+test('updating global sound defaults never changes the sound in an already-open player', async t => {
+  const f = setup(t)
+  await f.settings({ defaultMuted: false, volume: 0.42 })
+  await f.ui.openingPreferences()
+  await f.ui.start()
+  await f.settings({ defaultMuted: true, volume: 0.81 })
+  await f.poll()
+  assert.equal(f.video.muted, false)
+  assert.equal(f.video.volume, 0.42)
+  f.elements.get('mute').onclick(); f.video.onvolumechange()
+  await f.ui.suspend()
+  assert.equal(f.peer.preferences().volume, 0.81, 'a mute event must not overwrite another player volume')
+})
+
+test('disabling default mute keeps recommendations audible and never silently mutes after a host rejection', async t => {
+  const f = setup(t)
+  await f.settings({ defaultMuted: false, volume: 0.37 })
+  f.event('one'); await f.poll()
+  f.video.requireMuted = true
+  await f.ui.start('one')
+  assert.equal(f.video.muted, false)
+  assert.equal(f.video.volume, 0.37)
+  assert.equal(f.video.plays, 0)
+  assert.match(f.elements.get('notice').textContent, /宿主阻止了自动播放.*点击播放/)
+  f.video.requireMuted = false
+  await f.ui.start()
+  assert.equal(f.video.muted, false)
+  assert.equal(f.video.plays, 1)
+})
+
+test('closing while sound preferences load prevents a late reply from starting or changing the closed player', async t => {
+  const f = setup(t), original = f.service.call.bind(f.service)
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  f.service.call = async (scope, name, args) => {
+    if (name === 'get_preferences') await gate
+    return original(scope, name, args)
+  }
+  const starting = f.ui.start()
+  await flush()
+  assert.equal(f.video.plays, 0)
+  await f.ui.closePlayer()
+  release(); await starting
+  assert.equal(f.video.plays, 0)
+  assert.equal(f.elements.get('mute').disabled, true)
 })
 
 test('an ended recommendation stays paused and explains that manual playback is available', async t=>{
@@ -334,6 +431,16 @@ async function preloadFixture(t, pending = false) {
   await f.ui.start()
   return { ...f, calls }
 }
+
+test('switching episodes keeps the current manual mute state and volume', async t => {
+  const f = await preloadFixture(t)
+  f.video.muted = false; f.video.volume = 0.31; f.video.onvolumechange()
+  await f.ui.nextEpisode()
+  assert.equal(f.video.muted, false)
+  assert.equal(f.video.volume, 0.31)
+  await f.ui.suspend()
+  assert.equal(f.peer.preferences().volume, 0.31)
+})
 
 test('only the next episode is warmed near the end and playback reuses that preparation', async t => {
   const f = await preloadFixture(t)

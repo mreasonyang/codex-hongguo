@@ -64,6 +64,8 @@ export const schemas = {
     autoplayNext: z.boolean().optional(),
     autoPauseOnFinish: z.boolean().optional(),
     autoPlayOnStart: z.boolean().optional(),
+    defaultMuted: z.boolean().optional(),
+    volume: z.number().positive().max(1).optional(),
   }),
   read_panel_chunk: z.object({
     episodeId: dramaId,

@@ -12,6 +12,8 @@ export type Preferences = {
   autoplayNext: boolean
   autoPauseOnFinish: boolean
   autoPlayOnStart: boolean
+  defaultMuted: boolean
+  volume: number
   searchTerms: string[]
 }
 export type State = {
@@ -78,7 +80,7 @@ export async function call<T>(name: string, args: Record<string, unknown> = {}, 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(args),
-      keepalive: name === 'save_progress',
+      keepalive: name === 'save_progress' || (name === 'set_preferences' && 'volume' in args),
       signal: AbortSignal.timeout(timeout),
     })
     const data = await r.json()
