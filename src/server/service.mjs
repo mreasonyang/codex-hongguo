@@ -46,6 +46,7 @@ export const schemas = {
     reset: z.literal(true).optional(),
   }),
   prepare_playback: z.object({ episodeId: dramaId, retry: z.boolean().optional() }),
+  preload_playback: z.object({ episodeId: dramaId }),
   create_browser_pairing: z.object({
     follow: z.boolean().optional(),
     turnId: id.optional(),
@@ -262,6 +263,14 @@ export class Service {
         if (!this.store.persistent) throw new PlayerError('本机进度目录不可写', 503)
         this.catalog.cache?.hold(p.episodeId)
         return this.store.save(p)
+      case 'preload_playback': {
+        if (!scope.allowed?.has(p.episodeId))
+          throw new PlayerError('请先选择可播放的分集', 403)
+        // Warm the shared cache without changing the current stream or granting
+        // access to speculative media. Playback still goes through prepare_playback.
+        const { status } = this.catalog.prepare(p.episodeId, browser, false, true)
+        return { status }
+      }
       case 'prepare_playback': {
         if (!scope.allowed?.has(p.episodeId))
           throw new PlayerError('请先选择可播放的分集', 403)

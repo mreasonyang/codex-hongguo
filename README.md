@@ -49,7 +49,7 @@ npx.cmd "@kyun.si/codex-hongguo@latest" setup
 
 ![红果短剧目录：推荐、搜索、继续观看与观看历史](docs/images/codex-hongguo-catalog.png)
 
-**播放界面**：在聊天右侧观看，支持选集和连播。
+**播放界面**：在聊天右侧观看，支持选集和连播。开启连播时，在本集最后约 30 秒（短集的最后四分之一）后台预加载下一集，减少切集等待；只提前准备一集，失败不影响当前播放。
 
 ![在 Codex 处理任务时，于右侧面板观看红果短剧](docs/images/codex-hongguo-player.png)
 

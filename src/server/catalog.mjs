@@ -266,7 +266,7 @@ export class Catalog {
     } while (cursor)
     return null
   }
-  prepare(id, browser, retry) {
+  prepare(id, browser, retry, preload = false) {
     if (!this.ffmpeg) {
       void this.prepareMediaRuntime().catch(() => {})
       return { status: 'preparing' }
@@ -276,6 +276,6 @@ export class Catalog {
     if (result.status !== 'ready') return result
     if (browser) return { ...result, src: 'media/' + id }
     this.panelMedia ??= new PanelMedia(this.store.root)
-    return { ...result, ...this.panelMedia.prepare(id, this.cache.path(id), retry, result.codec) }
+    return { ...result, ...this.panelMedia.prepare(id, this.cache.path(id), retry, result.codec, preload) }
   }
 }

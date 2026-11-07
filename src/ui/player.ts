@@ -75,6 +75,8 @@ type InterruptedPlayback = { action: number; lastPosition?: number }
 let backgroundPlayback: InterruptedPlayback | undefined
 let closeStream: (() => void) | undefined
 let mediaLoad: AbortController | undefined
+let nextPreload: { selection: number; episodeId: string } | undefined
+let episodePage: { selection: number; cursor: string; promise: Promise<boolean> } | undefined
 let group = 0,
   batch = 0,
   watched: Progress[] = [],
@@ -129,6 +131,7 @@ function pause(reason = '', preserveRecommendation = false) {
   if (!preserveRecommendation) pendingRecommendationTurn = undefined
   if (reason === '已手动暂停') confirmWaitingPlayback()
   action++
+  cancelNextPreload()
   backgroundPlayback = undefined
   preparing = false
   if (playback !== 'finished') playback = 'idle'
@@ -141,6 +144,7 @@ function pause(reason = '', preserveRecommendation = false) {
   return save()
 }
 function release() {
+  cancelNextPreload()
   loaded = false
   playback = 'idle'
   mediaLoad?.abort()
@@ -253,35 +257,81 @@ async function playEpisode(ep: Episode) {
   drawEpisodes()
   await start()
 }
-async function moreEpisodes() {
-  if (!series || !epCursor) return
+async function moreEpisodes(quiet = false): Promise<boolean> {
+  if (!series || !epCursor) return false
   const t = selection,
     old = epCursor
   try {
-    const page = await call<Page<Episode>>('get_episodes', { seriesId: series.id, cursor: old })
-    if (t !== selection || old !== epCursor) return
-    episodes.push(...page.items)
-    epCursor = page.cursor === old ? undefined : page.cursor
-    drawEpisodes()
+    if (episodePage?.selection !== t || episodePage.cursor !== old) {
+      const seriesId = series.id
+      const pending = {
+        selection: t, cursor: old,
+        promise: (async () => {
+          const page = await call<Page<Episode>>('get_episodes', { seriesId, cursor: old })
+          if (t !== selection || old !== epCursor) return false
+          const known = new Set(episodes.map(ep => ep.id))
+          for (const ep of page.items) if (!known.has(ep.id)) { episodes.push(ep); known.add(ep.id) }
+          epCursor = page.cursor === old ? undefined : page.cursor
+          drawEpisodes()
+          return true
+        })(),
+      }
+      episodePage = pending
+      void pending.promise.finally(() => { if (episodePage === pending) episodePage = undefined }).catch(() => {})
+    }
+    return await episodePage.promise
   } catch (e) {
-    notice(explain(e))
+    if (!quiet && t === selection) notice(explain(e))
+    return false
   }
 }
-el('moreEpisodes').onclick = moreEpisodes
+el('moreEpisodes').onclick = () => { void moreEpisodes() }
+async function followingEpisode(valid: () => boolean, quiet = false) {
+  if (!episode) return
+  const following = () => episodes.slice(episodes.indexOf(episode!) + 1).find(e => e.playable)
+  let next = following()
+  const tried = new Set<string>()
+  while (!next && epCursor && !tried.has(epCursor) && valid()) {
+    tried.add(epCursor)
+    if (!await moreEpisodes(quiet) || !valid()) return
+    next = following()
+  }
+  return valid() ? next : undefined
+}
+function cancelNextPreload() {
+  nextPreload = undefined
+}
+function preloadNextEpisode() {
+  const duration = video.duration, remaining = duration - video.currentTime
+  if (!loaded || !episode || !pageActive || video.paused || !autoNext.checked ||
+      !Number.isFinite(duration) || !Number.isFinite(remaining) || duration <= 0 || remaining <= 0 ||
+      remaining > Math.min(30 * (video.playbackRate || 1), duration / 4)) return
+  if (nextPreload?.selection === selection && nextPreload.episodeId === episode.id) return
+  const work = nextPreload = { selection, episodeId: episode.id }
+  const valid = () => nextPreload === work && pageActive && autoNext.checked &&
+    selection === work.selection && episode?.id === work.episodeId
+  void (async () => {
+    const next = await followingEpisode(valid, true)
+    if (!next || !valid()) return
+    const until = Date.now() + 240000
+    while (valid() && Date.now() < until) {
+      const result = await call<{ status: 'preparing' | 'ready' | 'error' }>(
+        'preload_playback', { episodeId: next.id },
+      )
+      if (result.status !== 'preparing' || !valid()) return
+      await sleep(700)
+    }
+  })().catch(() => { /* Speculation must never interrupt or replace the playing episode. */ })
+}
 async function nextEpisode(auto = false) {
   if (!episode) return
   const id = episode.id,
     show = selection,
     ticket = action
-  let next = episodes.slice(episodes.indexOf(episode) + 1).find((e) => e.playable)
-  const tried = new Set<string>()
-  while (!next && epCursor && !tried.has(epCursor)) {
-    tried.add(epCursor)
-    await moreEpisodes()
-    if (selection !== show || episode?.id !== id || action !== ticket) return
-    next = episodes.slice(episodes.indexOf(episode) + 1).find((e) => e.playable)
-  }
-  if (!pageActive || (auto && !autoNext.checked)) return
+  const valid = () => selection === show && episode?.id === id && action === ticket &&
+    pageActive && (!auto || autoNext.checked)
+  const next = await followingEpisode(valid)
+  if (!valid()) return
   if (next) await playEpisode(next)
   else if (auto) void pause('本集已播完')
 }
@@ -634,6 +684,7 @@ async function readTurnState() {
       const promptChanged = prefs.autoPrompt !== state.preferences.autoPrompt
       prefs = state.preferences
       autoNext.checked = prefs.autoplayNext
+      if (!autoNext.checked) cancelNextPreload()
       if (promptChanged) renderPicks()
     }
     const reason = finishedTurn(current, state)
@@ -784,12 +835,14 @@ function finishEpisode() {
 }
 video.onended = finishEpisode
 autoNext.onchange = () => {
+  if (!autoNext.checked) cancelNextPreload()
   void call<Preferences>('set_preferences', { autoplayNext: autoNext.checked })
     .then(updated => { prefs = updated })
     .catch(e => notice(explain(e)))
 }
 video.ontimeupdate = () => {
   updateTime()
+  preloadNextEpisode()
   if (!video.paused && Date.now() - lastSave >= 5000) {
     lastSave = Date.now()
     void save()

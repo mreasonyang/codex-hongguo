@@ -34,7 +34,7 @@ class Video extends Element {
 // start and pause paths run unchanged against a real Service and SQLite store.
 const source = readFileSync(new URL('../src/ui/player.ts', import.meta.url), 'utf8') + `
 export const fixture = {
-  poll, pause, suspend, start, select,
+  poll, pause, suspend, start, select, nextEpisode, home,
   selected() {
     context = { identified: true }; pageActive = playerReady = loaded = true;
     series = { id: 'hg-1', title: 'Test' };
@@ -42,6 +42,8 @@ export const fixture = {
     episodes = [episode];
   },
   clearSelection() { series = null; episode = null },
+  setEpisodes(items, cursor) { episodes = items; episode = items[0]; epCursor = cursor },
+  episodeId() { return episode?.id },
 };`
 const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code
 const flush = async () => { for (let i = 0; i < 50; i++) await Promise.resolve() }
@@ -309,4 +311,109 @@ test('a host autoplay denial explains the required click and does not retry on i
   assert.equal(f.video.plays,0)
   await f.ui.start()
   assert.equal(f.video.plays,1)
+})
+
+const preloadEpisodes = [11, 12].map((id, i) => ({
+  id: 'hg-' + id, label: String(i + 1), number: i + 1, codec: 'h264', playable: true,
+}))
+async function preloadFixture(t, pending = false) {
+  const f = setup(t), calls = [], warm = new Set()
+  f.service.catalog = {
+    episodes: async () => ({ items: preloadEpisodes }),
+    prepare(id, browser, retry, preload) {
+      calls.push({ id, preload, hit: warm.has(id) })
+      if (preload && pending) return { status: 'preparing' }
+      warm.add(id)
+      return { status: 'ready', stream: 'stream-' + id, manifest: 'manifest' }
+    },
+    panelMedia: { pin() {}, unpin() {} },
+  }
+  await f.service.call(f.panel, 'get_episodes', { seriesId: 'hg-1' })
+  f.ui.setEpisodes(preloadEpisodes)
+  f.elements.get('autonext').checked = true
+  await f.ui.start()
+  return { ...f, calls }
+}
+
+test('only the next episode is warmed near the end and playback reuses that preparation', async t => {
+  const f = await preloadFixture(t)
+  f.video.currentTime = 44; f.video.ontimeupdate(); await flush()
+  assert.equal(f.calls.length, 0)
+  f.video.currentTime = 45; f.video.ontimeupdate(); await flush()
+  f.video.currentTime = 46; f.video.ontimeupdate(); await flush()
+  assert.deepEqual(f.calls, [{ id: 'hg-12', preload: true, hit: false }])
+  assert.equal(f.ui.episodeId(), 'hg-11')
+  assert.equal(f.video.paused, false)
+  assert.equal(f.video.plays, 1)
+  assert.equal(f.store.history('hg-1').length, 0, 'preloading must not create viewing progress')
+  await f.ui.nextEpisode()
+  assert.equal(f.ui.episodeId(), 'hg-12')
+  assert.equal(f.video.plays, 2)
+  assert.deepEqual(f.calls.at(-1), { id: 'hg-12', preload: undefined, hit: true })
+})
+
+for (const cancel of ['pause', 'disable', 'close']) test(`preloading stops polling after ${cancel}`, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const f = await preloadFixture(t, true)
+  f.video.currentTime = 50; f.video.ontimeupdate(); await flush()
+  assert.equal(f.calls.length, 1)
+  if (cancel === 'pause') await f.ui.pause('已手动暂停')
+  if (cancel === 'disable') {
+    f.elements.get('autonext').checked = false
+    f.elements.get('autonext').onchange()
+  }
+  if (cancel === 'close') await f.ui.suspend()
+  t.mock.timers.tick(700); await flush()
+  assert.equal(f.calls.length, 1)
+})
+
+test('preload failures stay silent and disabled, paused or final episodes do not preload', async t => {
+  const f = await preloadFixture(t)
+  f.video.currentTime = 50
+  f.elements.get('autonext').checked = false
+  f.video.ontimeupdate(); await flush()
+  f.elements.get('autonext').checked = true
+  await f.ui.pause()
+  f.video.ontimeupdate(); await flush()
+  assert.equal(f.calls.length, 0)
+  await f.ui.start()
+  f.service.catalog.prepare = () => { throw Error('preload failed') }
+  f.video.ontimeupdate(); await flush()
+  assert.equal(f.video.paused, false)
+  assert.equal(f.elements.get('notice').textContent, '正在播放')
+  await f.ui.pause()
+  await f.ui.start()
+  f.ui.setEpisodes([preloadEpisodes[0]])
+  f.video.ontimeupdate(); await flush()
+  assert.equal(f.calls.length, 0)
+})
+
+test('preloading finds the next playable episode across a page boundary', async t => {
+  const f = await preloadFixture(t)
+  f.ui.setEpisodes([preloadEpisodes[0]], 'page-2')
+  f.service.catalog.episodes = async () => ({ items: [
+    preloadEpisodes[0], { ...preloadEpisodes[1], id: 'hg-99', playable: false }, preloadEpisodes[1],
+  ] })
+  f.video.currentTime = 50; f.video.ontimeupdate(); await flush()
+  assert.deepEqual(f.calls, [{ id: 'hg-12', preload: true, hit: false }])
+  assert.equal(f.ui.episodeId(), 'hg-11')
+  await f.ui.nextEpisode()
+  assert.equal(f.ui.episodeId(), 'hg-12')
+})
+
+test('preloading and next playback share a pending episode page without switching after cancellation', async t => {
+  const f = await preloadFixture(t)
+  let resolve, pages = 0
+  f.service.catalog.episodes = () => { pages++; return new Promise(done => { resolve = done }) }
+  f.ui.setEpisodes([preloadEpisodes[0]], 'page-2')
+  f.video.currentTime = 50; f.video.ontimeupdate(); await flush()
+  const next = f.ui.nextEpisode()
+  await flush()
+  assert.equal(pages, 1)
+  await f.ui.pause('已手动暂停')
+  resolve({ items: [preloadEpisodes[1]] })
+  await next; await flush()
+  assert.equal(f.calls.length, 0)
+  assert.equal(f.ui.episodeId(), 'hg-11')
+  assert.equal(f.video.paused, true)
 })

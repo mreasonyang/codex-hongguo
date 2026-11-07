@@ -77,7 +77,7 @@ export class PanelMedia {
     }
     e.used = now
   }
-  prepare(id, file, retry, sourceCodec) {
+  prepare(id, file, retry, sourceCodec, preload = false) {
     this.sweep()
     let e = this.entries.get(id)
     if (e?.error && retry) {
@@ -87,7 +87,7 @@ export class PanelMedia {
     if (!e) {
       if (this.entries.size >= 4) {
         const cold = [...this.entries.values()]
-          .filter((e) => !e.pending && (!e.viewers.size || Date.now() - e.used > 30000))
+          .filter((e) => !e.pending && (!e.viewers.size || (!preload && Date.now() - e.used > 30000)))
           .sort((a, b) => a.used - b.used)[0]
         if (!cold) throw new PlayerError('侧栏播放器正忙，请稍后重试或使用分屏')
         this.drop(cold)

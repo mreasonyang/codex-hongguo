@@ -541,6 +541,54 @@ test('MCP full episode segments require the preparing panel and bounded offsets'
   await assert.rejects(svc.call(a, 'read_panel_chunk', { ...args, offset: chunk.size }))
 })
 
+test('next-episode preload preserves the active stream and reuses real prepared fragments', async t => {
+  const { store } = setup(t)
+  const catalog = cachedCatalog(t, store)
+  copyFileSync(avcFixture, catalog.cache.path('hg-102'))
+  store.db.prepare("INSERT INTO media(id,status,codec) VALUES('hg-102','ready','h264')").run()
+  catalog.episodes = async () => ({ items: [101, 102].map(id => ({ id: 'hg-' + id, playable: true })) })
+  const run = t.mock.fn(runFfmpeg)
+  catalog.panelMedia = new PanelMedia(store.root, run)
+  t.after(() => catalog.panelMedia.close())
+  const svc = new Service(store, catalog), scope = svc.panel(svc.open({}).panel)
+  await assert.rejects(svc.call(scope, 'preload_playback', { episodeId: 'hg-102' }), /请先选择/)
+  await svc.call(scope, 'get_episodes', { seriesId: 'hg-10' })
+  async function ready(method, id) {
+    for (let i = 0; i < 120; i++) {
+      const result = await svc.call(scope, method, { episodeId: id })
+      if (result.status !== 'preparing') return result
+      await new Promise(resolve => setTimeout(resolve, 20))
+    }
+    assert.fail('media preparation timed out')
+  }
+  const current = await ready('prepare_playback', 'hg-101')
+  assert.deepEqual(await ready('preload_playback', 'hg-102'), { status: 'ready' })
+  assert.equal(scope.playing, 'hg-101')
+  assert.equal(scope.streams.get('hg-101'), current.stream)
+  assert.equal(scope.streams.has('hg-102'), false)
+  assert.ok((await svc.call(scope, 'read_panel_chunk', {
+    episodeId: 'hg-101', stream: current.stream, asset: 'init.mp4', offset: 0,
+  })).bytes)
+  const built = run.mock.callCount()
+  const next = await svc.call(scope, 'prepare_playback', { episodeId: 'hg-102', retry: true })
+  assert.equal(next.status, 'ready')
+  assert.equal(run.mock.callCount(), built, 'switching must reuse fragments without another FFmpeg job')
+  scope.grants = new Set()
+  assert.deepEqual(await svc.call(scope, 'preload_playback', { episodeId: 'hg-102' }, true), { status: 'ready' })
+  assert.equal(scope.grants.size, 0, 'speculation must not grant browser media access')
+})
+
+test('speculative preparation cannot evict any pinned panel stream', t => {
+  const { store } = setup(t), media = new PanelMedia(store.root)
+  t.after(() => media.close())
+  for (let i = 0; i < 4; i++) media.entries.set('hg-' + i, {
+    id: 'hg-' + i, dir: join(media.root, 'absent-' + i), used: Date.now() - 60000,
+    pending: false, viewers: new Set([{}]),
+  })
+  assert.throws(() => media.prepare('hg-102', avcFixture, false, 'h264', true), /正忙/)
+  assert.equal(media.entries.size, 4)
+})
+
 test('provider HEVC labels select H.264, copy AAC and discard partial hardware output before fallback', async (t) => {
   const { dir, store } = setup(t)
   // Keep the probed streams constant to verify that the cached provider label reaches the segmenter.
