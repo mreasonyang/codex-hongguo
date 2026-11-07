@@ -68,6 +68,65 @@ test('a failed explicit native-binary override does not silently run a different
   await assert.rejects(ensureFfmpeg(options), /自动准备失败/)
 })
 
+test('transient HTTP and interrupted downloads retry from a clean archive before publishing verified bytes', async t => {
+  const f = await fixture(t)
+  let downloads = 0
+  const options = { ...f.options, fetchImpl: async () => {
+    downloads++
+    if (downloads === 1) return new Response('temporary outage', { status: 503 })
+    if (downloads === 2) {
+      let sent = false
+      return new Response(new ReadableStream({ pull(controller) {
+        if (!sent) { sent = true; controller.enqueue(f.archive.subarray(0, 20)) }
+        else controller.error(Object.assign(Error('SYNTHETIC_PRIVATE_NETWORK_DETAIL'), { code: 'ECONNRESET' }))
+      } }))
+    }
+    return new Response(f.archive)
+  } }
+  const target = await ensureFfmpeg(options)
+  assert.equal(downloads, 3)
+  assert.deepEqual(await readFile(target), f.binary)
+  assert.equal(isFfmpegReady(options), true)
+})
+
+test('connection timeouts stop after three attempts without retaining raw network errors', async t => {
+  const f = await fixture(t)
+  let downloads = 0
+  await assert.rejects(ensureFfmpeg({ ...f.options, fetchImpl: async () => {
+    downloads++
+    throw new TypeError('SYNTHETIC_PRIVATE_NETWORK_DETAIL', { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } })
+  } }), error => {
+    assert.equal(error.code, 'download-network')
+    assert.equal(error.cause, undefined)
+    assert.doesNotMatch(error.message, /SYNTHETIC/)
+    return true
+  })
+  assert.equal(downloads, 3)
+  await assert.rejects(lstat(ffmpegPath(f.options)), { code: 'ENOENT' })
+})
+
+test('permanent HTTP errors and integrity failures do not retry and only expose fixed diagnostic metadata', async t => {
+  for (const reason of ['http', 'hash', 'probe']) await t.test(reason, async t => {
+    const f = await fixture(t)
+    let downloads = 0
+    const wrong = Buffer.from(f.archive); wrong[0] ^= 1
+    const options = { ...f.options, probe: () => reason !== 'probe', fetchImpl: async () => {
+      downloads++
+      return reason === 'http' ? new Response('SYNTHETIC_PRIVATE_HTTP_DETAIL', { status: 403 })
+        : new Response(reason === 'hash' ? wrong : f.archive)
+    } }
+    await assert.rejects(ensureFfmpeg(options), error => {
+      assert.equal(error.code, reason === 'http' ? 'download-http' : reason === 'hash' ? 'archive-hash' : 'probe')
+      assert.equal(error.httpStatus, reason === 'http' ? 403 : undefined)
+      assert.doesNotMatch(error.message, /SYNTHETIC|fixture\.zip/)
+      return true
+    })
+    assert.equal(downloads, 1)
+    assert.equal(isFfmpegReady(options), false)
+    await assert.rejects(lstat(ffmpegPath(options)), { code: 'ENOENT' })
+  })
+})
+
 test('XZ archives are decoded without a system tar or xz program', async t => {
   const f = await fixture(t)
   const archive = Buffer.from('/Td6WFoAAATm1rRGAgAhARYAAAB0L+Wj4Cf/AH1dADkdSgEE6tmdRLuPMqEN1GnOxZ3PNdIA9kbUKZ1ZFYg80E5+tTVPpaQNJeqQV9yrg0dD7GAGPqBSYhAxG2bv4TuBScRHqIOoz0DIwskb14eZE09B+8HxzrQ0XMdb9RY5aJpCFcR7wTghGCkaSzMD5iq/8Y0IrbIZUu4Y0y8AAAAAAGpjA9Qk+eYsAAGZAYBQAABtIrlFscRn+wIAAAAABFla', 'base64')

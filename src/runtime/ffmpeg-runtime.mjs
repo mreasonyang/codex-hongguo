@@ -11,7 +11,15 @@ import artifacts from './ffmpeg-artifacts.json' with { type: 'json' }
 
 const verified = new Map(), pending = new Map()
 const runtimeOwner = '@kyun.si/codex-hongguo'
-const failure = () => Error('播放组件自动准备失败，请检查网络和缓存目录权限后重试安装。')
+const failureCodes = new Set(['prepare', 'download', 'download-url', 'download-http', 'download-network',
+  'archive-size', 'archive-hash', 'extract', 'binary-hash', 'probe', 'publish'])
+const transientNetwork = new Set(['UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_SOCKET', 'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH'])
+const transientHttp = new Set([408, 429, 500, 502, 503, 504])
+const failure = (code = 'prepare', httpStatus) => Object.assign(
+  Error('播放组件自动准备失败，请检查网络和缓存目录权限后重试安装。'),
+  { code, ...(Number.isInteger(httpStatus) && httpStatus >= 400 && httpStatus <= 599 ? { httpStatus } : {}) },
+)
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 function settings(options = {}) {
@@ -68,29 +76,45 @@ async function ready(config) {
 }
 
 async function download(artifact, destination, fetchImpl) {
-  const allowed = new Set(['github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com', 'evermeet.cx', 'www.osxexperts.net'])
   const signal = AbortSignal.timeout(300000)
+  for (let attempt = 0; ; attempt++) {
+    try { return await downloadAttempt(artifact, destination, fetchImpl, signal) }
+    catch (error) {
+      await rm(destination, { force: true })
+      const network = transientNetwork.has(error?.cause?.code || error?.code)
+      const retry = network || (error?.code === 'download-http' && transientHttp.has(error.httpStatus))
+      if (!retry || attempt >= 2 || signal.aborted) {
+        throw failure(network ? 'download-network' : failureCodes.has(error?.code) ? error.code : 'download', error?.httpStatus)
+      }
+      await pause((attempt + 1) * 1000)
+    }
+  }
+}
+async function downloadAttempt(artifact, destination, fetchImpl, signal) {
+  const allowed = new Set(['github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com', 'evermeet.cx', 'www.osxexperts.net'])
   let url = new URL(artifact.url), response
   for (let redirects = 0; redirects <= 6; redirects++) {
-    if (url.protocol !== 'https:' || url.username || url.password || url.port || !allowed.has(url.hostname)) throw failure()
+    if (url.protocol !== 'https:' || url.username || url.password || url.port || !allowed.has(url.hostname)) throw failure('download-url')
     response = await fetchImpl(url, { redirect: 'manual', signal })
     if (![301, 302, 303, 307, 308].includes(response.status)) break
     const location = response.headers.get('location')
     await response.body?.cancel()
-    if (!location || redirects === 6) throw failure()
+    if (!location || redirects === 6) throw failure('download-url')
     url = new URL(location, url)
   }
-  if (!response.ok || !response.body || Number(response.headers.get('content-length')) > artifact.archiveBytes) { await response.body?.cancel(); throw failure() }
+  if (!response.ok || !response.body) { await response.body?.cancel(); throw failure('download-http', response.status) }
+  if (Number(response.headers.get('content-length')) > artifact.archiveBytes) { await response.body.cancel(); throw failure('archive-size') }
   const file = await open(destination, 'wx', 0o600), hash = createHash('sha256')
   let size = 0
   try {
     for await (const bytes of response.body) {
       size += bytes.length
-      if (size > artifact.archiveBytes) throw failure()
+      if (size > artifact.archiveBytes) throw failure('archive-size')
       hash.update(bytes)
       await file.writeFile(bytes)
     }
-    if (size !== artifact.archiveBytes || hash.digest('hex') !== artifact.archiveSha256) throw failure()
+    if (size !== artifact.archiveBytes) throw failure('archive-size')
+    if (hash.digest('hex') !== artifact.archiveSha256) throw failure('archive-hash')
   } finally { await file.close() }
 }
 
@@ -209,19 +233,22 @@ async function install(config) {
   }
   const paths = config.platform === 'win32' ? win32 : posix
   const temporary = paths.basename(target) + '.' + randomUUID(), archive = paths.join(directory, temporary + '.archive'), output = paths.join(directory, temporary + '.part')
+  let stage = 'download'
   try {
     if (await ready(config)) return target
     await download(artifact, archive, config.fetchImpl || fetch)
+    stage = 'extract'
     await extract(artifact, archive, output)
     const binarySha256 = await digest(output)
-    if (artifact.binarySha256 && binarySha256 !== artifact.binarySha256) throw failure()
+    if (artifact.binarySha256 && binarySha256 !== artifact.binarySha256) throw failure('binary-hash')
     await chmod(output, 0o755)
-    if (!probe(output, config)) throw failure()
+    if (!probe(output, config)) throw failure('probe')
+    stage = 'publish'
     if (config.platform === 'win32') await rm(target, { force: true })
     await rename(output, target)
     await writeFile(target + '.json', JSON.stringify({ owner: runtimeOwner, schema: 1, archiveSha256: artifact.archiveSha256, binarySha256, binaryBytes: (await stat(target)).size, version: artifact.version }) + '\n', { mode: 0o600 })
     verified.set(target, signature(target))
     return target
-  } catch { throw failure() }
+  } catch (error) { throw failure(failureCodes.has(error?.code) && error.code !== 'prepare' ? error.code : stage, error?.httpStatus) }
   finally { await Promise.all([rm(archive, { force: true }), rm(output, { force: true }), rm(lock, { recursive: true, force: true })]) }
 }
