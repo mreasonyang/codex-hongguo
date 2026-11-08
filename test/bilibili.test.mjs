@@ -33,6 +33,9 @@ async function fixture(t, { payload = media, cookie = '', root } = {}) {
     async fetch(input, options) {
       const url = new URL(input); requests.push({ url, options })
       assert.equal(url.hostname, 'api.bilibili.com')
+      if (url.pathname.endsWith('/nav')) return Response.json({ code: 0, data: { isLogin: true, vipStatus: 0,
+        wbi_img: { img_url: 'https://i0.hdslb.com/bfs/wbi/' + 'a'.repeat(32) + '.png',
+          sub_url: 'https://i0.hdslb.com/bfs/wbi/' + 'b'.repeat(32) + '.png' } } })
       return Response.json({ code: 0, result: url.pathname.endsWith('/season') ? season : payload })
     },
     mediaFetcher(headers) { return async () => { assert.equal(headers.Cookie, undefined); throw Error('not requested') } },

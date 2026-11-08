@@ -254,7 +254,9 @@ export class Catalog {
       void this.prepareMediaRuntime().catch(() => {})
       return { status: 'preparing' }
     }
-    this.cache ??= new MediaCache(this.store, (ep) => this.sources.resolvePlayback(ep))
+    this.cache ??= new MediaCache(this.store, (ep) => this.sources.resolvePlayback(ep), {
+      revision: ep => this.sources.forId(ep, 'episode').adapter.auth?.revision?.() ?? '',
+    })
     const result = this.cache.prepare(id, retry)
     if (result.status !== 'ready') return result
     if (browser) return { ...result, src: 'media/' + id }

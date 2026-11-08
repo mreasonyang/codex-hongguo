@@ -1,0 +1,7 @@
+{
+  "implementation": "PASS",
+  "simulatedPremiumAndDecode": "PASS",
+  "realPremiumPlayback": "NOT_RUN_NO_PREMIUM_ACCOUNT",
+  "userRequestedScope": "implementation-and-automated-regression",
+  "installedUserPluginChanged": false
+}

@@ -1,0 +1,8 @@
+{
+  "npmSHA256": "a64642aedd14f57c39dd7aafad0a67647ac6a0726f0efa0546224f6eb0139157",
+  "sourceFilesMatched": 115,
+  "vendorMatchesTestedSdk": true,
+  "license": "AGPL-3.0-only",
+  "offlineSHA256": "fff078ee17109ddb5a1b32cff0bd5bb31abdcb73a6ca1d67e7c193c3943d15e7",
+  "hostAxiosIsolated": true
+}

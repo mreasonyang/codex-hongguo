@@ -84,16 +84,21 @@ export async function remux(raw, output, codec, key) {
 
 // SQLite coordinates multiple stdio processes sharing the same user cache.
 export class MediaCache {
-  constructor(store, resolve, { maxFiles = 40, maxBytes = 1024 * MB } = {}) {
+  constructor(store, resolve, { maxFiles = 40, maxBytes = 1024 * MB, revision = () => '' } = {}) {
     this.db = store.db
     this.resolve = resolve
+    this.revision = revision
     this.dir = join(store.root, 'media')
     this.maxFiles = maxFiles
     this.maxBytes = maxBytes
     mkdirSync(this.dir, { recursive: true, mode: 0o700 })
     this.db.exec(`CREATE TABLE IF NOT EXISTS media (
       id TEXT PRIMARY KEY, status TEXT, owner TEXT, expires INTEGER, accessed INTEGER, size INTEGER DEFAULT 0,
-      codec TEXT DEFAULT '', reason TEXT DEFAULT '', hold_until INTEGER DEFAULT 0)`)
+      codec TEXT DEFAULT '', reason TEXT DEFAULT '', hold_until INTEGER DEFAULT 0, revision TEXT DEFAULT '')`)
+    this.transaction(() => {
+      if (!this.db.prepare('PRAGMA table_info(media)').all().some(column => column.name === 'revision'))
+        this.db.exec("ALTER TABLE media ADD COLUMN revision TEXT DEFAULT ''")
+    })
     for (const file of readdirSync(this.dir)) {
       if (
         /^[a-f0-9-]+\.part\.(source|mp4)$/.test(file) &&
@@ -125,16 +130,18 @@ export class MediaCache {
   prepare(id, retry = false) {
     const file = this.path(id),
       now = Date.now(),
-      owner = randomUUID()
+      owner = randomUUID(), revision = this.revision(id)
     const result = this.transaction(() => {
       const row = this.db.prepare('SELECT * FROM media WHERE id=?').get(id)
-      if (row?.status === 'ready' && existsSync(file)) {
+      const current = row?.revision === revision
+      if (row && !current) rmSync(file, { force: true })
+      if (current && row.status === 'ready' && existsSync(file)) {
         this.hold(id)
         return { status: 'ready', codec: row.codec }
       }
-      if (row?.status === 'error' && !retry && row.expires > now)
+      if (current && row.status === 'error' && !retry && row.expires > now)
         return { status: 'error', reason: row.reason }
-      if (row?.status === 'working' && row.expires > now) return { status: 'preparing' }
+      if (current && row.status === 'working' && row.expires > now) return { status: 'preparing' }
       if (
         this.db.prepare("SELECT count(*) AS n FROM media WHERE status='working' AND expires>?").get(now).n >=
         2
@@ -142,17 +149,17 @@ export class MediaCache {
         return { status: 'preparing' }
       this.db
         .prepare(
-          `INSERT INTO media(id,status,owner,expires,accessed) VALUES(?,'working',?,?,?)
-        ON CONFLICT(id) DO UPDATE SET status='working', owner=excluded.owner,expires=excluded.expires,accessed=excluded.accessed`,
+          `INSERT INTO media(id,status,owner,expires,accessed,revision) VALUES(?,'working',?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET status='working', owner=excluded.owner,expires=excluded.expires,accessed=excluded.accessed,revision=excluded.revision`,
         )
-        .run(id, owner, now + 600000, now)
+        .run(id, owner, now + 600000, now, revision)
       return null
     })
     if (result) return result
-    this.build(id, owner).catch(() => {}) // State is published to all pollers by build.
+    this.build(id, owner, revision).catch(() => {}) // State is published to all pollers by build.
     return { status: 'preparing' }
   }
-  async build(id, owner) {
+  async build(id, owner, revision) {
     const raw = join(this.dir, owner + '.part.source'),
       output = join(this.dir, owner + '.part.mp4')
     try {
@@ -187,6 +194,10 @@ export class MediaCache {
         if (!lastError || lastError.code !== 'MEDIA_EXPIRED' || authorizationAttempt) break
       }
       if (lastError) throw lastError
+      if (this.revision(id) !== revision) {
+        this.db.prepare('DELETE FROM media WHERE id=? AND owner=?').run(id, owner)
+        return
+      }
       const size = statSync(output).size
       this.transaction(() => {
         if (this.db.prepare('SELECT owner FROM media WHERE id=?').get(id)?.owner !== owner) return

@@ -53,7 +53,7 @@ export class BilibiliSource {
     this.auth = new BilibiliAuth(context, (...args) => this.request(...args), { cookie, onChange: () => this.seasons.clear() })
   }
   async request(method, options, signal, { cookie = this.auth.cookie() } = {}) {
-    const signals = [this.context.signal, signal].filter(Boolean)
+    const signals = [this.context.signal, signal, AbortSignal.timeout(12000)].filter(Boolean)
     const combined = signals.length ? AbortSignal.any(signals) : undefined
     if (combined?.aborted) throw new PlayerError('请求已取消', 499)
     let failure
@@ -66,6 +66,7 @@ export class BilibiliSource {
         if (!response.ok) throw apiError(response.status)
         const data = await response.json()
         if (data.code !== 0) throw apiError(Number(data.code))
+        if (cookie && method === 'fetchBangumiStreamUrl' && data.data?.isLogin === false) throw apiError(-101)
         const responseHeaders = { 'set-cookie': response.headers.getSetCookie() }
         return { data, status: response.status, statusText: '', headers: responseHeaders, config }
       } catch (error) {
@@ -75,10 +76,12 @@ export class BilibiliSource {
     }
     try {
       const sdk = await (this.sdk ??= this.loadSdk())
-      // Use the SDK's H5 request mode: no unrelated account/nav/signing calls.
-      // An explicitly configured Cookie is applied only by the bounded adapter.
-      const result = await sdk[method](options, '', {
-        adapter, signal: combined, timeout: 10000, headers: { cookie: '' }, params: { fnval: 16, qn: 32 },
+      // Logged-in calls use amagi's native account/entitlement/signing flow.
+      // Its SDK boundary routes internal requests through the same adapter too.
+      // Anonymous calls retain the existing H5 request and stream preferences.
+      const result = await sdk[method](options, cookie, {
+        adapter, signal: combined, timeout: 10000, headers: { cookie },
+        ...(cookie ? {} : { params: { fnval: 16, qn: 32 } }),
       })
       if (combined?.aborted) throw new PlayerError('请求已取消', 499)
       if (!result?.success || result.data?.code !== 0) throw apiError(Number(result?.data?.code ?? result?.code))
@@ -174,9 +177,11 @@ export class BilibiliSource {
     }
     const audio = (data.dash?.audio || []).filter(track => !drm(track) && /^mp4a\./i.test(track.codecs || ''))
       .sort((a, b) => a.bandwidth - b.bandwidth)[0]
+    const authenticated = !!this.auth.cookie()
     const video = (data.dash?.video || []).filter(track => !drm(track) && /^avc[13]\./i.test(track.codecs || '') &&
       (Number(track.bandwidth) + Number(audio?.bandwidth)) * duration / 8 < 240 * 1024 * 1024)
-      .sort((a, b) => (Math.abs(Number(a.id) - 32) - Math.abs(Number(b.id) - 32)) || a.bandwidth - b.bandwidth)
+      .sort((a, b) => (authenticated ? Number(b.id) - Number(a.id)
+        : Math.abs(Number(a.id) - 32) - Math.abs(Number(b.id) - 32)) || a.bandwidth - b.bandwidth)
     if (video.length && audio) return { candidates: video.slice(0, 2).map(track => ({
       kind: 'tracks', codec: 'h264', video: locator(track), audio: locator(audio),
     })), fetchMedia: this.fetchMedia }
