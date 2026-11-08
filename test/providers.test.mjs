@@ -171,7 +171,7 @@ test('removed sources cannot reopen through saved defaults or stale recommendati
   assert.equal((await service.call(scope, 'get_preferences', {})).defaultSource, 'hongguo')
   assert.equal((await service.call(scope, 'set_preferences', { volume: 0.42 })).defaultSource, 'hongguo')
   scope.source = 'removed'; scope.selection = { seriesId: 'hh-1' }; scope.waiting = { selected: { id: 'hh-1' } }
-  assert.deepEqual((await service.call(scope, 'get_providers', {})).items.map(row => row.id), ['hongguo'])
+  assert.deepEqual((await service.call(scope, 'get_providers', {})).items.map(row => row.id), ['hongguo', 'bilibili'])
   assert.equal(scope.source, 'hongguo'); assert.equal(scope.selection, undefined); assert.equal(scope.waiting.selected, null)
   await assert.rejects(service.call(scope, 'set_source', { source: 'removed' }))
   store.db.prepare('INSERT INTO turn_picks VALUES(?,?,?,?,?)').run('A', 'old', JSON.stringify([{ id: 'hh-1', title: 'Removed' }]), null, 1)

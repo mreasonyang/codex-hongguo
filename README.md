@@ -128,7 +128,7 @@ npx "@kyun.si/codex-hongguo@latest" uninstall
 | 项目 | 说明与限制 |
 | --- | --- |
 | 适用宿主 | 仅支持 Codex 桌面客户端中使用本机执行器的对话，不适用于云端/远程执行器或其他宿主环境。 |
-| 片源与选流 | 仅接入红果短剧单片源（不含多片源切换）；同一集存在多档媒体流时由播放器自动选流，不提供手动清晰度切换。 |
+| 片源与选流 | 内置红果和 Bilibili 番剧，默认只启用红果；在设置开启哔哩哔哩，悬停图标后选择片源，粘贴 ss/ep 番剧链接进入分集。B 站暂不支持关键词搜索；首次播放先缓存整集，试看和 DRM 会拒绝。详见 [Provider 插件](docs/providers.md)。 |
 | 推荐与搜索 | 片库与搜索依赖匿名上游 SDK；首页优先推荐未看过的剧，每批最多 12 部（推荐与分集缓存 15 分钟，跨对话共享；过期先使用已有内容并后台刷新，失败后逐步延长重试间隔），推荐不足时按设置中的补充关键词搜索。 |
 | 匿名限流与恢复 | 匿名设备被拒或片源为空时，SDK 会按有限次数自动重试与恢复；仍失败时在界面显示原因供手动重试。 |
 | 进度保存 | 播放期间每约 5 秒自动保存一次进度，暂停、拖动、换集或隐藏面板时也会立即保存。 |
@@ -145,5 +145,5 @@ npm 包结构、升级与发布流程见 [npm 分发说明](docs/npm-distributio
 
 ## 许可证与致谢
 
-- **项目许可证**：本项目采用 [MIT 许可证](LICENSE)，npm 元数据标记为 `MIT`。第三方运行时依赖的许可声明随插件根目录 `licenses/` 分发。短剧剧目与媒体内容的版权归原权利人所有。
+- **项目许可证**：原有项目代码保留 [MIT 许可证](LICENSE)。包含 GPL SDK amagi 的组合发行包按 [GPL-3.0-only](COPYING) 分发，附项目对应源码 ZIP、固定修订的 SDK 原始源码及第三方许可。短剧剧目与媒体内容的版权归原权利人所有。
 - **上游与参考资料**：项目灵感来自 [frostming/dsh-hongguo](https://github.com/frostming/dsh-hongguo)，红果片库与播放解析使用 [openhongguo](https://github.com/beilunyang/openhongguo)，宿主扩展接口依据 [OpenAI 插件扩展](https://developers.openai.com/plugins/build/extensions)、[插件打包](https://developers.openai.com/plugins/build/plugins) 和 [Codex Hooks](https://learn.chatgpt.com/docs/hooks)。

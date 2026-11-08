@@ -2,7 +2,7 @@
   "name": "@kyun.si/codex-hongguo",
   "version": "0.0.34",
   "private": true,
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "type": "module",
   "engines": {
     "node": ">=22.16"
@@ -20,6 +20,7 @@
     "release:publish": "node scripts/publish.mjs --publish"
   },
   "dependencies": {
+    "@ikenxuan/amagi": "6.6.0",
     "@modelcontextprotocol/ext-apps": "1.7.5",
     "@modelcontextprotocol/sdk": "1.32.2",
     "cross-spawn": "7.0.6",

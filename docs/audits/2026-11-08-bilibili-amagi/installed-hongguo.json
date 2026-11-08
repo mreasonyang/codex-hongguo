@@ -1,0 +1,12 @@
+{
+  "result": "PASS",
+  "exitCode": 0,
+  "artifactSHA256": "dd1c7da4700799215285c13340d00593565d7a9193b65d97c50dc9ea061affa7",
+  "checks": {
+    "freshAndRepeatInstall": true,
+    "realHongguoMcpDecode": true,
+    "uninstall": true,
+    "manualHooksReminder": true
+  },
+  "installedUserPluginChanged": false
+}

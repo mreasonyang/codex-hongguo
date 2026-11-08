@@ -60,7 +60,7 @@ let activeQuery = '',
 let activeSource: SourceId = 'hongguo', sourceGeneration = 0, switchingSource = false
 let sourceUpdate = Promise.resolve()
 const sourceOf = (id: string): SourceId => id.startsWith('p.') ? id.split('.')[1] : 'hongguo'
-type Provider = { id: string; name: string; available: boolean; enabled?: boolean; configurable?: boolean; code?: string }
+type Provider = { id: string; name: string; available: boolean; enabled?: boolean; configurable?: boolean; code?: string; queryHint?: string; queryMode?: 'search' | 'link'; emptyMessage?: string }
 let providers: Provider[] = [{ id: 'hongguo', name: '红果', available: true }]
 let providerOptions: Provider[] = []
 const providerInputs = new Map<string, HTMLInputElement>()
@@ -98,7 +98,11 @@ function syncSourceButton() {
   control.dataset.source = activeSource
   control.dataset.busy = String(switchingSource)
   const name = providers.find(provider => provider.id === activeSource)?.name || activeSource
-  el('sourceName').textContent = activeSource === 'hongguo' ? tr('红果短剧') : name
+  el('sourceName').textContent = activeSource === 'hongguo' ? tr('红果短剧') : tr(name)
+  const query = el<HTMLInputElement>('query'), hint = providers.find(provider => provider.id === activeSource)?.queryHint || '搜索剧名'
+  query.placeholder = tr(hint); query.setAttribute('aria-label', tr(hint))
+  const submit = el<HTMLFormElement>('search').querySelector('button')
+  if (submit) submit.textContent = tr(providers.find(provider => provider.id === activeSource)?.queryMode === 'link' ? '添加番剧' : '搜索')
   const label = tr('切换视频源')
   control.setAttribute('aria-label', providers.length < 2 ? tr(name) : label)
   control.disabled = switchingSource || providers.length < 2
@@ -706,7 +710,10 @@ async function list(more = false, query = activeQuery) {
     drawCards()
     if (cards.length) catalogState('')
     else if (query) catalogState('empty', '没有找到相符的剧目')
-    else catalogState('error', '片源暂时没有返回推荐剧目')
+    else {
+      const message = providers.find(provider => provider.id === activeSource)?.emptyMessage
+      catalogState(message ? 'empty' : 'error', message || '片源暂时没有返回推荐剧目')
+    }
     el('more').hidden = pages <= 1 && !cursor
   } catch (e) {
     if (t === listing) {
@@ -1126,7 +1133,7 @@ function scheduleSearch() {
   ++listing // Drop replies for the previous text, including during the debounce.
   if (composing) return
   if (!queryInput.value.trim()) searchNow()
-  else searchTimer = setTimeout(searchNow, 400)
+  else if (providers.find(provider => provider.id === activeSource)?.queryMode !== 'link') searchTimer = setTimeout(searchNow, 400)
 }
 queryInput.addEventListener('input', scheduleSearch)
 queryInput.addEventListener('compositionstart', () => { composing = true; scheduleSearch() })

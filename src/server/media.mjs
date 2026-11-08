@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto'
 import { pipeline } from 'node:stream/promises'
 import { PlayerError } from './errors.mjs'
 import { prepareAdaptive } from './adaptive.mjs'
+import { prepareTracks } from './tracks.mjs'
 import { cdn } from './sources/network.mjs'
 import { parseId } from './sources/ids.mjs'
 
@@ -167,6 +168,9 @@ export class MediaCache {
               if (stream.encryption) throw new PlayerError('该分段片源需要单文件播放授权')
               mkdirSync(raw, { mode: 0o700 })
               await prepareAdaptive(stream.url, raw, output, { cdn: fetchMedia, run: runFfmpeg, codec, budget: maxEpisode })
+            } else if (stream.kind === 'tracks') {
+              mkdirSync(raw, { mode: 0o700 })
+              await prepareTracks(stream, raw, output, { cdn: fetchMedia, run: runFfmpeg, budget: maxEpisode })
             } else if (stream.kind === 'file') {
               const key = stream.encryption?.key
               if (stream.encryption && (stream.encryption.kind !== 'cenc' || !/^[a-f0-9]{32}$/i.test(key || '')))

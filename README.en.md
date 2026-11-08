@@ -129,7 +129,7 @@ Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn s
 | Area | Behavior & Scope |
 | --- | --- |
 | Host scope | Supports only Codex Desktop conversations running on the local executor; does not support cloud/remote executors or other host applications. |
-| Content source & streams | Connects to the Hongguo catalog only (no multi-provider source switcher); when an episode offers multiple streams, the player selects a playable stream automatically without a manual quality selector. |
+| Content source & streams | Includes Hongguo and Bilibili series; only Hongguo is enabled by default. Enable Bilibili in Settings, hover over the source icon, choose it, and paste an ss/ep series link. Bilibili keyword search is not supported yet. Initial playback prepares the full episode; previews and DRM are rejected. See [Providers](docs/providers.md). |
 | Recommendations & search | Catalog browsing and search rely on the anonymous upstream SDK; the home view prioritizes unwatched shows in batches of up to 12 (recommendations and episode pages share a persistent 15-minute cache across chats, serve stale data while refreshing, and back off after failures) and falls back to configurable search keywords when recommendations are sparse. |
 | Anonymous rate-limit recovery | When an anonymous device is rejected or streams come back empty, the SDK performs bounded retries and device resets before surfacing the failure reason with a retry action. |
 | Progress persistence | Saves playback position locally every ~5 seconds while playing, as well as on pause, seek, episode change, or panel hide. |
@@ -146,5 +146,5 @@ See [npm distribution, upgrades and publishing](docs/npm-distribution.md) for pa
 
 ## License & Credits
 
-- **Project license**: This project is licensed under the [MIT License](LICENSE); npm metadata uses `MIT`. Bundled third-party dependency notices are under `licenses/` in the plugin root. Copyrights for drama series, covers and media streams belong to their respective rightsholders.
+- **Project license**: Original project code retains the [MIT License](LICENSE). The combined distribution including the GPL SDK amagi is conveyed under [GPL-3.0-only](COPYING), with matching project source, the pinned upstream SDK source, and dependency notices. Bundled third-party dependency notices are under `licenses/` in the plugin root. Copyrights for drama series, covers and media streams belong to their respective rightsholders.
 - **Upstream & specifications**: Inspired by [frostming/dsh-hongguo](https://github.com/frostming/dsh-hongguo), with Hongguo catalog and playback resolution powered by [openhongguo](https://github.com/beilunyang/openhongguo). Host integration follows [OpenAI Plugin Extensions](https://developers.openai.com/plugins/build/extensions), [Plugin Packaging](https://developers.openai.com/plugins/build/plugins), and [Codex Hooks](https://learn.chatgpt.com/docs/hooks).

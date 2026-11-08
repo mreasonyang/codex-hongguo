@@ -182,6 +182,27 @@ test('additional providers use a checked menu and select through the existing so
   assert.equal(f.store.preferences().defaultSource, 'local')
   assert.equal(f.elements.get('sourceName').textContent, 'Local provider')
 })
+test('link-based providers import only on submit while Hongguo keeps debounced search', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const f = setup(t), requests = []
+  f.store.setPreferences({ enabledProviders: ['hongguo', 'bilibili'] })
+  f.service.catalog = { list: async input => { requests.push(input); return { items: [] } } }
+  f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true },
+    { id: 'bilibili', name: '哔哩哔哩', available: true, queryMode: 'link', queryHint: '粘贴番剧链接或 ss/ep 编号' }])
+  await f.ui.changeSource('bilibili'); requests.length = 0
+  const input = f.elements.get('query')
+  assert.equal(input.placeholder, '粘贴番剧链接或 ss/ep 编号')
+  input.value = 'ep50188'; input.dispatchEvent(new Event('input'))
+  t.mock.timers.tick(500); await flush()
+  assert.equal(requests.length, 0, 'typing a partial link must not import unrelated series')
+  f.elements.get('search').onsubmit({ preventDefault() {} }); await flush()
+  assert.equal(requests[0].query, 'ep50188')
+  await f.ui.changeSource('hongguo'); requests.length = 0
+  assert.equal(input.placeholder, '搜索剧名')
+  input.value = '重生'; input.dispatchEvent(new Event('input'))
+  t.mock.timers.tick(500); await flush()
+  assert.equal(requests[0].query, '重生')
+})
 test('a single available provider disables switching instead of opening an empty menu', t => {
   const f = setup(t)
   f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'demo', name: '示例片源', available: false }])

@@ -1,6 +1,6 @@
 # 视频源适配层与 Provider 插件
 
-当前实现只内置红果。新增来源通过显式安装的本地 Provider 扩展，详细接口见 [Provider 插件](../providers.md)。
+当前实现内置红果和基于 amagi 的 Bilibili 番剧 Provider，默认只启用红果。新增来源通过显式安装的本地 Provider 扩展，详细接口见 [Provider 插件](../providers.md)。
 
 ## 依赖方向
 

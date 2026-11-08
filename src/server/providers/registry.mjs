@@ -2,6 +2,7 @@ import { lstat, readdir, readFile, realpath } from 'node:fs/promises'
 import { resolve, join, sep, isAbsolute } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { HongguoSource } from '../sources/hongguo.mjs'
+import { BilibiliSource } from '../sources/bilibili.mjs'
 import { sourceId, parseId } from '../sources/ids.mjs'
 import { sourceCall } from '../sources/contracts.mjs'
 import { boundedResponse, responseBytes, mediaFetcher } from '../sources/network.mjs'
@@ -10,6 +11,10 @@ import { PlayerError } from '../errors.mjs'
 const methods = ['listSeries', 'getSeries', 'listEpisodes', 'getCover', 'resolvePlayback']
 export const builtins = [
   { manifest: { apiVersion: 1, id: 'hongguo', name: '红果', version: '1.0.0' }, createProvider: ctx => new HongguoSource(ctx.root) },
+  { manifest: { apiVersion: 1, id: 'bilibili', name: '哔哩哔哩', version: '1.0.0',
+    queryMode: 'link', queryHint: '粘贴番剧链接或 ss/ep 编号', emptyMessage: '粘贴 B 站番剧链接后，已添加的番剧会显示在这里',
+    network: { api: ['api.bilibili.com'], media: ['*.bilivideo.com', '*.bilivideo.cn', '*.bilivideo.net', '*.hdslb.com'] } },
+    createProvider: ctx => new BilibiliSource(ctx, { cookie: process.env.HONGGUO_BILIBILI_COOKIE || '' }) },
 ]
 function validate(manifest) {
   if (!manifest || manifest.apiVersion !== 1 || sourceId(manifest.id) !== manifest.id ||
@@ -19,6 +24,9 @@ function validate(manifest) {
     if (!Array.isArray(entries) || entries.length > 32 || entries.some(host => typeof host !== 'string' ||
         !/^(?:\*\.)?(?:[a-z0-9-]+\.)+[a-z]{2,}$/i.test(host))) throw Error('NETWORK_POLICY')
   }
+  for (const key of ['queryHint', 'emptyMessage'])
+    if (manifest[key] !== undefined && (typeof manifest[key] !== 'string' || manifest[key].length > 160)) throw Error('MANIFEST')
+  if (manifest.queryMode !== undefined && !['search', 'link'].includes(manifest.queryMode)) throw Error('MANIFEST')
   return manifest
 }
 function allows(hosts = []) {
@@ -74,6 +82,9 @@ export class ProviderRegistry {
     validate(manifest)
     if (this.definitions.has(manifest.id)) throw Error('DUPLICATE')
     const status = { id: manifest.id, name: manifest.name, version: manifest.version, builtin,
+      ...(manifest.queryHint ? { queryHint: manifest.queryHint } : {}),
+      ...(manifest.queryMode ? { queryMode: manifest.queryMode } : {}),
+      ...(manifest.emptyMessage ? { emptyMessage: manifest.emptyMessage } : {}),
       enabled: this.enabled.has(manifest.id) && manifest.enabled !== false,
       configurable: manifest.enabled !== false, available: false, code: 'DISABLED' }
     const definition = { manifest, factory, builtin, status }

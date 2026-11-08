@@ -1,0 +1,46 @@
+{
+  "createdAt": "2026-11-08T05:18:41.622Z",
+  "version": "0.0.34",
+  "distributionLicense": "GPL-3.0-only",
+  "upstreamSourceVersion": "6.6.0",
+  "correspondingSourceMatches": true,
+  "published": false,
+  "installedUserPluginChanged": false,
+  "artifacts": [
+    {
+      "path": "release/kyun.si-codex-hongguo-0.0.34.tgz",
+      "bytes": 15276484,
+      "sha256": "dd1c7da4700799215285c13340d00593565d7a9193b65d97c50dc9ea061affa7"
+    },
+    {
+      "path": "release/codex-hongguo-0.0.34.zip",
+      "bytes": 25275266,
+      "sha256": "1f120d3bf660fa85911ee52ef162d75502c42f1cfb6d3ec5f8fad4bde41bf648"
+    },
+    {
+      "path": "dist/server/index.mjs",
+      "bytes": 981562,
+      "sha256": "6578d204e7f6fddfe0461adeae57fd0d30d690739fd0cd3b96decfee4ffc3569"
+    },
+    {
+      "path": "dist/vendor/amagi/index.mjs",
+      "bytes": 2187641,
+      "sha256": "8d9e4d59cb6cb39e73b6cd37d171d3c54f325f207dc6992dd18faaf514d064e4"
+    },
+    {
+      "path": "dist/ui/player.html",
+      "bytes": 1213347,
+      "sha256": "760b38957a37a5a787e801c8ecf2b0d0fd09eeba19074f5db3c4d0656784684b"
+    },
+    {
+      "path": "release/npm/codex-hongguo/licenses/codex-hongguo-source.zip",
+      "bytes": 370257,
+      "sha256": "9b455736a7c6d09a7c191da60362e04baca53c1bf9d17332edd80ffe28125c61"
+    },
+    {
+      "path": "dist/licenses/amagi-6.6.0-source.tar.gz",
+      "bytes": 403526,
+      "sha256": "f5d14a43ea898e8fd37d4b2c69dd9541cae65a99a7d04a8d645c04205783ab7a"
+    }
+  ]
+}

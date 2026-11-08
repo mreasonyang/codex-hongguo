@@ -1,0 +1,48 @@
+{
+  "tests": {
+    "total": 196,
+    "passed": 190,
+    "skipped": 6,
+    "failed": 0
+  },
+  "sdk": "@ikenxuan/amagi@6.6.0",
+  "realBilibili": {
+    "authentication": "anonymous",
+    "seriesId": "2251",
+    "regularEpisodes": 13,
+    "durationMs": 1436992,
+    "mediaBytes": 90293597,
+    "coldPreparationSeconds": 17,
+    "decodePositionsSeconds": [
+      0,
+      600,
+      1431
+    ],
+    "mcpFragmentBytes": 319085,
+    "restartResume": "PASS",
+    "previewRejected": "PASS",
+    "disableRevokesCache": "PASS"
+  },
+  "browser": {
+    "realPlayback": "PASS",
+    "resume": "PASS",
+    "automaticNextEpisode": "PASS",
+    "simulatedOwnerStopPauses": "PASS",
+    "disableFallsBackToHongguo": "PASS",
+    "popoverSelection": "PASS"
+  },
+  "hongguoInstalledQualification": "PASS",
+  "limits": [
+    "real-member-account-not-tested",
+    "native-Codex-Bilibili-rendering-not-tested",
+    "Windows-Linux-desktop-not-tested"
+  ],
+  "installedUserPluginChanged": false,
+  "published": false,
+  "exactArtifactQualification": {
+    "bilibili": "PASS",
+    "hongguo": "PASS",
+    "artifactSHA256": "dd1c7da4700799215285c13340d00593565d7a9193b65d97c50dc9ea061affa7"
+  },
+  "temporaryReviewCleaned": true
+}

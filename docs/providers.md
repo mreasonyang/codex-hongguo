@@ -1,6 +1,18 @@
 # Provider 插件
 
-播放器通过统一适配契约访问 Provider。当前只内置红果，本地插件通过同一注册入口加载。首版 API 为 1，不需要修改 Catalog、播放器或媒体缓存才能添加来源。
+播放器通过统一适配契约访问 Provider。内置红果和 Bilibili 番剧，本地插件通过同一注册入口加载。首版 API 为 1。
+
+## Bilibili 番剧
+
+在播放器设置开启「哔哩哔哩」并保存，悬停左上角图标后点击切换。输入 `ss2251`、`ep50188` 或 `https://www.bilibili.com/bangumi/play/ss2251`，点击「添加番剧」；选择分集后播放。已导入的季度保存在本机 Provider 专属目录，重启后保留；正片与预告、花絮分开，进度及缓存与红果隔离。
+
+通过固定的公共 npm SDK `@ikenxuan/amagi@6.6.0` 获取季度、分集和按集播放流，使用 SDK 的公开 Axios adapter 接入宿主有域名、大小、超时及取消限制的请求器。不依赖 Python。SDK 的接口变化由上游跟进，本项目负责 Provider 映射、版本升级及回归。
+
+首版不提供关键词搜索、推荐片库、`b23.tv` 短链、UGC/BV 投稿或追番同步。没有已添加番剧时首页显示链接导入提示。默认使用匿名访问；有需要时可在 MCP 启动环境中自行设置 `HONGGUO_BILIBILI_COOKIE`，重启服务后在 B 站 API 请求中使用。不会读取浏览器 Cookie，也不通过界面、MCP、媒体 CDN、日志或本机库文件传递 Cookie。会员、地区和购买权益以原站实际返回为准；账号实测另行验收。
+
+只有完整、非 DRM 的普通 MP4 或 AVC/AAC 双轨可以播放。试看即使返回成功状态也明确拒绝。双轨通过 Provider 白名单传输下载、备用 CDN 有限重试、FFmpeg 本地合流后复用浏览器 MP4 和 Codex 面板 HLS；首次播放需先准备整集，单集原始媒体总预算仍为 256 MiB，两小时以上及预算不合适的流会拒绝。自动下一集、缓存预加载和回合暂停沿用宿主逻辑。
+
+包含 amagi 的组合发行包按 GPL-3.0-only 分发，完整文本见根目录 `COPYING`，原有项目代码的 MIT 许可见 `LICENSE`。发行包附带该项目的对应源码 ZIP、固定上游修订的 amagi 原始 TypeScript 源码和校验值；详见包内 `licenses/amagi/NOTICE.txt`。本地源码采用的 npm 依赖和 SDK 版本由锁文件固定，不维护 SDK fork。
 
 ## 启用配置
 
@@ -39,7 +51,7 @@ my-providers/
 }
 ```
 
-`id` 使用小写字母开头的字母、数字、连字符，最长 32 字符；内置 `hongguo` 不允许被覆盖。`entry` 必须是插件目录内的 `.mjs` 文件。清单的 `enabled: false` 会禁止启动该插件；移除此限制后重新启动服务，才能在播放器设置中开启。
+`id` 使用小写字母开头的字母、数字、连字符，最长 32 字符；内置 `hongguo`、`bilibili` 不允许被覆盖。`entry` 必须是插件目录内的 `.mjs` 文件。清单的 `enabled: false` 会禁止启动该插件；移除此限制后重新启动服务，才能在播放器设置中开启。
 
 这是显式加载的可信本地 Node.js 代码，不是沙箱。清单、路径、导入、工厂和接口错误会隔离为该插件的不可用状态；清单校验无法防止插件代码主动退出进程或耗尽资源。应只安装自己审查过的插件。
 
@@ -94,6 +106,8 @@ export function createProvider(context) {
 
 Provider 请求有宿主超时与结果失效保护。插件应主动响应 signal；宿主丢弃晚到结果不等于第三方 SDK 的底层网络已取消。
 
+清单可选声明 `queryMode: "link"`、`queryHint` 和 `emptyMessage`（提示文字各不超过 160 字符）。链接模式只在点击添加或回车后提交，输入过程中不触发搜索。返回的 Provider 可声明 `discovery: false`，由其 `listSeries()` 提供自己的已添加列表；宿主不会用红果推荐关键词补充该列表。
+
 ## 播放描述
 
 `resolvePlayback` 返回 `{ candidates, fetchMedia? }`，候选按顺序尝试：
@@ -103,6 +117,7 @@ Provider 请求有宿主超时与结果失效保护。插件应主动响应 sign
 { kind: 'file', url, codec: 'hevc', encryption: { kind: 'cenc', key } }
 { kind: 'hls', url, codec: 'h264' }
 { kind: 'dash', url, codec: 'h264' }
+{ kind: 'tracks', video: { url, backupURLs: [] }, audio: { url, backupURLs: [] }, codec: 'h264' }
 ```
 
 `key` 仅为 Host 内部授权值，不是日志或 MCP 字段。CENC 授权通过 FFmpeg 标准输入传递。HLS AES-128 的 key 和 IV 从清单逐分片解析，不能用 CENC `encryption` 字段替代。

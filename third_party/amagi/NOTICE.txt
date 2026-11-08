@@ -1,0 +1,13 @@
+This distribution includes @ikenxuan/amagi 6.6.0, licensed GPL-3.0-only.
+The upstream project's copyright notices are retained in its LICENSE and source.
+Project: https://github.com/ikenxuan/amagi
+The exact upstream revision, source location and checksum are in source.json.
+The preferred upstream source is included as dist/licenses/amagi-6.6.0-source.tar.gz.
+
+The combined codex-hongguo distribution is conveyed under GPL-3.0-only (COPYING).
+Original codex-hongguo code remains available under its MIT license (LICENSE).
+Other dependencies retain their own notices and licenses in licenses/.
+The matching codex-hongguo source and build scripts are supplied in
+licenses/codex-hongguo-source.zip. Extract it, install Node.js and Go, run
+`npm ci --ignore-scripts`, then `npm run build`. `npm run package` rebuilds
+the distribution. The FFmpeg component has its separate notices and source offer.

@@ -39,7 +39,11 @@ export class Catalog {
   async list({ source = this.defaultSource(), query = '', cursor, preview } = {}) {
     if (!this.sources.loaded) await this.sources.ready
     source = sourceId(source)
-    this.sources.get(source)
+    const adapter = this.sources.get(source)
+    if (!query && adapter.discovery === false) {
+      const page = await sourceCall(() => adapter.listSeries({ cursor, pageSize: 16 }))
+      return { items: this.rows(page, true, source), cursor: page.cursor }
+    }
     if (!query) return { items: await this.recommendations(preview, source), cursor: null }
     const page = await sourceCall(() => this.sources.get(source).listSeries({ query, cursor, pageSize: 16 }))
     return { items: this.rows(page, true, source), cursor: page.cursor }
@@ -47,7 +51,12 @@ export class Catalog {
   async recommendations(preview = false, source = this.defaultSource()) {
     if (!this.sources.loaded) await this.sources.ready
     source = sourceId(source)
-    this.sources.get(source)
+    const adapter = this.sources.get(source)
+    if (adapter.discovery === false) {
+      const rows = this.rows(await sourceCall(() => adapter.listSeries({ pageSize: 48 })), false, source)
+      this.store.saveWaitingFeed(rows, Date.now(), source)
+      return rows
+    }
     const terms = this.store.preferences().searchTerms
     const key = 'feed:' + source + ':' + createHash('sha256').update(JSON.stringify(terms)).digest('hex')
     const cached = this.store.catalogCache(key)?.value
@@ -57,7 +66,7 @@ export class Catalog {
       this.firstPages.set(key, firstPage.promise)
       try {
         const rows = await this.collectFeed(firstPage.resolve, terms, source)
-        if (!rows.length) throw new PlayerError('片源暂时不可达，请稍后重试', 503)
+        if (!rows.length && this.sources.get(source).discovery !== false) throw new PlayerError('片源暂时不可达，请稍后重试', 503)
         const covered = rows.filter(row => row.hasCover)
         return { items: (covered.length >= 12 ? covered : rows).slice(0, 48),
           titles: rows.map(({ id, title }) => ({ id, title })),
@@ -114,7 +123,7 @@ export class Catalog {
         break
       }
     }
-    for (const term of terms) {
+    for (const term of adapter.discovery === false ? [] : terms) {
       if (rows.size >= 24) break
       try {
         merge(await sourceCall(() => adapter.listSeries({ query: term, pageSize: 16 })))

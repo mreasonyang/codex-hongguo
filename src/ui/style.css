@@ -537,6 +537,8 @@ h1 {
 .sourceMenu .sourceLabel { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 .sourceDot { flex: 0 0 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--text-2); }
 .sourceDot[data-source='hongguo'] { background: var(--brand); }
+.sourceDot[data-source='bilibili'] { background: #fb7299; }
+.sourceButton[data-source='bilibili'] .mark { background: #fb7299; }
 .sourceMenu .i { width: 13px; height: 13px; color: var(--text-2); }
 .providerSettings { min-width: 0; margin: 0 0 10px; padding: 0 0 10px; border: 0; border-bottom: 1px solid var(--line); }
 .providerSettings legend { margin-bottom: 4px; font-weight: 600; font-size: 12px; }

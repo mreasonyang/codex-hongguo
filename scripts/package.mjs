@@ -13,7 +13,7 @@ await writeFile(join(release, 'marketplace/.agents/plugins/marketplace.json'), J
 await rm(npmRoot, { recursive: true, force: true })
 await rm(offline, { recursive: true, force: true })
 await mkdir(npmRoot, { recursive: true })
-for (const file of ['.codex-plugin/plugin.json', '.mcp.json', 'hooks/hooks.json', 'assets', 'bin', 'skills', 'dist', 'LICENSE', 'docs/images']) {
+for (const file of ['.codex-plugin/plugin.json', '.mcp.json', 'hooks/hooks.json', 'assets', 'bin', 'skills', 'dist', 'LICENSE', 'COPYING', 'docs/images']) {
   await mkdir(dirname(join(npmRoot, file)), { recursive: true })
   await cp(file, join(npmRoot, file), { recursive: true })
 }
@@ -31,7 +31,7 @@ await writeFile(join(npmRoot, 'package.json'), JSON.stringify({
   repository: { type: 'git', url: 'git+https://github.com/mreasonyang/codex-hongguo.git' },
   homepage: 'https://github.com/mreasonyang/codex-hongguo#readme',
   bin: { 'codex-hongguo': './bin/codex-hongguo.mjs' },
-  files: ['.codex-plugin/', '.mcp.json', 'hooks/', 'skills/', 'assets/', 'bin/', 'dist/', 'licenses/', 'LICENSE', 'README.md', 'README.en.md', 'docs/images/', 'docs/providers.md'],
+  files: ['.codex-plugin/', '.mcp.json', 'hooks/', 'skills/', 'assets/', 'bin/', 'dist/', 'licenses/', 'LICENSE', 'COPYING', 'README.md', 'README.en.md', 'docs/images/', 'docs/providers.md'],
   publishConfig: { access: 'public', registry: 'https://registry.npmjs.org' },
 }, null, 2) + '\n')
 const guides = {}
@@ -52,6 +52,21 @@ const notices = join(npmRoot, 'licenses')
 await mkdir(notices)
 await cp('third_party/ffmpeg', join(notices, 'ffmpeg'), { recursive: true })
 await cp('src/runtime/ffmpeg-artifacts.json', join(notices, 'ffmpeg/ffmpeg-artifacts.json'))
+await cp('third_party/amagi', join(notices, 'amagi'), { recursive: true })
+// Include the complete preferred form for our part of the combined distribution.
+// Only repository source/build inputs are collected; no user data or caches.
+const sourceEntries = {}
+async function sourceTree(path) {
+  for (const entry of await readdir(path, { withFileTypes: true })) {
+    const file = join(path, entry.name)
+    if (entry.isDirectory()) await sourceTree(file)
+    else if (entry.isFile()) sourceEntries[file.replaceAll('\\', '/')] = new Uint8Array(await readFile(file))
+  }
+}
+for (const directory of ['src', 'scripts', 'test', 'assets', 'bin', 'skills', 'hooks', '.codex-plugin', 'third_party']) await sourceTree(directory)
+for (const file of ['package.json', 'package-lock.json', 'tsconfig.json', '.mcp.json', 'LICENSE', 'COPYING', 'README.md', 'README.en.md', 'docs/providers.md'])
+  sourceEntries[file] = new Uint8Array(await readFile(file))
+await writeFile(join(notices, 'codex-hongguo-source.zip'), zipSync(sourceEntries, { level: 6 }))
 const lock = JSON.parse(await readFile('package-lock.json', 'utf8'))
 for (const [path, dependency] of Object.entries(lock.packages)) {
   if (!path || dependency.dev) continue
@@ -59,7 +74,7 @@ for (const [path, dependency] of Object.entries(lock.packages)) {
   for (const file of files.filter(name => /^(license|licence|copying|notice)(\.|$)/i.test(name)))
     await cp(join(path, file), join(notices, path.replaceAll('node_modules/', '').replaceAll('/', '-') + '-' + file))
 }
-await writeFile(join(notices, 'PROJECT-NOTICE.txt'), '本项目采用 MIT 许可证，全文见插件根目录 LICENSE。第三方运行时依赖按此目录各自的许可分发；短剧媒体版权归原权利人所有。\n')
+await writeFile(join(notices, 'PROJECT-NOTICE.txt'), '包含 amagi 的组合发行包按 GPL-3.0-only 分发，全文见 COPYING；原有项目代码保留 MIT 许可，见 LICENSE。对应项目源码在 codex-hongguo-source.zip，amagi 源码在 dist/licenses/amagi-6.6.0-source.tar.gz。第三方依赖保留各自许可；媒体版权归原权利人所有。\n')
 const packed = spawnSync(findExecutable('npm'), ['pack', '--ignore-scripts', '--json', '--pack-destination', release], {
   cwd: npmRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000,
 })
@@ -71,6 +86,7 @@ await mkdir(join(offline, '.agents/plugins'), { recursive: true })
 await writeFile(join(offline, '.agents/plugins/marketplace.json'), JSON.stringify(marketplace(pkg.version, { source: 'local', path: './plugins/codex-hongguo' }), null, 2) + '\n')
 for (const [name, guide] of Object.entries(guides)) await writeFile(join(offline, name), guide)
 await cp('LICENSE', join(offline, 'LICENSE'))
+await cp('COPYING', join(offline, 'COPYING'))
 await mkdir(join(offline, 'docs'), { recursive: true })
 await cp('docs/images', join(offline, 'docs/images'), { recursive: true })
 await cp('assets', join(offline, 'assets'), { recursive: true })
