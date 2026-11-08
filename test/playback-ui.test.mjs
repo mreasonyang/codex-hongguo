@@ -144,7 +144,7 @@ test('global playback switches default for older settings, synchronize across ch
   for (const volume of [0, -1, 1.01, NaN, Infinity]) await assert.rejects(f.settings({ volume }), /参数无效/)
 })
 
-test('player switches save immediately and Close is the only form completion action', async t => {
+test('player switches save immediately and explicit Close finishes Settings', async t => {
   const f = setup(t)
   f.event('one'); await f.poll()
   await f.elements.get('prefs').onclick()
@@ -318,6 +318,24 @@ test('disabling hover mode restores a covered player and later pointer exits kee
   assert.equal(f.video.paused, false)
   f.document.documentElement.dispatchEvent(new Event('pointerleave'))
   assert.equal(f.video.paused, false)
+})
+for (const enabled of [true, false]) test(`leaving and returning preserves open Settings with hover=${enabled}`, async t => {
+  const f = await hoveringPlayer(t)
+  await f.elements.get('prefs').onclick()
+  if (!enabled) {
+    f.elements.get('hoverDecoyEnabled').checked = false
+    f.elements.get('hoverDecoyEnabled').onchange(); await flush()
+  }
+  f.document.documentElement.dispatchEvent(new Event('pointerleave'))
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.ui.decoy.covered, enabled)
+  assert.equal(f.video.paused, enabled)
+  await enterPanel(t, f)
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.ui.decoy.covered, false)
+  assert.equal(f.video.paused, false)
+  await f.elements.get('prefs').onclick()
+  assert.equal(f.elements.get('settings').hidden, true)
 })
 test('a late play promise and host media play events cannot restart a covered player', async t => {
   const f = await hoveringPlayer(t, false)

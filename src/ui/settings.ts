@@ -16,6 +16,7 @@ export function createSettings(options: Options, doc: Document = document) {
   const form = element<HTMLFormElement>('settings'), terms = element<HTMLInputElement>('terms')
   const status = element('settingsStatus'), close = element<HTMLButtonElement>('settingsClose')
   const change = element<HTMLButtonElement>('changeCover'), trigger = element<HTMLButtonElement>('prefs')
+  const content = element('playerContent')
   let pending: Partial<Preferences> = {}, generation = 0, revision = 0, busy = 0
   let queue = Promise.resolve(), finishing: Promise<boolean> | undefined
   let invalidTerms = false, saved = false, termsBaseline = ''
@@ -105,6 +106,22 @@ export function createSettings(options: Options, doc: Document = document) {
   form.onsubmit = event => { event.preventDefault(); saveTerms() }
   close.onclick = () => { void finish() }
   change.onclick = () => { void finish(true) }
+  doc.addEventListener('click', event => {
+    if (form.hidden || content.inert || event.defaultPrevented) return
+    const path = event.composedPath()
+    if (!path.includes(content) || path.includes(form) || path.includes(trigger)) return
+    // Dismiss first, without also activating a player control beneath the click.
+    event.preventDefault()
+    event.stopPropagation()
+    void finish()
+  }, true)
+  doc.addEventListener('keydown', event => {
+    if (form.hidden || content.inert || event.defaultPrevented || event.key !== 'Escape' ||
+      event.isComposing || event.keyCode === 229) return
+    event.preventDefault()
+    event.stopPropagation()
+    void finish()
+  }, true)
   return {
     get busy() { return busy > 0 },
     open() {

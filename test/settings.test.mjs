@@ -4,17 +4,17 @@ import { createSettings } from '../src/ui/settings.ts'
 
 const settle = async () => { for (let i = 0; i < 80; i++) await Promise.resolve() }
 function deferred() { let resolve; return { promise: new Promise(done => { resolve = done }), resolve } }
-function fixture() {
-  const elements = new Map(), document = { getElementById: id => {
+function fixture({ hoverDecoyEnabled = false } = {}) {
+  const elements = new Map(), document = Object.assign(new EventTarget(), { getElementById: id => {
     if (!elements.has(id)) elements.set(id, {
       hidden: true, disabled: false, checked: false, value: '', dataset: {}, attributes: {},
       setAttribute(key, value) { this.attributes[key] = value },
       removeAttribute(key) { delete this.attributes[key] }, focus() {},
     })
     return elements.get(id)
-  } }
+  } })
   let stored = { autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
-    defaultMuted: true, hoverDecoyEnabled: false, volume: 0.42, searchTerms: ['都市'] }
+    defaultMuted: true, hoverDecoyEnabled, volume: 0.42, searchTerms: ['都市'] }
   let current = structuredClone(stored), beforeSave = async () => {}, covers = 0, applied = 0
   const requests = []
   const settings = createSettings({
@@ -27,10 +27,16 @@ function fixture() {
     changeCover: () => { covers++ },
   }, document)
   settings.open()
-  return { settings, elements, requests,
+  return { settings, elements, requests, document,
     get stored() { return stored }, get covers() { return covers }, get applied() { return applied },
     beforeSave: callback => { beforeSave = callback },
     external(patch) { stored = { ...stored, ...patch }; current = structuredClone(stored) },
+    dispatch(type, path = [], properties = {}) {
+      const event = new Event(type, { cancelable: true })
+      Object.assign(event, properties, { composedPath: () => path.map(id => elements.get(id)) })
+      document.dispatchEvent(event)
+      return event
+    },
     toggle(key, checked) { const input = elements.get(key); input.checked = checked; input.onchange() },
     terms(value) { const input = elements.get('terms'); input.value = value; input.oninput(); return input },
   }
@@ -156,4 +162,88 @@ test('a closed player ignores late UI responses and cannot close a newly opened 
   assert.equal(f.applied, 0)
   assert.equal(f.covers, 0)
   assert.equal(f.elements.get('settings').hidden, false)
+})
+
+for (const hoverDecoyEnabled of [false, true]) {
+  test(`outside clicks wait for saves and close Settings with hover=${hoverDecoyEnabled}`, async () => {
+    const f = fixture({ hoverDecoyEnabled }), gate = deferred()
+    f.beforeSave(() => gate.promise)
+    f.terms('都市，悬疑')
+    const event = f.dispatch('click', ['playerContent'])
+    await settle()
+    assert.equal(event.defaultPrevented, true)
+    assert.equal(f.elements.get('settings').hidden, false)
+    assert.equal(f.elements.get('settingsClose').disabled, true)
+    gate.resolve(); await settle()
+    assert.deepEqual(f.stored.searchTerms, ['都市', '悬疑'])
+    assert.equal(f.elements.get('settings').hidden, true)
+    assert.equal(f.covers, 0)
+  })
+
+  test(`Escape closes Settings with hover=${hoverDecoyEnabled}`, async () => {
+    const f = fixture({ hoverDecoyEnabled })
+    const event = f.dispatch('keydown', [], { key: 'Escape', isComposing: false })
+    await settle()
+    assert.equal(event.defaultPrevented, true)
+    assert.equal(f.elements.get('settings').hidden, true)
+    assert.equal(f.requests.length, 0)
+  })
+}
+
+test('clicks inside Settings, on its toggle, and outside player content do not dismiss it', async () => {
+  const f = fixture()
+  for (const path of [['terms', 'settings', 'playerContent'], ['prefs', 'playerContent'], []]) {
+    assert.equal(f.dispatch('click', path).defaultPrevented, false)
+    await settle()
+    assert.equal(f.elements.get('settings').hidden, false)
+  }
+  assert.equal(f.requests.length, 0)
+})
+
+test('pointer movement, focus changes, IME Escape, and a canceled Escape leave Settings open', async () => {
+  const f = fixture()
+  for (const type of ['pointerleave', 'mouseleave', 'blur', 'focusout']) f.dispatch(type)
+  for (const properties of [{ key: 'Escape', isComposing: true }, { key: 'Escape', keyCode: 229 }, { key: 'Enter' }])
+    assert.equal(f.dispatch('keydown', [], properties).defaultPrevented, false)
+  const canceled = new Event('keydown', { cancelable: true })
+  Object.assign(canceled, { key: 'Escape' }); canceled.preventDefault()
+  // A previously handled Escape must not start a close or save operation.
+  f.terms('悬疑')
+  f.document.dispatchEvent(canceled)
+  await settle()
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.requests.length, 0)
+})
+
+test('the cover cannot dismiss Settings via a click or Escape while player content is inert', async () => {
+  const f = fixture({ hoverDecoyEnabled: true })
+  f.elements.get('playerContent').inert = true
+  assert.equal(f.dispatch('click', ['playerContent']).defaultPrevented, false)
+  assert.equal(f.dispatch('keydown', [], { key: 'Escape' }).defaultPrevented, false)
+  await settle()
+  assert.equal(f.elements.get('settings').hidden, false)
+  f.elements.get('playerContent').inert = false
+  f.dispatch('keydown', [], { key: 'Escape' }); await settle()
+  assert.equal(f.elements.get('settings').hidden, true)
+})
+
+for (const dismissal of ['outside', 'Escape']) test(`${dismissal} retains invalid or unsaved Settings and allows a later retry`, async () => {
+  const f = fixture()
+  const dismiss = () => dismissal === 'outside'
+    ? f.dispatch('click', ['playerContent']) : f.dispatch('keydown', [], { key: 'Escape' })
+  f.terms('')
+  dismiss(); await settle()
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.elements.get('terms').attributes['aria-invalid'], 'true')
+  assert.equal(f.requests.length, 0)
+  f.terms('悬疑')
+  f.beforeSave(async () => { throw Error('synthetic failure') })
+  dismiss(); await settle()
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.elements.get('settingsStatus').dataset.state, 'error')
+  assert.deepEqual(f.stored.searchTerms, ['都市'])
+  f.beforeSave(async () => {})
+  dismiss(); await settle()
+  assert.equal(f.elements.get('settings').hidden, true)
+  assert.deepEqual(f.stored.searchTerms, ['悬疑'])
 })
