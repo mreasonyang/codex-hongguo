@@ -13,13 +13,15 @@ class Element extends EventTarget {
   hidden = true; checked = false; value = '1'; dataset = {}; children = []; textContent = ''
   classList = { toggle() {}, add() {}, remove() {}, contains() { return false } }
   style = { setProperty() {} }
-  setAttribute() {}
+  attributes = new Map()
+  setAttribute(name, value) { this.attributes.set(name, value) }
+  getAttribute(name) { return this.attributes.get(name) ?? null }
   replaceChildren(...children) { this.children = children }
   append(...children) { this.children.push(...children) }
   querySelectorAll() { return [] }
   querySelector() { return null }
   focus() {}
-  removeAttribute() {}
+  removeAttribute(name) { this.attributes.delete(name) }
 }
 class Video extends Element {
   paused = true; ended = false; duration = 60; currentTime = 12; plays = 0
@@ -37,11 +39,13 @@ const source = readFileSync(new URL('../src/ui/player.ts', import.meta.url), 'ut
 export const fixture = {
   poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer, changeSource, list, history,
   sourceState() { return { source: activeSource, cards: cards.map(row => row.id), watched: watched.map(row => row.seriesId) } },
+  setProviders(items) { providers = items.filter(item => item.available); syncSourceButton() },
   selected() {
     context = { identified: true }; pageActive = playerReady = loaded = true;
     series = { id: 'hg-1', title: 'Test' };
     episode = { id: 'hg-11', label: '1', number: 1, codec: 'h264', playable: true };
     episodes = [episode];
+    syncSourceButton();
   },
   clearSelection() { series = null; episode = null },
   setEpisodes(items, cursor) { episodes = items; episode = items[0]; epCursor = cursor },
@@ -96,6 +100,47 @@ function setup(t) {
 }
 const turnHelpers = await import('../src/ui/playback-turn.ts')
 const mediaHelpers = await import('../src/ui/media-startup.ts')
+
+test('the source mark switches two providers directly and restores its target label', async t => {
+  const f = setup(t)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  const control = f.elements.get('source')
+  assert.equal(control.getAttribute('aria-label'), '切换至黄果')
+  control.onclick(); await flush()
+  assert.equal(f.ui.sourceState().source, 'hghub')
+  assert.equal(control.dataset.source, 'hghub')
+  assert.equal(control.getAttribute('aria-label'), '切换至红果')
+  assert.equal(f.elements.get('sourceName').textContent, '黄果短剧')
+  assert.equal(f.elements.get('sourceMenu').hidden, true)
+  assert.equal(control.disabled, false)
+  control.onclick(); await flush()
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+})
+test('additional providers use a checked menu and select through the existing source service', async t => {
+  const f = setup(t)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'hghub', name: '黄果', available: true },
+    { id: 'local', name: 'Local provider', available: true }])
+  const control = f.elements.get('source'), menu = f.elements.get('sourceMenu')
+  control.onclick()
+  assert.equal(menu.hidden, false)
+  assert.equal(control.getAttribute('aria-expanded'), 'true')
+  assert.equal(menu.children.length, 3)
+  assert.equal(menu.children[0].getAttribute('aria-checked'), 'true')
+  menu.children[2].onclick(); await flush()
+  assert.equal(f.ui.sourceState().source, 'local')
+  assert.equal(menu.hidden, true)
+  assert.equal(f.store.preferences().defaultSource, 'local')
+  assert.equal(f.elements.get('sourceName').textContent, 'Local provider')
+})
+test('a single available provider disables switching instead of opening an empty menu', t => {
+  const f = setup(t)
+  f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'hghub', name: '黄果', available: false }])
+  const control = f.elements.get('source')
+  assert.equal(control.disabled, true)
+  control.onclick()
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+})
 
 test('switching providers saves progress, stops playback and discards the old catalog response', async t => {
   const f = setup(t), old = Promise.withResolvers()

@@ -459,6 +459,7 @@ input[type='range']::-moz-range-thumb {
   margin-bottom: 6px;
 }
 .brand {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -483,7 +484,53 @@ h1 {
   font-weight: 600;
   letter-spacing: 0.02em;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.sourceButton {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  margin: 0 -4px;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+}
+.sourceButton:hover:not(:disabled) { background: var(--hover); }
+.sourceButton:disabled { opacity: .55; }
+.sourceButton[data-source='hghub'] .mark { background: #e3ac32; color: #493307; }
+.sourceButton:not([data-source='hongguo']):not([data-source='hghub']) .mark { background: var(--text-2); }
+.sourceMenu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 7px);
+  left: 0;
+  min-width: 168px;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--raised);
+  box-shadow: var(--_shadow);
+}
+.sourceMenu button {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  text-align: start;
+}
+.sourceMenu button:hover, .sourceMenu button:focus-visible { background: var(--hover); }
+.sourceMenu button[aria-checked='true'] { background: var(--surface); }
+.sourceMenu .sourceLabel { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.sourceDot { flex: 0 0 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--text-2); }
+.sourceDot[data-source='hongguo'] { background: var(--brand); }
+.sourceDot[data-source='hghub'] { background: #e3ac32; }
+.sourceMenu .i { width: 13px; height: 13px; color: var(--text-2); }
 .tools {
   display: flex;
   gap: 2px;
@@ -1508,4 +1555,3 @@ h1 {
     animation: none !important;
   }
 }
-.sourcePicker { max-width: 7rem; min-height: 32px; padding: 4px 8px; border: 1px solid var(--border, #8885); border-radius: 8px; background: transparent; color: inherit; font: inherit; }

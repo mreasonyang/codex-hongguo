@@ -57,12 +57,55 @@ let activeQuery = '',
   cursor: string | undefined,
   cards: Series[] = [],
   loaded = false
-let activeSource: SourceId = 'hongguo', sourceGeneration = 0
+let activeSource: SourceId = 'hongguo', sourceGeneration = 0, switchingSource = false
 let sourceUpdate = Promise.resolve()
 const sourceOf = (id: string): SourceId => id.startsWith('p.') ? id.split('.')[1] : id.startsWith('hh-') ? 'hghub' : 'hongguo'
 let providers: Array<{ id: string; name: string; available: boolean }> = [
   { id: 'hongguo', name: '红果', available: true }, { id: 'hghub', name: '黄果', available: true },
 ]
+function closeSourceMenu(focus = false) {
+  el('sourceMenu').hidden = true
+  el('source').setAttribute('aria-expanded', 'false')
+  if (focus) el('source').focus()
+}
+function syncSourceButton() {
+  const control = el<HTMLButtonElement>('source')
+  control.dataset.source = activeSource
+  const name = providers.find(provider => provider.id === activeSource)?.name || activeSource
+  el('sourceName').textContent = activeSource === 'hongguo' ? tr('红果短剧') : activeSource === 'hghub' ? tr('黄果短剧') : name
+  const next = providers.length === 2 ? providers.find(provider => provider.id !== activeSource) : undefined
+  const label = next ? tr(next.id === 'hongguo' ? '切换至红果' : next.id === 'hghub' ? '切换至黄果' : '切换视频源') : tr('切换视频源')
+  control.setAttribute('aria-label', label)
+  control.title = label
+  control.disabled = switchingSource || providers.length < 2
+  if (providers.length > 2) {
+    control.setAttribute('aria-haspopup', 'menu')
+    control.setAttribute('aria-controls', 'sourceMenu')
+    control.setAttribute('aria-expanded', String(!el('sourceMenu').hidden))
+  } else {
+    control.removeAttribute('aria-haspopup')
+    control.removeAttribute('aria-controls')
+    control.removeAttribute('aria-expanded')
+  }
+}
+function showSourceMenu() {
+  const menu = el('sourceMenu')
+  const items = providers.map(provider => {
+    const b = button('', async () => { closeSourceMenu(true); await changeSource(provider.id) })
+    b.setAttribute('role', 'menuitemradio')
+    b.setAttribute('aria-checked', String(provider.id === activeSource))
+    const dot = document.createElement('span'), name = document.createElement('span')
+    dot.className = 'sourceDot'; dot.dataset.source = provider.id; dot.setAttribute('aria-hidden', 'true')
+    name.className = 'sourceLabel'; name.textContent = tr(provider.name)
+    b.append(dot, name)
+    if (provider.id === activeSource) b.append(icon('check'))
+    return b
+  })
+  menu.replaceChildren(...items)
+  menu.hidden = false
+  el('source').setAttribute('aria-expanded', 'true')
+  items.find((_, i) => providers[i].id === activeSource)?.focus()
+}
 let action = 0,
   selection = 0,
   listing = 0,
@@ -257,7 +300,7 @@ async function select(s: Series, requested?: string, playNow = false, waitingTur
     activeSource = nextSource
     ++sourceGeneration; ++listing
     cards = []; watched = []; cursor = undefined; activeQuery = ''
-    el<HTMLSelectElement>('source').value = activeSource
+    closeSourceMenu(); syncSourceButton()
   }
   const exactEpisode = waitingTurn && requested
   el('home').hidden = true
@@ -1064,8 +1107,9 @@ async function changeSource(next: SourceId) {
   if (next === activeSource || !playerReady) return
   const generation = ++sourceGeneration
   ++listing; ++selection
-  const control = el<HTMLSelectElement>('source')
-  control.disabled = true
+  closeSourceMenu()
+  switchingSource = true
+  syncSourceButton()
   const pending = pause()
   release()
   series = null; episode = null; episodes = []; epCursor = undefined
@@ -1082,6 +1126,7 @@ async function changeSource(next: SourceId) {
     await sourceUpdate
     if (generation !== sourceGeneration || !playerReady) return
     activeSource = next; context.source = next
+    syncSourceButton()
     await Promise.all([list(false, ''), history()])
   } catch {
     if (generation === sourceGeneration) {
@@ -1089,12 +1134,33 @@ async function changeSource(next: SourceId) {
       catalogState('error', '视频源暂未切换，请重试')
     }
   }
-  finally { control.value = activeSource; control.disabled = false }
+  finally { switchingSource = false; syncSourceButton() }
 }
-el<HTMLSelectElement>('source').onchange = () => {
-  const next = el<HTMLSelectElement>('source').value
-  if (providers.some(provider => provider.available && provider.id === next)) void changeSource(next)
+el('source').onclick = () => {
+  if (el<HTMLButtonElement>('source').disabled) return
+  if (providers.length === 2) {
+    const next = providers.find(provider => provider.id !== activeSource)
+    if (next) void changeSource(next.id)
+  } else if (providers.length > 2) {
+    if (el('sourceMenu').hidden) showSourceMenu()
+    else closeSourceMenu()
+  }
 }
+el('sourceMenu').onkeydown = e => {
+  if (e.key === 'Escape') { e.preventDefault(); closeSourceMenu(true) }
+  else if (e.key === 'Tab') closeSourceMenu()
+  else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+    e.preventDefault()
+    const items = [...el('sourceMenu').querySelectorAll<HTMLButtonElement>('button')]
+    const at = items.indexOf(document.activeElement as HTMLButtonElement)
+    const next = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : (at + (e.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length
+    items[next]?.focus()
+  }
+}
+document.addEventListener('pointerdown', e => {
+  if (!el('sourceMenu').hidden && !el('sourceControl').contains(e.target as Node)) closeSourceMenu()
+})
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !el('sourceMenu').hidden) closeSourceMenu(true) })
 async function openPairing() {
   const show = series
   const ep = episode
@@ -1266,13 +1332,8 @@ async function initPlayer(selection?: WaitingSelection) {
   if (!playerReady || generation !== sourceGeneration) return
   providers = (await call<{ items: typeof providers }>('get_providers')).items.filter(provider => provider.available)
   if (!playerReady || generation !== sourceGeneration) return
-  el<HTMLSelectElement>('source').replaceChildren(...providers.map(provider => {
-    const option = document.createElement('option')
-    option.value = provider.id; option.textContent = tr(provider.name)
-    return option
-  }))
   activeSource = context.source ?? prefs.defaultSource ?? 'hongguo'
-  el<HTMLSelectElement>('source').value = activeSource
+  syncSourceButton()
   if (selection?.pick) {
     const pick = selection.pick
     await select(pick, pick.episodeId, selection.play, selection.turnId)
@@ -1291,6 +1352,7 @@ async function initPlayer(selection?: WaitingSelection) {
   await catalog
 }
 function closePlayer() {
+  closeSourceMenu()
   const stopped = suspend()
   playerReady = false
   ++preferencesGeneration

@@ -106,17 +106,14 @@
     </section>
     <main>
       <header class="topbar">
-        <div class="brand">
-          <span class="mark" aria-hidden="true">
-            <svg class="i"><use href="#i-play" /></svg>
-          </span>
-          <h1>红果短剧</h1>
+        <div class="brand" id="sourceControl">
+          <button id="source" class="sourceButton" type="button" aria-label="切换至黄果" title="切换至黄果" data-source="hongguo" disabled>
+            <span class="mark" aria-hidden="true"><svg class="i"><use href="#i-play" /></svg></span>
+          </button>
+          <h1 id="sourceName">红果短剧</h1>
+          <div id="sourceMenu" class="sourceMenu" role="menu" aria-label="视频源" hidden></div>
         </div>
         <div class="tools">
-          <select id="source" class="sourcePicker" aria-label="视频源" title="视频源">
-            <option value="hongguo">红果</option>
-            <option value="hghub">黄果</option>
-          </select>
           <button
             id="prefs"
             class="icon"
