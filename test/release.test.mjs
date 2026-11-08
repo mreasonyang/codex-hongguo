@@ -238,17 +238,31 @@ test('registry reads use canonical scoped URLs and the dedicated tag endpoint', 
   ])
 })
 
-test('publication tolerates tag propagation beyond the original short confirmation window', async t => {
+test('publication tolerates tag propagation lasting several minutes', async t => {
   const { root, candidate, env } = await fixture(t, { version: '0.0.35-beta.1' })
   let uploaded = false, reads = 0, waits = 0
   const fetchImpl = async url => {
     if (url.endsWith('/' + candidate.version) && !uploaded) return absent()
-    const visible = uploaded && ++reads > 20
+    const visible = uploaded && ++reads > 40
     return registry(candidate, { latest: version, ...(visible ? { beta: candidate.version } : {}) })(url)
   }
   await publishRelease({ root, execute: true, env, fetchImpl, publishImpl: async () => { uploaded = true },
-    delay: async milliseconds => { assert.equal(milliseconds, 5000); waits++ },
+    delay: async milliseconds => { assert.equal(milliseconds, 15000); waits++ },
   })
-  assert.ok(waits >= 5)
+  assert.ok(waits * 15000 > 120000)
   assert.equal((await readJson(join(root, 'release/publication.json'))).channel, 'beta')
+})
+
+test('publication waits for missing package metadata without uploading the archive again', async t => {
+  const { root, candidate, env } = await fixture(t, { version: '0.0.35-beta.1' })
+  let uploads = 0, waits = 0
+  const fetchImpl = async url => url.endsWith('/' + candidate.version) && waits < 22
+    ? absent() : registry(candidate)(url)
+  await publishRelease({ root, execute: true, env, fetchImpl,
+    publishImpl: async () => { uploads++ },
+    delay: async milliseconds => { assert.equal(milliseconds, 15000); waits++ },
+  })
+  assert.equal(uploads, 1)
+  assert.equal(waits, 22)
+  assert.equal((await readJson(join(root, 'release/publication.json'))).integrity, candidate.integrity)
 })

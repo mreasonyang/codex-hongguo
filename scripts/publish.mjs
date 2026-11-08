@@ -44,14 +44,16 @@ export async function publishRelease({ root = process.cwd(), execute = false, en
     }
   }
   let confirmed = false, confirmedTags
-  // npm publication and read replicas need not become visible simultaneously.
-  for (let attempt = 0; attempt < 24; attempt++) {
+  // Newly published metadata can take several minutes to reach npm read replicas.
+  // Allow ten minutes before failing; a retry reuses the identical published bytes.
+  const confirmationAttempts = 41
+  for (let attempt = 0; attempt < confirmationAttempts; attempt++) {
     if (await registryPackage(candidate, fetchImpl)) {
       const tags = await registryTags(candidate, fetchImpl)
       if (channel === 'beta' && tags.latest !== before.latest) throw Error('Stable npm channel changed during beta publication')
       if (tags[channel] === candidate.version) { confirmed = true; confirmedTags = tags; break }
     }
-    if (attempt < 23) await delay(5000)
+    if (attempt < confirmationAttempts - 1) await delay(15000)
   }
   if (!confirmed) throw Error('Registry integrity has not been confirmed')
   await writeFile(resolve(root, 'release/publication.json'), JSON.stringify({
