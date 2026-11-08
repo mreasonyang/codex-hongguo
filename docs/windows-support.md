@@ -43,6 +43,14 @@ node "$env:TEMP\hongguo-windows-hooks.cjs"
 
 脚本列出插件版本、发行包中的钩子文件和 Windows 启动器是否存在，并通过 npm/PATH CLI 与可定位的桌面内置引擎分别查询钩子发现结果。它不执行钩子、不修改配置或信任记录，不输出命令参数、环境变量、原始日志或其他插件的配置。`desktopEngineFound: false` 表示没有定位到桌面内置引擎，不能把 CLI 的结果当成桌面版的结果。请将输出中的 JSON 提供给维护者；无需提交完整日志或认证配置。
 
+## Beta 测试安装
+
+```powershell
+npx.cmd "@kyun.si/codex-hongguo@beta" setup
+```
+
+后续更新使用同一命令的 `update`。关闭旧播放器和 Codex 后执行，完成后重新打开；保留观看进度和设置。返回正式渠道使用 `npx.cmd "@kyun.si/codex-hongguo@latest" setup`。测试版与正式版共用插件 ID，切换会替换当前安装，不同时运行两份。
+
 ## 离线 ZIP 安装
 
 也可以解压 `release/codex-hongguo-<版本>.zip` 到长期保留的目录，在解压根目录的 PowerShell 执行：

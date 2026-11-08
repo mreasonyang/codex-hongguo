@@ -71,7 +71,7 @@ node scripts/verify-install.mjs --playback
 
 ## 版本与 CI 发布
 
-普通提交、PR 和本地候选安装不触发 npm 发布。一个待发布版本可以包含多次修改；只在准备下一次正式发布时递增版本，构建、测试和本地安装都不自动改版本号。已发布版本不能覆盖。
+普通提交、PR 和本地候选安装不触发 npm 发布。一个待发布版本可以包含多次修改；正式版沿用三段数字（每段 0–999）；测试版使用下一正式版本加 `-beta.N`，N 从 1 开始。构建、测试和本地安装都不自动改版本号。已发布版本不能覆盖。
 
 发布由 `.github/workflows/publish.yml` 负责：
 
@@ -97,3 +97,13 @@ git push origin v0.0.34
 在 npm 包设置中为 `mreasonyang/codex-hongguo` 的 `publish.yml` 配置受信任发布者，并允许直接 `npm publish`。流程使用 GitHub 托管 runner、Node 24、npm 11 和仅发布 job 的 `id-token: write`，不保存长期 npm token。配置要求以 [npm 受信任发布者文档](https://docs.npmjs.com/trusted-publishers/) 为准；预演不验证 npm 账户端的发布授权。
 
 `scripts/publish.mjs` 默认为预览；实际上传必须显式 `--publish`，且具备 CI OIDC、版本标签和三平台回执。本机 `npm run release:publish` 不再作为正式发布入口。`release/candidate.json` 绑定源码与产物，`release/qualifications/` 保存各平台安装回执，合并后的 `release/verification.json` 用于发布校验。公开用户安装和桌面实播仍需分别验收。
+
+## Beta 发布
+
+`npm run version:beta` 从 `0.0.34` 生成 `0.0.35-beta.1`，再次执行生成 `0.0.35-beta.2`。版本脚本同步 package、lock 和两个插件清单。已发布版本不可覆盖；不要移动已发布标签。
+
+Beta 可以从功能分支发布。提交代码和版本后推送匹配标签（例如 `v0.0.35-beta.1`），沿用同一份产物的三平台回归和安装验收，再由原有 `publish.yml` 通过 OIDC 执行 `npm publish --tag beta`。发布脚本检查 beta 指向和包完整性，并确认 `latest` 未改变；不更新正式市场索引，也不向 main 提交 beta 发布记录。发布回执保存在 Actions 的 publication artifact。
+
+Windows 用户始终使用 `npx.cmd "@kyun.si/codex-hongguo@beta" setup` / `update`，无需知道具体 beta 编号。安装器将自身 beta 版本写入独立版本目录的本机索引，并固定安装该版本。卸载识别 beta 索引，切换至 `@latest setup` 保留进度和设置。
+
+准备转正式版时，`npm run version:patch` 将 `0.0.35-beta.N` 提升为 `0.0.35`，将正式源码合入 main 后再推送正式标签。正式发布仍要求 main 历史，并显式指定 `--tag latest`。发布渠道从版本推导，不能把 beta 版本标成 latest；已存在更新版本时拒绝回退渠道。

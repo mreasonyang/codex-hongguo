@@ -37,6 +37,16 @@ npx.cmd "@kyun.si/codex-hongguo@latest" setup
 
 默认安装和更新不需要 Git。命令会检查 Node、npm 和 Codex CLI，自动准备播放组件，再通过本机市场索引从 npm 安装插件。首次安装需要联网，之后复用本机缓存。安装完成时会提示你到 Codex「设置 → Hooks」审查、信任并启用 `UserPromptSubmit`、`Stop`、`Interrupt`。然后打开新的本地聊天使用。
 
+### Beta 测试渠道
+
+测试设备可安装 beta；正式用户继续使用 `@latest`。Windows PowerShell：
+
+```powershell
+npx.cmd "@kyun.si/codex-hongguo@beta" setup
+```
+
+后续更新固定使用 `npx.cmd "@kyun.si/codex-hongguo@beta" update`；macOS / Linux 将 `npx.cmd` 换为 `npx`。切回正式版使用 `@latest setup`。切换渠道替换当前插件，保留设置与观看进度；操作前关闭旧播放器，完成后重启 Codex。首次安装或更新后按提示核对 Hooks。
+
 ### 安装后配置
 
 - **运行设置引导（Setup）**：安装后可在插件详情页运行 **Setup**（调用 `hongguo-setup`），或在本地对话中直接说“配置红果短剧”。引导会检查 Node、进度库和播放组件，并固定提示你到 Codex「设置 → Hooks」人工核对三个 Hooks 的授权。

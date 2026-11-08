@@ -11,14 +11,15 @@ const writeJson = (path, value) => writeFile(path, JSON.stringify(value) + '\n')
 const readJson = async path => JSON.parse(await readFile(path, 'utf8'))
 const index = version => ({ plugins: [{ source: { source: 'npm', package: name, version } }] })
 const missing = path => assert.rejects(access(path), { code: 'ENOENT' })
-const registry = candidate => async () => ({ ok: true, status: 200, json: async () => ({ name, version, dist: { integrity: candidate.integrity } }) })
+const registry = (candidate, tags = candidate.channel === 'beta' ? { latest: version, beta: candidate.version } : { latest: candidate.version }) =>
+  async () => ({ ok: true, status: 200, json: async () => ({ name, version: candidate.version, dist: { integrity: candidate.integrity }, 'dist-tags': tags }) })
 const absent = async () => ({ ok: false, status: 404 })
 
-async function fixture(t, { tagged = true, qualified = true } = {}) {
+async function fixture(t, { tagged = true, qualified = true, version: targetVersion = version } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'hongguo-release-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   await mkdir(join(root, '.agents/plugins'), { recursive: true })
-  await writeJson(join(root, 'package.json'), { name, version })
+  await writeJson(join(root, 'package.json'), { name, version: targetVersion })
   await writeJson(join(root, '.agents/plugins/marketplace.json'), index('0.0.33'))
   await writeFile(join(root, '.gitignore'), '/release/\n')
   git(root, 'init', '-b', 'main')
@@ -27,18 +28,18 @@ async function fixture(t, { tagged = true, qualified = true } = {}) {
   git(root, '-c', 'user.name=Release Test', '-c', 'user.email=release@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-m', 'fixture')
   const sha = git(root, 'rev-parse', 'HEAD')
   git(root, 'update-ref', 'refs/remotes/origin/main', sha)
-  if (tagged) git(root, 'tag', 'v' + version)
+  if (tagged) git(root, 'tag', 'v' + targetVersion)
   for (const path of ['release/npm/codex-hongguo', 'release/marketplace/.agents/plugins']) await mkdir(join(root, path), { recursive: true })
-  await writeJson(join(root, 'release/npm/codex-hongguo/package.json'), { name, version })
-  await writeJson(join(root, 'release/package-metadata.json'), { name, version, filename: `kyun.si-codex-hongguo-${version}.tgz` })
-  await writeJson(join(root, 'release/marketplace/.agents/plugins/marketplace.json'), index(version))
-  await writeFile(join(root, `release/kyun.si-codex-hongguo-${version}.tgz`), 'synthetic archive for release metadata checks')
-  await writeFile(join(root, `release/codex-hongguo-${version}.zip`), 'synthetic offline archive')
-  const candidate = await prepareCandidate(root, sha, tagged ? 'v' + version : '')
+  await writeJson(join(root, 'release/npm/codex-hongguo/package.json'), { name, version: targetVersion })
+  await writeJson(join(root, 'release/package-metadata.json'), { name, version: targetVersion, filename: `kyun.si-codex-hongguo-${targetVersion}.tgz` })
+  await writeJson(join(root, 'release/marketplace/.agents/plugins/marketplace.json'), index(targetVersion))
+  await writeFile(join(root, `release/kyun.si-codex-hongguo-${targetVersion}.tgz`), 'synthetic archive for release metadata checks')
+  await writeFile(join(root, `release/codex-hongguo-${targetVersion}.zip`), 'synthetic offline archive')
+  const candidate = await prepareCandidate(root, sha, tagged ? 'v' + targetVersion : '')
   if (qualified) {
     for (const platform of ['darwin', 'linux', 'win32']) {
       await writeJson(join(root, 'release/verification.json'), {
-        name, version, platform, sha256: candidate.sha256, installation: 'fresh',
+        name, version: targetVersion, platform, sha256: candidate.sha256, installation: 'fresh',
         checks: ['native-npm-source', 'progress-preserved', 'sound-preferences-preserved'],
       })
       await sealReceipt(root, sha, platform)
@@ -46,7 +47,7 @@ async function fixture(t, { tagged = true, qualified = true } = {}) {
     await collectReceipts(root, sha)
   }
   // Synthetic OIDC metadata: no real credential is read or used in these tests.
-  const env = { GITHUB_ACTIONS: 'true', RELEASE_PUBLISH: 'true', RELEASE_SOURCE_SHA: sha, RELEASE_TAG: 'v' + version,
+  const env = { GITHUB_ACTIONS: 'true', RELEASE_PUBLISH: 'true', RELEASE_SOURCE_SHA: sha, RELEASE_TAG: 'v' + targetVersion,
     ACTIONS_ID_TOKEN_REQUEST_URL: 'https://example.invalid/oidc', ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'synthetic-test-placeholder' }
   return { root, sha, candidate, env }
 }
@@ -59,7 +60,7 @@ test('release resolution pins the tag commit after main advances and requires ma
   const latest = git(root, 'rev-parse', 'HEAD')
   git(root, 'update-ref', 'refs/remotes/origin/main', latest)
   assert.deepEqual(await resolveRelease(root, { event: 'push', ref: 'refs/tags/v' + version, sha }), {
-    source_sha: sha, version, release_tag: 'v' + version, publish: 'true',
+    source_sha: sha, version, channel: 'latest', release_tag: 'v' + version, publish: 'true',
   })
   assert.equal((await resolveRelease(root, { event: 'workflow_dispatch', sha: latest })).source_sha, latest)
   await assert.rejects(resolveRelease(root, { sha, publish: true }), /requires/)
@@ -151,4 +152,65 @@ test('index advances only after registry confirmation, tolerates newer main and 
   await writeJson(join(root, '.agents/plugins/marketplace.json'), index('0.0.35'))
   await updatePublishedIndex(root, registry(candidate))
   assert.equal((await readJson(join(root, '.agents/plugins/marketplace.json'))).plugins[0].source.version, '0.0.35')
+})
+
+test('beta tags can resolve a feature-branch commit without requiring a stable main release', async t => {
+  const beta = '0.0.35-beta.1', { root } = await fixture(t, { version: beta })
+  git(root, 'checkout', '-b', 'feature')
+  await writeFile(join(root, 'feature.txt'), 'beta change')
+  git(root, 'add', 'feature.txt')
+  git(root, '-c', 'user.name=Release Test', '-c', 'user.email=release@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-m', 'feature')
+  const sha = git(root, 'rev-parse', 'HEAD')
+  git(root, 'tag', '-f', 'v' + beta)
+  const result = await resolveRelease(root, { event: 'push', ref: 'refs/tags/v' + beta, sha })
+  assert.equal(result.source_sha, sha)
+  assert.equal(result.channel, 'beta')
+  assert.equal(result.publish, 'true')
+})
+
+test('candidate channel is bound to its version', async t => {
+  const { root } = await fixture(t, { version: '0.0.35-beta.1' })
+  const candidate = await readJson(join(root, 'release/candidate.json'))
+  await writeJson(join(root, 'release/candidate.json'), { ...candidate, channel: 'latest' })
+  await assert.rejects(validateCandidate(root), /channel differs/)
+})
+
+test('beta publication uses the beta tag, confirms it, and leaves the stable index unchanged', async t => {
+  const { root, candidate, env } = await fixture(t, { version: '0.0.35-beta.1' })
+  const before = await readFile(join(root, '.agents/plugins/marketplace.json'), 'utf8')
+  let uploaded = false
+  const fetchImpl = async url => url.endsWith('/' + candidate.version) && !uploaded
+    ? absent() : registry(candidate, { latest: version, ...(uploaded ? { beta: candidate.version } : {}) })()
+  await publishRelease({ root, execute: true, env, fetchImpl, publishImpl: async (archive, options) => {
+    assert.equal(archive, join(root, 'release', candidate.filename))
+    assert.deepEqual(options, { channel: 'beta' })
+    uploaded = true
+  } })
+  await updatePublishedIndex(root, fetchImpl)
+  assert.equal(await readFile(join(root, '.agents/plugins/marketplace.json'), 'utf8'), before)
+  assert.equal((await readJson(join(root, 'docs/releases/npm-' + candidate.version + '.json'))).channel, 'beta')
+  const publication = await readJson(join(root, 'release/publication.json'))
+  assert.equal(publication.stableVersionBefore, version)
+  assert.equal(publication.stableVersionAfter, version)
+})
+
+test('a beta candidate older than the current stable version is not published', async t => {
+  const { root, candidate, env } = await fixture(t, { version: '0.0.34-beta.1' })
+  await assert.rejects(publishRelease({ root, execute: true, env, fetchImpl: registry(candidate),
+    publishImpl: () => assert.fail('must not publish an older beta'),
+  }), /must follow the stable/)
+})
+
+test('beta refuses changed latest, a missing beta pointer, and downgrading an existing beta channel', async t => {
+  for (const scenario of ['latest-changed', 'beta-missing', 'newer-beta']) {
+    const { root, candidate, env } = await fixture(t, { version: '0.0.35-beta.1' })
+    let uploaded = false
+    const tags = () => ({ latest: scenario === 'latest-changed' && uploaded ? '0.0.35' : version,
+      ...(scenario === 'newer-beta' ? { beta: '0.0.35-beta.2' } : uploaded && scenario !== 'beta-missing' ? { beta: candidate.version } : {}) })
+    const fetchImpl = async url => url.endsWith('/' + candidate.version) && !uploaded ? absent() : registry(candidate, tags())()
+    await assert.rejects(publishRelease({ root, execute: true, env, fetchImpl, delay: async () => {},
+      publishImpl: async () => { assert.notEqual(scenario, 'newer-beta'); uploaded = true },
+    }), /channel changed|not been confirmed|newer version/)
+    await missing(join(root, 'release/publication.json'))
+  }
 })

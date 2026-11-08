@@ -10,12 +10,14 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { Store } from '../src/server/store.mjs'
 import { marketplace, npmPackageName } from './distribution.mjs'
+import { releaseChannel } from '../src/runtime/version.mjs'
 
 const tmp = await realpath(await mkdtemp(join(tmpdir(), '红果 安装 ')))
 const root = join(tmp, '本地 市场'),
   profile = join(tmp, '独立配置')
 const npmMarket = join(tmp, 'npm 市场')
 const version = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version
+const channel = releaseChannel(version)
 const playerUri = 'ui://hongguo/v24/player', waitingUri = 'ui://hongguo/v24/waiting'
 const commands = Object.fromEntries(['npm', 'codex', 'openssl'].map(name => [name, findExecutable(name)]))
 const env = {
@@ -101,12 +103,12 @@ try {
   seeded.setPreferences({ autoPrompt: true, searchTerms: ['总裁', '重生', '逆袭'], defaultMuted: false, volume: 0.43 })
   seeded.setSetupDismissed(true)
   seeded.close()
-  run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
+  run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + channel, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
   if (process.platform === 'win32') {
     // Exercise the same quoted scoped package used in the installation instructions,
     // with both Windows PowerShell 5.1 and PowerShell 7. No platform bypass is allowed.
     const quote = value => "'" + value.replaceAll("'", "''") + "'"
-    const args = ['--yes', '--registry', origin, npmPackageName + '@latest', 'setup', '--marketplace', npmMarket]
+    const args = ['--yes', '--registry', origin, npmPackageName + '@' + channel, 'setup', '--marketplace', npmMarket]
     const script = "$ErrorActionPreference = 'Stop'; npx.cmd " + args.map(quote).join(' ') + '; exit $LASTEXITCODE'
     for (const shell of ['powershell', 'pwsh']) {
       const result = spawnSync(findExecutable(shell), ['-NoProfile', '-NonInteractive', '-Command', script], {

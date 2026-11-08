@@ -37,6 +37,16 @@ Keep the package name quoted so PowerShell treats the leading `@` literally. `np
 
 Default installation and updates do not require Git. The command checks Node, npm and the Codex CLI, prepares the playback component, then uses a local marketplace index to install the plugin from npm. The first installation requires a network connection; later runs reuse the local cache. The installer tells you to review, trust and enable `UserPromptSubmit`, `Stop` and `Interrupt` in Codex **Settings → Hooks**. Then open a new local chat to use the plugin.
 
+### Beta testing channel
+
+Test devices can use beta while stable users stay on `@latest`:
+
+```powershell
+npx.cmd "@kyun.si/codex-hongguo@beta" setup
+```
+
+Update with `npx.cmd "@kyun.si/codex-hongguo@beta" update`. On macOS / Linux, use `npx` instead of `npx.cmd`. Use `@latest setup` to return to stable. Switching channels replaces the current plugin and preserves preferences and progress. Close the previous player first and restart Codex afterward; review Hooks when prompted.
+
 ### Post-Install Setup
 
 - **Run the Setup guide**: Run **Setup** from the plugin details view (which invokes `hongguo-setup`), or say `配置红果短剧` in a local conversation. Setup checks Node, the progress database and the playback component, then shows a fixed reminder to check Hook authorization manually in Codex Settings → Hooks.

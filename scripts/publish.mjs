@@ -3,7 +3,8 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { git, qualifiedCandidate, registryPackage } from './release-artifacts.mjs'
+import { git, qualifiedCandidate, registryPackage, registryTags } from './release-artifacts.mjs'
+import { releaseChannel, compareVersions } from '../src/runtime/version.mjs'
 
 export async function publishRelease({ root = process.cwd(), execute = false, env = process.env, fetchImpl = fetch,
   delay = ms => new Promise(done => setTimeout(done, ms)), publishImpl } = {}) {
@@ -19,24 +20,33 @@ export async function publishRelease({ root = process.cwd(), execute = false, en
     throw Error('Publishing requires GitHub Actions OIDC')
   if (candidate.releaseTag !== 'v' + candidate.version || env.RELEASE_TAG !== candidate.releaseTag || git(root, 'rev-parse', 'refs/tags/' + candidate.releaseTag + '^{commit}') !== candidate.sourceCommit)
     throw Error('Publishing requires the qualified version tag')
+  const channel = releaseChannel(candidate.version), before = await registryTags(candidate, fetchImpl)
+  if (before[channel] && compareVersions(before[channel], candidate.version) > 0) throw Error('Registry channel already has a newer version')
+  if (channel === 'beta' && before.latest && compareVersions(candidate.version, before.latest) <= 0)
+    throw Error('Beta version must follow the stable version')
   if (!await registryPackage(candidate, fetchImpl)) {
-    if (publishImpl) await publishImpl(resolve(root, 'release', candidate.filename))
+    if (publishImpl) await publishImpl(resolve(root, 'release', candidate.filename), { channel })
     else {
-      const result = spawnSync('npm', ['publish', resolve(root, 'release', candidate.filename), '--access', 'public', '--registry', 'https://registry.npmjs.org', '--provenance'], {
+      const result = spawnSync('npm', ['publish', resolve(root, 'release', candidate.filename), '--tag', channel, '--access', 'public', '--registry', 'https://registry.npmjs.org', '--provenance'], {
         cwd: root, stdio: 'ignore', timeout: 120000,
       })
       if (result.status !== 0) throw Error('npm publication failed')
     }
   }
-  let confirmed = false
+  let confirmed = false, confirmedTags
   for (let attempt = 0; attempt < 5; attempt++) {
-    if (await registryPackage(candidate, fetchImpl)) { confirmed = true; break }
+    if (await registryPackage(candidate, fetchImpl)) {
+      const tags = await registryTags(candidate, fetchImpl)
+      if (channel === 'beta' && tags.latest !== before.latest) throw Error('Stable npm channel changed during beta publication')
+      if (tags[channel] === candidate.version) { confirmed = true; confirmedTags = tags; break }
+    }
     if (attempt < 4) await delay(2000)
   }
   if (!confirmed) throw Error('Registry integrity has not been confirmed')
   await writeFile(resolve(root, 'release/publication.json'), JSON.stringify({
-    name: candidate.name, version: candidate.version, sourceCommit: candidate.sourceCommit,
+    name: candidate.name, version: candidate.version, channel, sourceCommit: candidate.sourceCommit,
     releaseTag: candidate.releaseTag, sha256: candidate.sha256, integrity: candidate.integrity,
+    ...(channel === 'beta' ? { stableVersionBefore: before.latest ?? null, stableVersionAfter: confirmedTags.latest ?? null } : {}),
     publicationMethod: 'GitHub Actions OIDC', registryConfirmed: true, confirmedAt: new Date().toISOString(),
     url: 'https://www.npmjs.com/package/' + candidate.name + '/v/' + candidate.version,
   }, null, 2) + '\n')
