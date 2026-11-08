@@ -38,8 +38,10 @@ function settings(options = {}) {
   }
   const artifact = (options.artifacts || artifacts)[platform + '-' + arch]
   if (!artifact) throw Error('当前系统架构暂不支持自动准备播放组件。')
+  if (artifact.cacheKey !== undefined && (!/^[a-f0-9]{16}$/.test(artifact.cacheKey) ||
+    !/^[a-f0-9]{64}$/.test(artifact.binarySha256) || !Number.isSafeInteger(artifact.binaryBytes) || artifact.binaryBytes <= 0)) throw failure()
   const cache = cacheDirectory({ env, home, platform, paths })
-  const directory = paths.join(cache, 'runtime', 'ffmpeg', artifact.archiveSha256.slice(0, 16), platform + '-' + arch)
+  const directory = paths.join(cache, 'runtime', 'ffmpeg', artifact.cacheKey ?? artifact.archiveSha256.slice(0, 16), platform + '-' + arch)
   return { ...options, env, platform, artifact, directory, target: paths.join(directory, platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg') }
 }
 function cacheDirectory({ env, home, platform, paths }) {
@@ -51,11 +53,14 @@ function cacheDirectory({ env, home, platform, paths }) {
 }
 
 export function ffmpegPath(options) { return settings(options).target }
-function signature(path) {
-  try { const s = lstatSync(path); return s.isFile() && !s.isSymbolicLink() ? `${s.size}:${s.mtimeMs}:${s.ctimeMs}` : null } catch { return null }
+function signature(config) {
+  try {
+    const s = lstatSync(config.target), identity = config.artifact?.binarySha256 || config.artifact?.archiveSha256 || 'override'
+    return s.isFile() && !s.isSymbolicLink() ? `${s.size}:${s.mtimeMs}:${s.ctimeMs}:${identity}` : null
+  } catch { return null }
 }
 export function isFfmpegReady(options) {
-  try { const path = ffmpegPath(options); return !!verified.get(path) && verified.get(path) === signature(path) } catch { return false }
+  try { const config = settings(options); return !!verified.get(config.target) && verified.get(config.target) === signature(config) } catch { return false }
 }
 async function digest(path) {
   const hash = createHash('sha256')
@@ -67,17 +72,21 @@ function probe(path, options) {
 }
 async function ready(config) {
   const { target, artifact } = config
-  if (verified.get(target) && verified.get(target) === signature(target)) return true
+  if (verified.get(target) && verified.get(target) === signature(config)) return true
   try {
     const s = await lstat(target)
     if (!s.isFile() || s.isSymbolicLink()) return false
     if (artifact) {
       const receipt = JSON.parse(await readFile(target + '.json', 'utf8'))
-      if (receipt.archiveSha256 !== artifact.archiveSha256 || !/^[a-f0-9]{64}$/.test(receipt.binarySha256)) return false
+      // Repacking changes the archive hash, while the pinned executable and its
+      // original cache directory stay the same. Preserve the original receipt.
+      const sameBinary = artifact.cacheKey && artifact.binarySha256 && receipt.owner === runtimeOwner &&
+        receipt.schema === 1 && receipt.binarySha256 === artifact.binarySha256
+      if ((receipt.archiveSha256 !== artifact.archiveSha256 && !sameBinary) || !/^[a-f0-9]{64}$/.test(receipt.binarySha256)) return false
       if (s.size !== (artifact.binaryBytes || receipt.binaryBytes) || await digest(target) !== (artifact.binarySha256 || receipt.binarySha256)) return false
     }
     if (!probe(target, config)) return false
-    verified.set(target, signature(target))
+    verified.set(target, signature(config))
     return true
   } catch { return false }
 }
@@ -263,7 +272,7 @@ async function install(config) {
     if (config.platform === 'win32') await rm(target, { force: true })
     await rename(output, target)
     await writeFile(target + '.json', JSON.stringify({ owner: runtimeOwner, schema: 1, archiveSha256: artifact.archiveSha256, binarySha256, binaryBytes: (await stat(target)).size, version: artifact.version }) + '\n', { mode: 0o600 })
-    verified.set(target, signature(target))
+    verified.set(target, signature(config))
     return target
   } catch (error) { throw failure(failureCodes.has(error?.code) && error.code !== 'prepare' ? error.code : stage, error?.httpStatus) }
   finally {

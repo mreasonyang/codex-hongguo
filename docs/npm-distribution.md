@@ -26,7 +26,7 @@ npx "@kyun.si/codex-hongguo@latest" uninstall
 
 ## 运行环境与包内容
 
-npm 包的 `os` 为 darwin/linux/win32，Windows 需要 x64 或 ARM64 Node；ARM64 系统需要 Windows 11 和插件 >=0.0.30。Windows PowerShell 使用 `npx.cmd "@kyun.si/codex-hongguo@latest" setup`，详见 [Windows 支持](windows-support.md)。三平台的自动化安装验证与桌面播放观察分别记录。需要外部 Node.js >=22.16（含 npm）和 Codex CLI。播放组件由安装器自动从原始发行者下载到用户缓存，校验固定的 SHA-256 后使用；不需要全局安装 FFmpeg。包内提供 JavaScript 依赖、播放器、SDK/WASM、播放组件清单和许可说明。
+npm 包的 `os` 为 darwin/linux/win32，Windows 需要 x64 或 ARM64 Node；ARM64 系统需要 Windows 11 和插件 >=0.0.30。Windows PowerShell 使用 `npx.cmd "@kyun.si/codex-hongguo@latest" setup`，详见 [Windows 支持](windows-support.md)。三平台的自动化安装验证与桌面播放观察分别记录。需要外部 Node.js >=22.16（含 npm）和 Codex CLI。播放组件由安装器自动下载到用户缓存，校验固定的归档和可执行文件 SHA-256 后使用；不需要全局安装 FFmpeg。macOS 使用原始发行者的组件，Windows/Linux 使用本项目独立发布的精简组件。包内提供 JavaScript 依赖、播放器、SDK/WASM、播放组件清单和许可说明。
 
 MCP 使用同名的 `bin/run-node` / Windows `bin/run-node.exe` 入口，Hooks 按平台调用同一启动器。两者都检查 Node 版本及 `node:sqlite`；POSIX 保留 PATH、Homebrew、Volta、nvm、mise、fnm 查找，Windows 支持 PATH、常见 Node、Volta、nvm-windows 和 Scoop 位置。源码构建需 Go >=1.25，发行包使用者无需安装 Go。FFmpeg/Codex 通过 `src/runtime/executables.mjs` 查找，显式覆盖项见 [CONTRIBUTING](../CONTRIBUTING.md#运行环境与诊断)。覆盖值必须在实际宿主子进程的环境中可见。
 
@@ -45,6 +45,17 @@ README 的界面截图以无损 WebP 留在源码仓库中，npm 包和离线 ZI
 播放组件下载的总时限为 30 分钟，最多三次尝试共用该时限；等待另一安装完成的时限为 32 分钟。
 安装过程每 30 秒更新锁的时间，避免旧版本将慢速下载误判为废弃安装。
 环境检查的外层时限覆盖等待、下载与解压校验，不会在原先的 15 秒处提前结束。
+
+Windows/Linux 精简组件由 `.github/workflows/ffmpeg-components.yml` 单独发布。
+流程先核对固定上游归档的完整 SHA-256，提取唯一的普通可执行文件，再保留其原始字节重打包。
+组件带 GPLv3、上游许可和来源说明；独立发行提供 FFmpeg 源码快照、固定构建脚本与依赖来源索引。
+Windows/Linux x64 通过实际 H.264/AAC、HEVC 转 H.264、JPEG 封面和 framehash 检查后才发布。
+ARM64 校验源归档、架构和可执行文件字节一致性；这些回执不代表 ARM64 实机播放验收。
+组件使用独立的 `ffmpeg-*` 预发布标签，不推进 npm 正式通道或正式市场索引。
+
+精简组件的 `cacheKey` 保持原缓存目录。升级复用旧回执时，必须匹配本插件所有者、回执版本和固定的可执行文件哈希，
+并重新校验实际文件；内存中的校验缓存也绑定该可执行文件身份。
+因此仅改变压缩归档不会触发同一程序的重复下载，损坏、身份不符或被替换的程序仍需重新安装。
 
 包不声明安装依赖或生命周期脚本，也不包含本机绝对路径、观看媒体、设备档案、测试数据和凭据。便携清单保留在源码，安装包采用已验证的兼容清单。项目采用 [MIT 许可证](../LICENSE)，npm 元数据使用 `MIT`；第三方依赖仍按各自许可分发。
 

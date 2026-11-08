@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, writeFile, rm, readdir, realpath, mkdir, symlink, lstat, rename } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile, rm, readdir, realpath, mkdir, symlink, lstat, rename, copyFile, chmod } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { createHash } from 'node:crypto'
@@ -31,6 +31,96 @@ test('a cold installation downloads once, verifies bytes, and remains usable wit
   await ensureFfmpeg({ ...options, fetchImpl: () => assert.fail('a warm cache must not use the network') })
   assert.deepEqual(await readdir(f.directory), ['codex-hongguo'])
   await assert.rejects(readFile(join(f.directory, 'escape')), { code: 'ENOENT' })
+})
+
+function compactOptions(f, binary = f.binary) {
+  const archive = zipSync({ ffmpeg: binary, 'COPYING.GPLv3': Buffer.from('test license') })
+  const artifact = { ...f.artifact, cacheKey: f.artifact.archiveSha256.slice(0, 16),
+    archiveBytes: archive.length, archiveSha256: sha(archive), binaryBytes: binary.length, binarySha256: sha(binary) }
+  return { archive, options: { ...f.options, artifacts: { [process.platform + '-' + process.arch]: artifact } } }
+}
+
+test('a compact archive reuses the verified legacy executable across a process restart without downloading', async t => {
+  const f = await fixture(t)
+  const original = await ensureFfmpeg({ ...f.options, fetchImpl: async () => new Response(f.archive) })
+  const receipt = await readFile(original + '.json', 'utf8')
+  const { options } = compactOptions(f)
+  assert.equal(ffmpegPath(options), original)
+  // A fresh module has no in-memory verification record from the legacy install.
+  const fresh = await import('../src/runtime/ffmpeg-runtime.mjs?compact-reuse')
+  assert.equal(await fresh.ensureFfmpeg({ ...options, fetchImpl: () => assert.fail('an unchanged binary must reuse the old cache') }), original)
+  assert.deepEqual(await readFile(original), f.binary)
+  assert.equal(await readFile(original + '.json', 'utf8'), receipt, 'retain the actual original archive provenance')
+})
+
+test('a shared cache key cannot reuse an executable with a different pinned binary hash', async t => {
+  const f = await fixture(t)
+  const original = await ensureFfmpeg({ ...f.options, fetchImpl: async () => new Response(f.archive) })
+  const replacement = Buffer.from('new trusted executable'), { archive, options } = compactOptions(f, replacement)
+  assert.equal(isFfmpegReady(options), false)
+  let downloads = 0
+  assert.equal(await ensureFfmpeg({ ...options, fetchImpl: async () => { downloads++; return new Response(archive) } }), original)
+  assert.equal(downloads, 1)
+  assert.deepEqual(await readFile(original), replacement)
+})
+
+test('a compact installer rejects a corrupt legacy binary and repairs it from the compact archive', async t => {
+  const f = await fixture(t)
+  const original = await ensureFfmpeg({ ...f.options, fetchImpl: async () => new Response(f.archive) })
+  await writeFile(original, 'corrupt')
+  const { archive, options } = compactOptions(f)
+  let downloads = 0
+  await ensureFfmpeg({ ...options, fetchImpl: async () => { downloads++; return new Response(archive) } })
+  assert.equal(downloads, 1)
+  assert.deepEqual(await readFile(original), f.binary)
+})
+
+test('a legacy receipt with the wrong owner cannot enable cross-archive reuse', async t => {
+  const f = await fixture(t)
+  const original = await ensureFfmpeg({ ...f.options, fetchImpl: async () => new Response(f.archive) })
+  const receipt = JSON.parse(await readFile(original + '.json', 'utf8'))
+  await writeFile(original + '.json', JSON.stringify({ ...receipt, owner: 'another-application' }))
+  const fresh = await import('../src/runtime/ffmpeg-runtime.mjs?compact-owner')
+  const { options } = compactOptions(f)
+  let downloads = 0
+  await assert.rejects(fresh.ensureFfmpeg({ ...options, fetchImpl: async () => { downloads++; throw Error('synthetic network failure') } }), /自动准备失败/)
+  assert.equal(downloads, 1)
+  assert.deepEqual(await readFile(original), f.binary)
+})
+
+test('compact cache identifiers must be bounded hashes with a pinned executable identity', async t => {
+  const f = await fixture(t)
+  for (const patch of [{ cacheKey: '../escape' }, { cacheKey: 'a'.repeat(16), binarySha256: undefined },
+    { cacheKey: 'a'.repeat(16), binaryBytes: 0 }]) {
+    await assert.rejects(ensureFfmpeg({ ...f.options,
+      artifacts: { [process.platform + '-' + process.arch]: { ...f.artifact, ...patch } },
+      fetchImpl: () => assert.fail('invalid cache identity must fail before network access'),
+    }), /自动准备失败/)
+  }
+})
+
+test('the real Windows/Linux component reuses a legacy cache and receipt without network access', {
+  skip: !['win32', 'linux'].includes(process.platform) || !['x64', 'arm64'].includes(process.arch),
+}, async t => {
+  const key = process.platform + '-' + process.arch
+  const artifacts = JSON.parse(await readFile(new URL('../src/runtime/ffmpeg-artifacts.json', import.meta.url), 'utf8'))
+  const upstream = JSON.parse(await readFile(new URL('../third_party/ffmpeg/upstream-artifacts.json', import.meta.url), 'utf8')).platforms[key]
+  const artifact = artifacts[key]
+  assert.equal(artifact.cacheKey, upstream.archiveSha256.slice(0, 16))
+  const source = await ensureFfmpeg()
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'hongguo-real-legacy-cache-')))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const options = { env: { HONGGUO_RUNTIME_DIR: directory } }
+  const oldPath = ffmpegPath({ ...options, artifacts: { [key]: upstream } })
+  assert.equal(ffmpegPath(options), oldPath)
+  await mkdir(dirname(oldPath), { recursive: true })
+  await copyFile(source, oldPath)
+  await chmod(oldPath, 0o755)
+  const receipt = JSON.stringify({ owner: '@kyun.si/codex-hongguo', schema: 1, version: upstream.version,
+    archiveSha256: upstream.archiveSha256, binarySha256: artifact.binarySha256, binaryBytes: artifact.binaryBytes })
+  await writeFile(oldPath + '.json', receipt)
+  assert.equal(await ensureFfmpeg({ ...options, fetchImpl: () => assert.fail('real legacy bytes must not be downloaded again') }), oldPath)
+  assert.equal(await readFile(oldPath + '.json', 'utf8'), receipt)
 })
 
 test('a corrupt cache is repaired from a verified archive and partial or wrong downloads are never executed', async t => {
