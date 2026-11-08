@@ -60,9 +60,32 @@ let activeQuery = '',
 let activeSource: SourceId = 'hongguo', sourceGeneration = 0, switchingSource = false
 let sourceUpdate = Promise.resolve()
 const sourceOf = (id: string): SourceId => id.startsWith('p.') ? id.split('.')[1] : id.startsWith('hh-') ? 'hghub' : 'hongguo'
-let providers: Array<{ id: string; name: string; available: boolean }> = [
-  { id: 'hongguo', name: '红果', available: true }, { id: 'hghub', name: '黄果', available: true },
-]
+type Provider = { id: string; name: string; available: boolean; enabled?: boolean; configurable?: boolean; code?: string }
+let providers: Provider[] = [{ id: 'hongguo', name: '红果', available: true }]
+let providerOptions: Provider[] = []
+const providerInputs = new Map<string, HTMLInputElement>()
+async function refreshProviders() {
+  providerOptions = (await call<{ items: Provider[] }>('get_providers')).items
+  providers = providerOptions.filter(provider => provider.available)
+  closeSourceMenu()
+  syncSourceButton()
+  if (!providers.some(provider => provider.id === activeSource) && providers.length) await changeSource(providers[0].id)
+}
+function renderProviderSettings() {
+  providerInputs.clear()
+  el('providerSettings').replaceChildren(...providerOptions.filter(provider => provider.configurable).map(provider => {
+    const row = document.createElement('label'), label = document.createElement('span'), input = document.createElement('input')
+    row.className = 'switchRow'; label.textContent = tr(provider.name)
+    if (provider.id === 'hongguo' || (provider.enabled && !provider.available)) {
+      const hint = document.createElement('small')
+      hint.textContent = tr(provider.id === 'hongguo' ? '始终启用' : '启动失败'); label.append(hint)
+    }
+    input.type = 'checkbox'; input.className = 'switch'; input.checked = !!provider.enabled
+    input.disabled = provider.id === 'hongguo'
+    providerInputs.set(provider.id, input)
+    row.append(label, input); return row
+  }))
+}
 function closeSourceMenu(focus = false) {
   el('sourceMenu').hidden = true
   el('source').setAttribute('aria-expanded', 'false')
@@ -71,12 +94,13 @@ function closeSourceMenu(focus = false) {
 function syncSourceButton() {
   const control = el<HTMLButtonElement>('source')
   control.dataset.source = activeSource
+  control.dataset.busy = String(switchingSource)
   const name = providers.find(provider => provider.id === activeSource)?.name || activeSource
   el('sourceName').textContent = activeSource === 'hongguo' ? tr('红果短剧') : activeSource === 'hghub' ? tr('黄果短剧') : name
   const next = providers.length === 2 ? providers.find(provider => provider.id !== activeSource) : undefined
   const label = next ? tr(next.id === 'hongguo' ? '切换至红果' : next.id === 'hghub' ? '切换至黄果' : '切换视频源') : tr('切换视频源')
-  control.setAttribute('aria-label', label)
-  control.title = label
+  control.setAttribute('aria-label', providers.length < 2 ? tr(name) : label)
+  control.title = providers.length < 2 ? tr(name) : label
   control.disabled = switchingSource || providers.length < 2
   if (providers.length > 2) {
     control.setAttribute('aria-haspopup', 'menu')
@@ -118,7 +142,7 @@ let lastSave = 0,
 let prefs: Preferences = {
   autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
   defaultMuted: true, volume: 0.7,
-  searchTerms: ['总裁', '重生', '逆袭'], defaultSource: 'hongguo',
+  searchTerms: ['总裁', '重生', '逆袭'], defaultSource: 'hongguo', enabledProviders: ['hongguo'],
 }
 let playback: 'idle' | 'playing' | 'finished' = 'idle'
 type InterruptedPlayback = { action: number; lastPosition?: number }
@@ -791,11 +815,13 @@ async function readTurnState() {
     if (!pageActive) return
     if (state.preferences) {
       const promptChanged = prefs.autoPrompt !== state.preferences.autoPrompt
+      const providersChanged = JSON.stringify(prefs.enabledProviders) !== JSON.stringify(state.preferences.enabledProviders)
       syncDefaultMute(state.preferences)
       prefs = state.preferences
       autoNext.checked = prefs.autoplayNext
       if (!autoNext.checked) cancelNextPreload()
       if (promptChanged) renderPicks()
+      if (providersChanged) await refreshProviders()
     }
     const reason = finishedTurn(current, state)
     const starting = startedTurn(current, state)
@@ -1202,6 +1228,7 @@ el('prefs').onclick = async () => {
   if (!playerReady) return
   try {
     await openingPreferences()
+    await refreshProviders()
     if (!playerReady) return
     el('settings').hidden = !el('settings').hidden
     el('prefs').setAttribute('aria-expanded', String(!el('settings').hidden))
@@ -1210,6 +1237,7 @@ el('prefs').onclick = async () => {
     el<HTMLInputElement>('autoPlayOnStart').checked = prefs.autoPlayOnStart
     el<HTMLInputElement>('defaultMuted').checked = prefs.defaultMuted
     el<HTMLInputElement>('terms').value = prefs.searchTerms.join('，')
+    renderProviderSettings()
   } catch (error) { notice(explain(error)) }
 }
 el('settings').onsubmit = (e) => {
@@ -1219,17 +1247,23 @@ el('settings').onsubmit = (e) => {
     .value.split(/[,，]/)
     .map((s) => s.trim())
     .filter(Boolean)
-  void call<typeof prefs>('set_preferences', {
-    autoPrompt: el<HTMLInputElement>('autoPrompt').checked,
-    autoPauseOnFinish: el<HTMLInputElement>('autoPauseOnFinish').checked,
-    autoPlayOnStart: el<HTMLInputElement>('autoPlayOnStart').checked,
-    defaultMuted: el<HTMLInputElement>('defaultMuted').checked,
-    searchTerms,
-  })
+  const enabledProviders = providerInputs.size ? [...providerInputs].filter(([, input]) => input.checked).map(([id]) => id) : prefs.enabledProviders
+  void (async () => {
+    if (!enabledProviders.includes(activeSource)) await pause()
+    return call<typeof prefs>('set_preferences', {
+      autoPrompt: el<HTMLInputElement>('autoPrompt').checked,
+      autoPauseOnFinish: el<HTMLInputElement>('autoPauseOnFinish').checked,
+      autoPlayOnStart: el<HTMLInputElement>('autoPlayOnStart').checked,
+      defaultMuted: el<HTMLInputElement>('defaultMuted').checked,
+      searchTerms,
+      enabledProviders,
+    })
+  })()
     .then(async (updated) => {
       if (generation !== preferencesGeneration || !playerReady) return
       syncDefaultMute(updated)
       prefs = updated
+      await refreshProviders()
       autoNext.checked = prefs.autoplayNext
       el('settings').hidden = true
       el('prefs').setAttribute('aria-expanded', 'false')
@@ -1330,7 +1364,7 @@ async function initPlayer(selection?: WaitingSelection) {
   activatePage()
   await openingPreferences()
   if (!playerReady || generation !== sourceGeneration) return
-  providers = (await call<{ items: typeof providers }>('get_providers')).items.filter(provider => provider.available)
+  await refreshProviders()
   if (!playerReady || generation !== sourceGeneration) return
   activeSource = context.source ?? prefs.defaultSource ?? 'hongguo'
   syncSourceButton()

@@ -259,6 +259,33 @@ test('loopback pairing, origin, Host, cookie, fixed-turn scope, replay and conti
   web.tickets.get(stale).expires = 0
   assert.equal((await post('/exchange', { ticket: stale })).status, 403)
 })
+test('compiled MCP persists the provider startup configuration across process restarts', async t => {
+  const { dir } = setup(t)
+  async function start() {
+    const client = new Client({ name: 'provider-config-test', version: '1' })
+    await client.connect(new StdioClientTransport({ command: process.execPath,
+      args: ['--no-warnings', join(projectRoot, 'dist/server/index.mjs')], env: env(dir), stderr: 'ignore' }))
+    t.after(() => client.close())
+    const opened = await client.callTool({ name: 'open_drama_panel', arguments: {} })
+    return { client, async call(name, args = {}) {
+      const result = await client.callTool({ name, arguments: { panel: opened._meta.panel, ...args } })
+      assert.ok(!result.isError)
+      return result._meta.data
+    } }
+  }
+  const first = await start()
+  assert.deepEqual((await first.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo'])
+  await first.call('set_preferences', { enabledProviders: ['hongguo', 'hghub'] })
+  await first.client.close()
+  const second = await start()
+  assert.deepEqual((await second.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'hghub'])
+  await second.call('set_source', { source: 'hghub' })
+  await second.call('set_preferences', { enabledProviders: ['hongguo'] })
+  await second.client.close()
+  const third = await start()
+  assert.deepEqual((await third.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo'])
+  assert.equal((await third.call('get_preferences')).defaultSource, 'hongguo')
+})
 test('compiled plugin exposes a model-visible waiting widget and keeps player controls app-only', async (t) => {
   let client
   t.after(() => client?.close())
@@ -287,7 +314,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   })
   assert.equal(data.isError, true)
   const resources = (await client.listResources()).resources
-  const playerUri = 'ui://hongguo/v21/player', waitingUri = 'ui://hongguo/v21/waiting'
+  const playerUri = 'ui://hongguo/v22/player', waitingUri = 'ui://hongguo/v22/waiting'
   assert.equal(tools.find(t => t.name === 'show_waiting_picks')._meta.ui.resourceUri, waitingUri)
   assert.equal(tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri, playerUri)
   assert.deepEqual(resources.map(r => r.uri).sort(), [playerUri, waitingUri])
@@ -300,7 +327,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
     'ui://hongguo/v8/player', 'ui://hongguo/v9/waiting', 'ui://hongguo/v11/player', 'ui://hongguo/v12/waiting',
     'ui://hongguo/v16/player', 'ui://hongguo/v16/waiting', 'ui://hongguo/v17/player', 'ui://hongguo/v17/waiting',
     'ui://hongguo/v18/player', 'ui://hongguo/v18/waiting', 'ui://hongguo/v19/player', 'ui://hongguo/v19/waiting',
-    'ui://hongguo/v20/player', 'ui://hongguo/v20/waiting']) {
+    'ui://hongguo/v20/player', 'ui://hongguo/v20/waiting', 'ui://hongguo/v21/player', 'ui://hongguo/v21/waiting']) {
     const read = (await client.readResource({ uri })).contents[0]
     assert.equal(read.uri, uri)
     assert.deepEqual(read._meta.ui.csp, policy)

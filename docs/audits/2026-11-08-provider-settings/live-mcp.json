@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "checkedAt": "2026-11-08T03:05:39.746Z",
+  "runtime": "v26.11.0",
+  "compiledServerSha256": "ca8da78f39271a9cd0ef27414099c84da3ca2470a4e24653339135aa6fd9a950",
+  "providers": [
+    {
+      "source": "hongguo",
+      "fullEpisodeDecoded": true,
+      "attemptedShows": 1,
+      "catalogItems": 8,
+      "episodeCount": 104,
+      "durationMs": 544848,
+      "assets": 274,
+      "chunkCalls": 1199,
+      "bytes": 209512947,
+      "historySaved": true,
+      "elapsedMs": 25714
+    },
+    {
+      "source": "hghub",
+      "fullEpisodeDecoded": true,
+      "attemptedShows": 1,
+      "catalogItems": 16,
+      "episodeCount": 21,
+      "durationMs": 207935,
+      "assets": 42,
+      "chunkCalls": 378,
+      "bytes": 70208756,
+      "historySaved": true,
+      "elapsedMs": 18275
+    }
+  ],
+  "desktopPlaybackObserved": false,
+  "isolatedState": true,
+  "defaultOnlyHongguo": true,
+  "enabledHuangguoExplicitly": true,
+  "historyIsolated": true,
+  "status": "pass"
+}

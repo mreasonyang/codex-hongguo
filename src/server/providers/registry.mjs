@@ -11,7 +11,7 @@ import { PlayerError } from '../errors.mjs'
 const methods = ['listSeries', 'getSeries', 'listEpisodes', 'getCover', 'resolvePlayback']
 export const builtins = [
   { manifest: { apiVersion: 1, id: 'hongguo', name: '红果', version: '1.0.0' }, createProvider: ctx => new HongguoSource(ctx.root) },
-  { manifest: { apiVersion: 1, id: 'hghub', name: '黄果', version: '1.0.0' }, createProvider: () => new HghubSource() },
+  { manifest: { apiVersion: 1, id: 'hghub', name: '黄果', version: '1.0.0' }, createProvider: ctx => new HghubSource({ signal: ctx.signal }) },
 ]
 function validate(manifest) {
   if (!manifest || manifest.apiVersion !== 1 || sourceId(manifest.id) !== manifest.id ||
@@ -37,6 +37,7 @@ export class ProviderRegistry {
   constructor(root, options = {}) {
     this.root = root
     this.adapters = new Map(); this.status = []; this.controllers = new Map(); this.fetchers = new Map()
+    this.definitions = new Map(); this.enabled = new Set(options.enabled ?? ['hongguo'])
     const pending = []
     for (const plugin of options.builtins || builtins) {
       const task = this.register(plugin.manifest, plugin.createProvider, true)
@@ -69,15 +70,32 @@ export class ProviderRegistry {
     if (this.adapters.has(manifest.id) || !adapter || adapter.id !== manifest.id || methods.some(method => typeof adapter[method] !== 'function')) throw Error('CONTRACT')
     this.adapters.set(manifest.id, adapter)
     this.fetchers.set(manifest.id, adapter.fetchMedia || context.fetchMedia)
-    this.status.push({ id: manifest.id, name: manifest.name, version: manifest.version, available: true, builtin })
+    Object.assign(this.definitions.get(manifest.id).status, { available: true, code: undefined })
   }
   register(manifest, factory, builtin = false) {
     validate(manifest)
-    if (this.adapters.has(manifest.id)) throw Error('DUPLICATE')
+    if (this.definitions.has(manifest.id)) throw Error('DUPLICATE')
+    const status = { id: manifest.id, name: manifest.name, version: manifest.version, builtin,
+      enabled: this.enabled.has(manifest.id) && manifest.enabled !== false,
+      configurable: manifest.enabled !== false, available: false, code: 'DISABLED' }
+    const definition = { manifest, factory, builtin, status }
+    this.definitions.set(manifest.id, definition); this.status.push(status)
+    if (status.enabled) return this.start(definition)
+  }
+  start({ manifest, factory, builtin, status }) {
     const context = this.context(manifest)
-    const value = factory(context)
-    if (value && typeof value.then === 'function') return bounded(value).then(adapter => this.accept(manifest, adapter, builtin, context))
-    this.accept(manifest, value, builtin, context)
+    const failed = () => {
+      this.controllers.get(manifest.id)?.abort(); this.controllers.delete(manifest.id)
+      Object.assign(status, { available: false, code: 'LOAD_FAILED' })
+    }
+    try {
+      const value = factory(context)
+      if (value && typeof value.then === 'function') return bounded(Promise.resolve(value).then(adapter => {
+        if (context.signal.aborted) return bounded(Promise.resolve().then(() => adapter?.dispose?.()), 1000).catch(() => {})
+        return this.accept(manifest, adapter, builtin, context)
+      })).catch(failed)
+      this.accept(manifest, value, builtin, context)
+    } catch { failed() }
   }
   async loadDirectory(directory) {
     if (!directory) return
@@ -97,11 +115,7 @@ export class ProviderRegistry {
         const stat = await lstat(path)
         if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 16384) throw Error('MANIFEST')
         manifest = validate(JSON.parse(await readFile(path, 'utf8')))
-        if (this.status.some(row => row.id === manifest.id)) throw Error('DUPLICATE')
-        if (manifest.enabled === false) {
-          this.status.push({ id: manifest.id, name: manifest.name, version: manifest.version, available: false, code: 'DISABLED' })
-          continue
-        }
+        if (this.definitions.has(manifest.id)) throw Error('DUPLICATE')
         if (typeof manifest.entry !== 'string' || isAbsolute(manifest.entry) || !manifest.entry.endsWith('.mjs')) throw Error('ENTRY')
         const requested = resolve(dir, manifest.entry)
         if (!requested.startsWith(dir + sep)) throw Error('ENTRY')
@@ -109,9 +123,11 @@ export class ProviderRegistry {
         if (!fileStat.isFile() || fileStat.isSymbolicLink()) throw Error('ENTRY')
         const file = await realpath(requested)
         if (!file.startsWith(dir + sep)) throw Error('ENTRY')
-        const module = await bounded(import(pathToFileURL(file).href))
-        if (typeof module.createProvider !== 'function') throw Error('CONTRACT')
-        await this.register(manifest, module.createProvider)
+        await this.register(manifest, async context => {
+          const module = await bounded(import(pathToFileURL(file).href))
+          if (typeof module.createProvider !== 'function') throw Error('CONTRACT')
+          return module.createProvider(context)
+        })
       } catch {
         if (manifest && !this.adapters.has(manifest.id)) { this.controllers.get(manifest.id)?.abort(); this.controllers.delete(manifest.id) }
         this.status.push({ id: manifest?.id || 'invalid-provider', name: manifest?.name || '本地 Provider', available: false, code: 'LOAD_FAILED' })
@@ -119,6 +135,32 @@ export class ProviderRegistry {
     }
   }
   list() { return this.status.map(row => ({ ...row })) }
+  validateEnabled(ids) {
+    if (!Array.isArray(ids) || !ids.includes('hongguo') || ids.length > 32 ||
+        ids.some(id => !this.definitions.get(id)?.status.configurable))
+      throw new PlayerError('请选择已安装的片源，并保留红果', 400)
+  }
+  configure(ids) {
+    this.configuring = (this.configuring ?? Promise.resolve()).catch(() => {}).then(async () => {
+      await this.ready
+      this.enabled = new Set(ids)
+      for (const definition of this.definitions.values()) {
+        const { manifest, status } = definition
+        const enabled = this.enabled.has(manifest.id) && status.configurable
+        if (status.enabled === enabled) continue
+        status.enabled = enabled
+        if (enabled) await this.start(definition)
+        else {
+          const adapter = this.adapters.get(manifest.id)
+          this.adapters.delete(manifest.id); this.fetchers.delete(manifest.id)
+          this.controllers.get(manifest.id)?.abort(); this.controllers.delete(manifest.id)
+          Object.assign(status, { available: false, code: 'DISABLED' })
+          if (adapter) await bounded(Promise.resolve().then(() => adapter.dispose?.()), 1000).catch(() => {})
+        }
+      }
+    })
+    return this.configuring
+  }
   get(id = 'hongguo') {
     const adapter = this.adapters.get(sourceId(id))
     if (!adapter) throw new PlayerError('片源插件不可用，请切换其他片源', 503)
@@ -133,6 +175,8 @@ export class ProviderRegistry {
     return { ...descriptor, fetchMedia: descriptor.fetchMedia || this.fetchers.get(adapter.id) }
   }
   async dispose() {
+    await this.ready
+    await this.configuring?.catch(() => {})
     for (const controller of this.controllers.values()) controller.abort()
     await Promise.allSettled([...this.adapters.values()].map(adapter => bounded(Promise.resolve().then(() => adapter.dispose?.()), 1000)))
   }

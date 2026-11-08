@@ -498,7 +498,8 @@ h1 {
   background: transparent;
 }
 .sourceButton:hover:not(:disabled) { background: var(--hover); }
-.sourceButton:disabled { opacity: .55; }
+.sourceButton:disabled { opacity: 1; }
+.sourceButton[data-busy='true'] { opacity: .55; }
 .sourceButton[data-source='hghub'] .mark { background: #e3ac32; color: #493307; }
 .sourceButton:not([data-source='hongguo']):not([data-source='hghub']) .mark { background: var(--text-2); }
 .sourceMenu {
@@ -531,6 +532,12 @@ h1 {
 .sourceDot[data-source='hongguo'] { background: var(--brand); }
 .sourceDot[data-source='hghub'] { background: #e3ac32; }
 .sourceMenu .i { width: 13px; height: 13px; color: var(--text-2); }
+.providerSettings { min-width: 0; margin: 0 0 10px; padding: 0 0 10px; border: 0; border-bottom: 1px solid var(--line); }
+.providerSettings legend { margin-bottom: 4px; font-weight: 600; font-size: 12px; }
+#providerSettings { display: grid; gap: 6px; margin: 4px 0 8px; }
+.providerSettings .switchRow { min-height: 28px; }
+.providerSettings .switchRow > span { display: flex; align-items: center; gap: 8px; }
+.providerSettings small { color: var(--text-3); font-size: 11px; font-weight: 400; }
 .tools {
   display: flex;
   gap: 2px;

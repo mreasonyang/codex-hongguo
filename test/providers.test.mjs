@@ -40,14 +40,88 @@ async function install(root, folder, patch = {}, code = pluginCode) {
   await writeFile(join(dir, 'index.mjs'), code)
   return dir
 }
+function fixtures(create = id => adapter(id)) {
+  return ['hongguo', 'hghub'].map(id => ({
+    manifest: { apiVersion: 1, id, name: id, version: '1.0.0' }, createProvider: context => create(id, context),
+  }))
+}
+test('only Hongguo starts by default; enabling, stopping and restarting a provider owns its lifecycle', async t => {
+  const root = await temporary(t), created = [], disposed = []
+  const registry = new ProviderRegistry(root, { builtins: fixtures((id, context) => {
+    created.push([id, context.signal])
+    return { ...adapter(id), dispose() { disposed.push(id) } }
+  }) })
+  await registry.ready; t.after(() => registry.dispose())
+  assert.deepEqual(created.map(([id]) => id), ['hongguo'])
+  assert.equal(registry.list().find(p => p.id === 'hghub').enabled, false)
+  assert.throws(() => registry.get('hghub'), /片源插件不可用/)
+  await registry.configure(['hongguo', 'hghub'])
+  assert.equal(registry.get('hghub').id, 'hghub')
+  await registry.configure(['hongguo'])
+  assert.deepEqual(disposed, ['hghub'])
+  assert.equal(created[1][1].aborted, true)
+  assert.throws(() => registry.get('hghub'))
+  await registry.configure(['hongguo', 'hghub'])
+  assert.deepEqual(created.map(([id]) => id), ['hongguo', 'hghub', 'hghub'])
+  assert.equal(created[2][1].aborted, false)
+})
+test('discovery does not import unconfigured local providers', async t => {
+  const root = await temporary(t), directory = join(root, 'plugins'); await mkdir(directory)
+  await install(directory, 'unselected', {}, 'throw Error("entry must remain unloaded")')
+  const registry = new ProviderRegistry(root, { directory }); await registry.ready
+  t.after(() => registry.dispose())
+  assert.equal(registry.list().find(p => p.id === 'unselected').code, 'DISABLED')
+  await registry.configure(['hongguo', 'unselected'])
+  assert.equal(registry.list().find(p => p.id === 'unselected').code, 'LOAD_FAILED')
+  assert.equal(registry.get('hongguo').id, 'hongguo')
+  assert.ok(!JSON.stringify(registry.list()).includes('entry must'))
+})
+test('provider settings persist, sync between services, reject old cached media and keep progress', async t => {
+  const root = await temporary(t), store = new Store(root), peer = new Store(root)
+  t.after(() => { store.close(); peer.close() })
+  const make = database => {
+    const sources = new ProviderRegistry(root, { builtins: fixtures(), enabled: database.preferences().enabledProviders })
+    t.after(() => sources.dispose())
+    const catalog = new Catalog(database, { sources }); catalog.ffmpeg = true
+    const service = new Service(database, catalog), scope = service.panel(service.open({ threadId: 'A' }).panel)
+    return { sources, catalog, service, scope }
+  }
+  const a = make(store), b = make(peer)
+  assert.deepEqual((await a.service.call(a.scope, 'get_providers', {})).items.filter(p => p.available).map(p => p.id), ['hongguo'])
+  await assert.rejects(a.service.call(a.scope, 'set_source', { source: 'hghub' }))
+  await a.service.call(a.scope, 'set_preferences', { enabledProviders: ['hongguo', 'hghub'] })
+  await b.service.call(b.scope, 'set_source', { source: 'hghub' })
+  await b.service.call(b.scope, 'get_episodes', { seriesId: 'hh-1' })
+  b.scope.grants = new Set(['hh-1_1']); b.scope.streams = new Map([['hh-1_1', 'old']]); b.scope.playing = 'hh-1_1'
+  b.scope.selection = { seriesId: 'hh-1', episodeId: 'hh-1_1' }
+  b.scope.waiting = { selected: { id: 'hh-1', title: 'Old pick' } }
+  await b.service.call(b.scope, 'save_progress', { seriesId: 'hh-1', episodeId: 'hh-1_1', title: 'Kept', label: '1', positionMs: 1234, durationMs: 5000 })
+  const restarted = make(peer)
+  await restarted.sources.ready
+  assert.equal(restarted.sources.get('hghub').id, 'hghub')
+  await a.service.call(a.scope, 'set_preferences', { enabledProviders: ['hongguo'] })
+  await b.service.call(b.scope, 'get_providers', {})
+  assert.equal(b.scope.source, 'hongguo'); assert.equal(b.scope.allowed.size, 0)
+  assert.equal(b.scope.grants.size, 0); assert.equal(b.scope.streams.size, 0)
+  assert.equal(b.scope.selection, undefined); assert.equal(b.scope.waiting.selected, null)
+  assert.equal(store.preferences().defaultSource, 'hongguo')
+  await assert.rejects(b.service.call(b.scope, 'get_episodes', { seriesId: 'hh-1' }))
+  assert.throws(() => b.catalog.prepare('hh-1_1', true))
+  assert.equal(peer.history(undefined, undefined, 30, 'hghub')[0].positionMs, 1234)
+  await assert.rejects(a.service.call(a.scope, 'set_preferences', { enabledProviders: ['hongguo', 'missing'] }))
+  await assert.rejects(a.service.call(a.scope, 'set_preferences', { enabledProviders: ['hghub'] }))
+  assert.deepEqual(peer.preferences().enabledProviders, ['hongguo'])
+})
 test('local providers load through the same contract, retain opaque IDs and dispose cleanly', async t => {
   const root = await temporary(t), directory = join(root, 'plugins'); await mkdir(directory)
   await install(directory, 'local')
   const registry = new ProviderRegistry(root, { directory }); await registry.ready
+  await registry.configure(['hongguo', 'local'])
   const provider = registry.get('local')
-  assert.equal(registry.list().filter(p => p.available).length, 3)
+  assert.equal(registry.list().filter(p => p.available).length, 2)
   assert.equal(registry.get('hongguo').id, 'hongguo')
   const store = new Store(join(root, 'data')); t.after(() => store.close())
+  store.setPreferences({ enabledProviders: ['hongguo', 'local'] })
   const catalog = new Catalog(store, { sources: registry }); catalog.ffmpeg = true
   const list = await catalog.list({ source: 'local', query: 'fixture' })
   assert.equal(parseId(list.items[0].id).id, 'series/中文')
@@ -73,7 +147,7 @@ test('invalid, duplicate, disabled, escaping and broken plugins leave both built
   await install(directory, 'incomplete', {}, 'export function createProvider(){return {id:"incomplete"}}')
   const linked = await install(directory, 'linked')
   await rm(join(linked, 'index.mjs')); await symlink(join(directory, 'broken/index.mjs'), join(linked, 'index.mjs'))
-  const registry = new ProviderRegistry(root, { directory }); await registry.ready
+  const registry = new ProviderRegistry(root, { directory, enabled: ['hongguo', 'hghub', 'broken', 'incomplete'] }); await registry.ready
   assert.deepEqual(registry.list().filter(p => p.available).map(p => p.id), ['hongguo', 'hghub'])
   assert.equal(registry.get('hongguo') instanceof HongguoSource, true)
   assert.equal(registry.get('hghub') instanceof HghubSource, true)
@@ -156,6 +230,7 @@ test('network policies validate every redirect, preserve ranges and bound unknow
 })
 test('source changes preserve another panel, its history and fixed per-turn recommendations', async t => {
   const root = await temporary(t), store = new Store(root); t.after(() => store.close())
+  store.setPreferences({ enabledProviders: ['hongguo', 'hghub'] })
   const providers = new ProviderRegistry(root, { builtins: ['hongguo', 'hghub'].map(id => ({
     manifest: { apiVersion: 1, id, name: id, version: '1.0.0' }, createProvider: () => adapter(id),
   })) })

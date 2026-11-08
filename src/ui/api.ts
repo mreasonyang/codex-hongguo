@@ -11,6 +11,7 @@ export type Context = {
 export type SourceId = string
 export type Preferences = {
   defaultSource: SourceId
+  enabledProviders: SourceId[]
   autoPrompt: boolean
   autoplayNext: boolean
   autoPauseOnFinish: boolean
@@ -20,6 +21,7 @@ export type Preferences = {
   searchTerms: string[]
 }
 export type State = {
+  source?: SourceId
   state: 'unknown' | 'submitted' | 'stopped' | 'interrupted'
   turnId: string | null
   observedAt: number | null

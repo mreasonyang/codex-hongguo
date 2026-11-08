@@ -7,7 +7,8 @@ const MB = 1024 * 1024
 const anonymous = { load: async () => null, save: async () => {}, reset: async () => {} }
 export class HghubSource {
   id = 'hghub'
-  constructor() {
+  constructor({ signal } = {}) {
+    this.signal = signal
     this.apiHosts = new Set(HGHUB_LINES.map(line => new URL(line.url).hostname))
     this.details = new Map()
     this.fetchMedia = mediaFetcher({ allows: isMediaHost, headers: target => ({
@@ -18,7 +19,9 @@ export class HghubSource {
     const headers = new Headers(options.headers)
     if (headers.has('authorization') || headers.has('cookie')) throw new PlayerError('此片源仅使用匿名访问', 403)
     const { response } = await boundedResponse(url, { allows: host => this.apiHosts.has(host),
-      budget: 2 * MB, timeout: 10000, signal: options.signal, headers, method: options.method, body: options.body })
+      budget: 2 * MB, timeout: 10000,
+      signal: this.signal ? AbortSignal.any([this.signal, ...(options.signal ? [options.signal] : [])]) : options.signal,
+      headers, method: options.method, body: options.body })
     const bytes = await responseBytes(response.body, 2 * MB)
     return new Response(bytes, { status: response.status, headers: response.headers })
   }
@@ -32,7 +35,7 @@ export class HghubSource {
     if (this.mirrorAt && Date.now() - this.mirrorAt < 300000) return this.mirrorLines
     const result = await fetchMirrors({ limit: 4, fetchImpl: async (url, options) => {
       const { response } = await boundedResponse(url, { allows: host => host === 'huangguoai.pages.dev',
-        budget: 256 * 1024, timeout: 7000, headers: options.headers })
+        budget: 256 * 1024, timeout: 7000, headers: options.headers, signal: this.signal })
       return new Response(await responseBytes(response.body, 256 * 1024), { status: response.status, headers: response.headers })
     } })
     this.mirrorLines = result.items.map(item => item.url).filter(url => {
@@ -45,6 +48,7 @@ export class HghubSource {
     return this.mirrorLines
   }
   async call(method, args = [], signal) {
+    if (this.signal) signal = AbortSignal.any([this.signal, ...(signal ? [signal] : [])])
     const work = async () => {
       const client = await this.sdk()
       const tried = new Set()

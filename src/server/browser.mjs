@@ -130,17 +130,21 @@ export class BrowserServer {
           'data-host="browser"',
         ),
       )
-    if (route === 'context' && req.method === 'GET')
+    if (route === 'context' && req.method === 'GET') {
+      await this.service.syncProviders(session)
       return json({
         identified: !!session.sessionId,
         turnId: session.fixedTurn,
         selection: session.selection,
         source: session.source,
       })
+    }
     if (route.startsWith('api/') && req.method === 'POST')
       return json(await this.service.call(session, route.slice(4), await body(req), true))
     if (route.startsWith('media/') && ['GET', 'HEAD'].includes(req.method)) {
       const id = route.slice(6)
+      await this.service.syncProviders(session)
+      this.service.catalog.sources?.forId(id, 'episode')
       if (!session.grants.has(id)) throw new PlayerError('请先选择该集', 403)
       const file = this.service.catalog.cache?.path(id)
       if (!file) throw new PlayerError('素材待重新准备', 404)

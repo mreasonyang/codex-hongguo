@@ -43,6 +43,11 @@ try {
     if (reply.isError || !reply._meta?.data) throw fail('RPC_FAILED')
     return reply._meta.data
   }
+  const defaults = (await rpc('get_providers')).items.filter(p => p.available)
+  assert.deepEqual(defaults.map(p => p.id), ['hongguo'])
+  report.defaultOnlyHongguo = true
+  await rpc('set_preferences', { enabledProviders: ['hongguo', 'hghub'] })
+  report.enabledHuangguoExplicitly = true
   const available = (await rpc('get_providers')).items.filter(p => p.available)
   assert.ok(available.some(p => p.id === 'hongguo') && available.some(p => p.id === 'hghub'))
   for (const source of ['hongguo', 'hghub']) {
@@ -142,7 +147,8 @@ try {
 } finally {
   await client?.close().catch(() => {})
   await rm(scratch, { recursive: true, force: true })
-  const directory = resolve('docs/audits/2026-11-08-provider-implementation')
+  const output = process.argv.indexOf('--output-dir')
+  const directory = resolve(output >= 0 ? process.argv[output + 1] : 'docs/audits/2026-11-08-provider-implementation')
   await mkdir(directory, { recursive: true })
   await writeFile(join(directory, 'live-mcp.json'), JSON.stringify(report, null, 2) + '\n')
   console.log(JSON.stringify({ status: report.status, decodedProviders: report.providers.filter(p => p.fullEpisodeDecoded).length,

@@ -71,6 +71,7 @@ export const schemas = {
     autoPlayOnStart: z.boolean().optional(),
     defaultMuted: z.boolean().optional(),
     volume: z.number().positive().max(1).optional(),
+    enabledProviders: z.array(source).min(1).max(32).refine(ids => ids.includes('hongguo')).optional(),
   }),
   read_panel_chunk: z.object({
     episodeId,
@@ -125,8 +126,10 @@ export class Service {
   async waitingPicks(sessionId, turnId, inView, eligible, preferred) {
     if (!eligible()) return { items: [] }
     const pinned = this.store.turnPicks(sessionId, turnId)
-    if (pinned.length) return { items: pinned }
+    const enabled = pick => !this.catalog.sources?.fallback || this.catalog.sources.fallback(parseId(pick.id).source) === parseId(pick.id).source
+    if (pinned.length) return { items: pinned.filter(enabled) }
     const source = this.store.recommendationSource(sessionId, turnId, preferred)
+    if (this.catalog.sources?.fallback && this.catalog.sources.fallback(source) !== source) return { items: [] }
     const [feed, resume] = await Promise.all([
       this.catalog.waitingRecommendations(source).catch(() => []), this.resumePick(source),
     ])
@@ -140,10 +143,28 @@ export class Service {
     scope.lastSeen = Date.now()
     return scope
   }
+  resetSource(scope, source) {
+    scope.source = source
+    if (scope.selection && parseId(scope.selection.seriesId).source !== source) scope.selection = undefined
+    if (scope.waiting?.selected && parseId(scope.waiting.selected.id).source !== source) scope.waiting.selected = null
+    scope.sourceRevision = (scope.sourceRevision || 0) + 1
+    scope.allowed?.clear(); scope.grants?.clear()
+    this.catalog.panelMedia?.unpin(scope.playing, scope)
+    scope.streams?.clear(); scope.playing = null
+  }
+  async syncProviders(scope) {
+    await this.catalog.syncProviders?.()
+    if (!this.catalog.sources?.fallback) return
+    for (const panel of new Set([...this.panels.values(), scope])) {
+      const source = this.catalog.sources.fallback(panel.source)
+      if (source !== panel.source) this.resetSource(panel, source)
+    }
+  }
   async call(scope, name, args, browser = false) {
     const a = schemas[name]?.strict().safeParse(args)
     if (!a?.success) throw new PlayerError('请求参数无效')
     const p = a.data
+    if (this.catalog.syncProviders) await this.syncProviders(scope)
     switch (name) {
       case 'get_waiting_status':
       case 'browse_waiting_catalog': {
@@ -187,6 +208,7 @@ export class Service {
           return {}
         }
         if (name === 'select_waiting_pick') {
+          this.catalog.sources?.forId(p.seriesId)
           if (!this.store.offerable(scope.sessionId, card.turnId)) throw new PlayerError('这条推荐已结束')
           const pick = this.store.turnPicks(scope.sessionId, card.turnId).find(item => item.id === p.seriesId)
           if (!pick) throw new PlayerError('请从本轮推荐中选剧', 403)
@@ -225,6 +247,7 @@ export class Service {
           return {
             ...this.store.state(scope.sessionId, browser ? scope.fixedTurn : undefined),
             preferences: this.store.preferences(),
+            source: scope.source,
           }
         }
         const fixed = scope.waiting?.turnId ?? (browser ? scope.fixedTurn : null)
@@ -260,13 +283,7 @@ export class Service {
           if (!this.store.persistent) throw new PlayerError('本机设置目录不可写', 503)
           this.store.setPreferences({ defaultSource: p.source })
         }
-        scope.source = p.source
-        scope.sourceRevision = (scope.sourceRevision || 0) + 1
-        scope.allowed?.clear()
-        scope.grants?.clear()
-        this.catalog.panelMedia?.unpin(scope.playing, scope)
-        scope.streams?.clear()
-        scope.playing = null
+        this.resetSource(scope, p.source)
         return { source: p.source }
       case 'get_cover':
         return this.catalog.cover(p.seriesId)
@@ -323,12 +340,14 @@ export class Service {
       case 'get_providers':
         await this.catalog.sources?.ready
         return { items: this.catalog.sources?.list() ?? [
-          { id: 'hongguo', name: '红果', available: true }, { id: 'hghub', name: '黄果', available: true },
+          { id: 'hongguo', name: '红果', available: true, enabled: true, configurable: true },
         ] }
       case 'set_preferences': {
         if (!this.store.persistent) throw new PlayerError('本机设置目录不可写', 503)
+        if (p.enabledProviders) this.catalog.sources?.validateEnabled(p.enabledProviders)
         const previous = this.store.preferences()
         const settings = this.store.setPreferences(p)
+        if (p.enabledProviders) await this.syncProviders(scope)
         if (JSON.stringify(previous.searchTerms) !== JSON.stringify(settings.searchTerms)) {
           this.catalog.feed = null
           this.catalog.refresh = null

@@ -8,6 +8,8 @@ import { webcrypto } from 'node:crypto'
 import { transformSync } from 'esbuild'
 import { Store } from '../src/server/store.mjs'
 import { Service } from '../src/server/service.mjs'
+import { Catalog } from '../src/server/catalog.mjs'
+import { ProviderRegistry } from '../src/server/providers/registry.mjs'
 
 class Element extends EventTarget {
   hidden = true; checked = false; value = '1'; dataset = {}; children = []; textContent = ''
@@ -37,7 +39,7 @@ class Video extends Element {
 // start and pause paths run unchanged against a real Service and SQLite store.
 const source = readFileSync(new URL('../src/ui/player.ts', import.meta.url), 'utf8') + `
 export const fixture = {
-  poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer, changeSource, list, history,
+  poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer, changeSource, list, history, refreshProviders,
   sourceState() { return { source: activeSource, cards: cards.map(row => row.id), watched: watched.map(row => row.seriesId) } },
   setProviders(items) { providers = items.filter(item => item.available); syncSourceButton() },
   selected() {
@@ -70,7 +72,9 @@ function setup(t) {
   const window = Object.assign(new EventTarget(), { setInterval: () => 1, clearInterval() {}, scrollTo() {} })
   const api = {
     browser: false, connect: async () => {}, hostLocale: () => 'zh',
-    call: (name, args = {}) => service.call(panel, name, args),
+    call: (name, args = {}) => name === 'get_providers' && !service.catalog.sources
+      ? Promise.resolve({ items: store.preferences().enabledProviders.map(id => ({ id, name: id === 'hongguo' ? '红果' : id === 'hghub' ? '黄果' : id, available: true, enabled: true, configurable: true })) })
+      : service.call(panel, name, args),
   }
   const exports = {}, context = vm.createContext({
     module: { exports }, exports, document, window, navigator: {}, crypto: webcrypto,
@@ -88,6 +92,8 @@ function setup(t) {
   vm.runInContext(code, context)
   const ui = context.module.exports.fixture
   ui.selected()
+  ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'hghub', name: '黄果', available: true }])
+  store.setPreferences({ enabledProviders: ['hongguo', 'hghub'] })
   let at = Date.now()
   return {
     store, peer, service, panel, video, document, window, ui, elements,
@@ -118,6 +124,7 @@ test('the source mark switches two providers directly and restores its target la
 })
 test('additional providers use a checked menu and select through the existing source service', async t => {
   const f = setup(t)
+  f.store.setPreferences({ enabledProviders: ['hongguo', 'hghub', 'local'] })
   f.service.catalog = { list: async () => ({ items: [] }) }
   f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'hghub', name: '黄果', available: true },
     { id: 'local', name: 'Local provider', available: true }])
@@ -140,6 +147,34 @@ test('a single available provider disables switching instead of opening an empty
   assert.equal(control.disabled, true)
   control.onclick()
   assert.equal(f.ui.sourceState().source, 'hongguo')
+})
+test('the settings form enables Huangguo explicitly, then disabling it returns to Hongguo', async t => {
+  const f = setup(t)
+  f.store.setPreferences({ enabledProviders: ['hongguo'] })
+  const sources = new ProviderRegistry(f.store.root, { builtins: ['hongguo', 'hghub'].map(id => ({
+    manifest: { apiVersion: 1, id, name: id === 'hongguo' ? '红果' : '黄果', version: '1.0.0' },
+    createProvider: () => ({ id, async listSeries() { return { items: [], cursor: null } },
+      async getSeries() {}, async listEpisodes() { return { items: [], cursor: null } }, async getCover() {}, async resolvePlayback() {} }),
+  })) })
+  t.after(() => sources.dispose())
+  f.service.catalog = new Catalog(f.store, { sources })
+  await f.elements.get('prefs').onclick()
+  let rows = f.elements.get('providerSettings').children
+  assert.equal(rows[0].children[1].disabled, true)
+  assert.equal(rows[1].children[1].checked, false)
+  assert.equal(f.elements.get('source').disabled, true)
+  rows[1].children[1].checked = true
+  f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
+  assert.equal(sources.get('hghub').id, 'hghub')
+  assert.equal(f.elements.get('source').disabled, false)
+  await f.ui.changeSource('hghub')
+  await f.elements.get('prefs').onclick()
+  rows = f.elements.get('providerSettings').children
+  rows[1].children[1].checked = false
+  f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
+  assert.throws(() => sources.get('hghub'))
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+  assert.equal(f.elements.get('source').disabled, true)
 })
 
 test('switching providers saves progress, stops playback and discards the old catalog response', async t => {

@@ -82,9 +82,11 @@ export class Store {
     const defaults = {
       autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
       defaultMuted: true, volume: 0.7,
-      searchTerms: ['总裁', '重生', '逆袭'], defaultSource: 'hongguo',
+      searchTerms: ['总裁', '重生', '逆袭'], defaultSource: 'hongguo', enabledProviders: ['hongguo'],
     }
-    return row ? { ...defaults, ...JSON.parse(row.body) } : defaults
+    const settings = row ? { ...defaults, ...JSON.parse(row.body) } : defaults
+    if (!settings.enabledProviders.includes(settings.defaultSource)) settings.defaultSource = 'hongguo'
+    return settings
   }
   setupDismissed() {
     return this.db.prepare('SELECT dismissed FROM player_onboarding WHERE id=1').get()?.dismissed === 1
@@ -97,6 +99,7 @@ export class Store {
     return this.transaction(() => {
       const previous = this.preferences()
       const updated = { ...previous, ...settings }
+      if (!updated.enabledProviders.includes(updated.defaultSource)) updated.defaultSource = 'hongguo'
       this.db.prepare('INSERT OR REPLACE INTO player_preferences VALUES(1,?)').run(JSON.stringify(updated))
       if (JSON.stringify(previous.searchTerms) !== JSON.stringify(updated.searchTerms)) {
         this.db.exec('DELETE FROM recommendation_feed')

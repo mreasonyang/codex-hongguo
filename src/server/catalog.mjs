@@ -9,7 +9,7 @@ import { SourceRegistry } from './sources/registry.mjs'
 import { sourceId, qualify, parseId } from './sources/ids.mjs'
 import { decodeCursor, sourceCall } from './sources/contracts.mjs'
 export class Catalog {
-  constructor(store, { sources = new SourceRegistry(store.root) } = {}) {
+  constructor(store, { sources = new SourceRegistry(store.root, { enabled: store.preferences().enabledProviders }) } = {}) {
     this.store = store
     this.sources = sources
     this.ffmpeg = hasFfmpeg()
@@ -19,6 +19,14 @@ export class Catalog {
     this.firstPages = new Map()
     this.coverJobs = new Map()
     void this.prepareMediaRuntime().catch(() => {})
+  }
+  async syncProviders() {
+    const enabled = this.store.preferences().enabledProviders, key = JSON.stringify(enabled)
+    if (key !== this.providerKey) {
+      this.providerKey = key
+      this.providerSync = this.sources.configure?.(enabled) ?? this.sources.ready
+    }
+    await this.providerSync
   }
   prepareMediaRuntime() {
     this.preparingRuntime ??= ensureFfmpeg().then(() => { this.ffmpeg = true }).catch(error => {
@@ -31,6 +39,7 @@ export class Catalog {
   async list({ source = this.defaultSource(), query = '', cursor, preview } = {}) {
     if (!this.sources.loaded) await this.sources.ready
     source = sourceId(source)
+    this.sources.get(source)
     if (!query) return { items: await this.recommendations(preview, source), cursor: null }
     const page = await sourceCall(() => this.sources.get(source).listSeries({ query, cursor, pageSize: 16 }))
     return { items: this.rows(page, true, source), cursor: page.cursor }
@@ -38,6 +47,7 @@ export class Catalog {
   async recommendations(preview = false, source = this.defaultSource()) {
     if (!this.sources.loaded) await this.sources.ready
     source = sourceId(source)
+    this.sources.get(source)
     const terms = this.store.preferences().searchTerms
     const key = 'feed:' + source + ':' + createHash('sha256').update(JSON.stringify(terms)).digest('hex')
     const cached = this.store.catalogCache(key)?.value
@@ -69,6 +79,7 @@ export class Catalog {
     return value.items
   }
   async waitingRecommendations(source = this.defaultSource()) {
+    this.sources.get(source)
     const cached = this.store.waitingFeed(false, source)
     if (cached.length) return cached
     const previous = this.store.waitingFeed(true, source)
@@ -134,6 +145,7 @@ export class Catalog {
     return items
   }
   async cover(id) {
+    this.sources.forId(id)
     if (!this.ffmpeg) return { cover: null }
     const entry = this.covers.get(id)
     if (entry?.cover !== undefined) return { cover: entry.cover }
@@ -183,6 +195,8 @@ export class Catalog {
     return { cover: entry.cover }
   }
   async episodes({ seriesId, cursor }) {
+    if (!this.sources.loaded) await this.sources.ready
+    this.sources.forId(seriesId)
     const ref = parseId(seriesId)
     const key = 'episodes:v2:' + JSON.stringify([seriesId, decodeCursor(cursor, ref.source, 'episodes', ref.id) ?? null])
     const page = await this.metadata.get(key, () => this.loadEpisodes(seriesId, cursor))
@@ -226,6 +240,7 @@ export class Catalog {
     return null
   }
   prepare(id, browser, retry, preload = false) {
+    this.sources.forId(id, 'episode')
     if (!this.ffmpeg) {
       void this.prepareMediaRuntime().catch(() => {})
       return { status: 'preparing' }
