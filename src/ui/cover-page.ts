@@ -1,4 +1,4 @@
-// Local presentation only: no network, saved preferences or playback state.
+// Local presentation only: no network or playback state.
 const zh = {
   workspace: '工作空间', projects: ['工作台迭代', '接口整合', '数据质量改进', '服务可观测性'],
   navigation: ['概览', '项目待办', '技术文档', '测试报告', '会议纪要'],
@@ -53,11 +53,12 @@ const en: typeof zh = {
 }
 const kinds = ['tasks', 'document', 'report', 'minutes'] as const
 type Kind = typeof kinds[number]
+export type CoverStyle = Kind | 'random'
 
-/** One page per mounted player. Only an explicit settings action replaces it. */
+/** One page per mounted player; a saved style change replaces it. */
 export function createCoverPage(host: HTMLElement, random: () => number = Math.random) {
   const doc = host.ownerDocument
-  let copy = zh, language = 'zh-CN', current: Kind | undefined
+  let copy = zh, language = 'zh-CN', current: Kind | undefined, style: CoverStyle = 'random'
   const number = (min: number, max: number) => min + Math.floor(random() * (max - min + 1))
   const choose = <T,>(items: readonly T[]): T => items[number(0, items.length - 1)]
   function sample<T>(items: readonly T[], count: number) {
@@ -162,7 +163,7 @@ export function createCoverPage(host: HTMLElement, random: () => number = Math.r
     section.append(list); body.append(section)
   }
   function render() {
-    current = choose(kinds.filter(kind => kind !== current))
+    current = style === 'random' ? choose(kinds.filter(kind => kind !== current)) : style
     const index = kinds.indexOf(current), project = choose(copy.projects)
     const frame = node('div', 'coverPage')
     frame.dataset.template = current
@@ -203,6 +204,10 @@ export function createCoverPage(host: HTMLElement, random: () => number = Math.r
       copy = language === 'en' ? en : zh
       render()
     },
-    change() { if (current) render() },
+    configure(next: CoverStyle) {
+      if (next === style) return
+      style = next
+      if (current) render()
+    },
   }
 }

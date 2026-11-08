@@ -78,7 +78,7 @@ export class Store {
     const row = this.db.prepare('SELECT body FROM player_preferences WHERE id=1').get()
     const defaults = {
       autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
-      defaultMuted: true, volume: 0.7, hoverDecoyEnabled: false,
+      defaultMuted: true, volume: 0.7, hoverDecoyEnabled: false, coverStyle: 'random',
       searchTerms: ['总裁', '重生', '逆袭'],
     }
     return row ? { ...defaults, ...JSON.parse(row.body) } : defaults

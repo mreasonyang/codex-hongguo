@@ -37,7 +37,7 @@ for (const [index, kind] of ['tasks', 'document', 'report', 'minutes'].entries()
     page.initialize(locale)
     assert.equal(root.children[0], rendered)
     assert.equal(text(root), content)
-    page.change()
+    page.configure(kind === 'minutes' ? 'tasks' : 'minutes')
     assert.notEqual(root.children[0].dataset.template, kind)
     assert.equal(locale.startsWith('en') ? /[\u3400-\u9fff]/.test(text(root)) : false, false)
   })
@@ -54,4 +54,17 @@ test('separate mounted players get independent pages and layout variations', () 
   }
   assert.equal(variants.size, 4)
   assert.ok(pages.size > 40)
+})
+
+for (const kind of ['tasks', 'document', 'report', 'minutes']) test(`a saved ${kind} style selects that template across new openings`, () => {
+  for (const value of [0.01, 0.41, 0.91]) {
+    const root = host(), page = createCoverPage(root, () => value)
+    page.configure(kind)
+    page.initialize('en')
+    assert.equal(root.children[0].dataset.template, kind)
+    const rendered = root.children[0]
+    page.configure(kind)
+    page.initialize('en')
+    assert.equal(root.children[0], rendered)
+  }
 })

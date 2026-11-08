@@ -287,7 +287,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   })
   assert.equal(data.isError, true)
   const resources = (await client.listResources()).resources
-  const playerUri = 'ui://hongguo/v25/player', waitingUri = 'ui://hongguo/v25/waiting'
+  const playerUri = 'ui://hongguo/v26/player', waitingUri = 'ui://hongguo/v26/waiting'
   assert.equal(tools.find(t => t.name === 'show_waiting_picks')._meta.ui.resourceUri, waitingUri)
   assert.equal(tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri, playerUri)
   assert.deepEqual(resources.map(r => r.uri).sort(), [playerUri, waitingUri])

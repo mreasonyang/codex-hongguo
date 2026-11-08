@@ -18,7 +18,7 @@ const root = join(tmp, '本地 市场'),
 const npmMarket = join(tmp, 'npm 市场')
 const version = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version
 const channel = releaseChannel(version)
-const playerUri = 'ui://hongguo/v25/player', waitingUri = 'ui://hongguo/v25/waiting'
+const playerUri = 'ui://hongguo/v26/player', waitingUri = 'ui://hongguo/v26/waiting'
 const commands = Object.fromEntries(['npm', 'codex', 'openssl'].map(name => [name, findExecutable(name)]))
 const env = {
   HOME: tmp,
@@ -42,7 +42,8 @@ function run(bin, args) {
   const r = spawnSync(commands[bin] || bin, args, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: bin === 'npm' ? 420000 : 120000, windowsHide: true })
   // Never relay host logs. Only a fixed category crosses the diagnostic boundary.
   const diagnostic = (r.stderr || '') + '\n' + (r.stdout || '')
-  const reason = /红果后台仍在运行/.test(diagnostic) ? 'plugin_running'
+  const reason = /播放组件自动准备失败/.test(diagnostic) ? 'media_prepare_failed'
+    : /红果后台仍在运行/.test(diagnostic) ? 'plugin_running'
     : /无法确认红果后台是否已退出/.test(diagnostic) ? 'process_check_failed'
     : /无法删除红果插件缓存/.test(diagnostic) ? 'cache_in_use'
     : /红果插件卸载失败/.test(diagnostic) ? 'plugin_remove_failed'
@@ -100,7 +101,7 @@ try {
   await assert.rejects(access(env.HONGGUO_FORBIDDEN_FFMPEG), '不应调用系统 FFmpeg')
   const seeded = new Store(defaultData)
   seeded.save({ seriesId: 'hg-987654321', episodeId: 'hg-987654322', title: '安装验收进度', label: '2', positionMs: 12345, durationMs: 60000 })
-  seeded.setPreferences({ autoPrompt: true, searchTerms: ['总裁', '重生', '逆袭'], defaultMuted: false, volume: 0.43 })
+  seeded.setPreferences({ autoPrompt: true, searchTerms: ['总裁', '重生', '逆袭'], defaultMuted: false, volume: 0.43, coverStyle: 'document' })
   seeded.setSetupDismissed(true)
   seeded.close()
   run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + channel, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
@@ -272,6 +273,9 @@ try {
   const preferences = (await hostCall('get_preferences', { panel: opened._meta.panel }))._meta?.data
   assert.equal(preferences?.defaultMuted, false, '重复安装后默认静音设置丢失')
   assert.equal(preferences?.volume, 0.43, '重复安装后音量记忆丢失')
+  assert.equal(preferences?.coverStyle, 'document', '重复安装后替身样式丢失')
+  const coverSettings = await hostCall('set_preferences', { panel: opened._meta.panel, coverStyle: 'minutes' })
+  assert.equal(coverSettings._meta?.data?.coverStyle, 'minutes', '安装副本无法保存替身样式')
   const firstSetup = await hostCall('get_setup_status', { panel: opened._meta.panel })
   assert.equal(firstSetup._meta?.data?.dismissed, true, '重复安装后引导设置丢失')
   assert.equal(firstSetup._meta.data.hooks.status, 'manual_check')

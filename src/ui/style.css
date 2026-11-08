@@ -185,9 +185,17 @@ html[data-surface='waiting'] #playerRoot { display: none; }
 .coverActions strong { font-size: 12px; font-weight: 500; }
 .coverActions li p { color: var(--text-2); font-size: 11px; margin: 4px 0 0; }
 .coverCheck { color: var(--text-2); }
-.coverSettings { display: flex; align-items: center; gap: 12px; }
-.coverSettings .settingsHint { flex: 1; margin: 4px 0; }
-.coverSettings button { flex-shrink: 0; }
+.coverSettings { display: grid; gap: 6px; }
+.coverSettings select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
 #settingsStatus:empty { display: none; }
 #settingsStatus[data-state='error'] { color: var(--danger); }
 @media (max-width: 800px) { .coverContents { display: none; } .coverArticleGrid { grid-template-columns: minmax(0, 1fr); } }

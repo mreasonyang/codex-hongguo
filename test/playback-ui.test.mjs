@@ -180,7 +180,7 @@ async function hoveringPlayer(t, playing = true) {
   if (playing) await f.ui.start()
   return f
 }
-test('one cover survives hover, preference polling and saves; changing it leaves playback and saved settings intact', async t => {
+test('selecting a cover style keeps Settings open and preserves playback and unrelated preferences', async t => {
   const f = await hoveringPlayer(t)
   const host = f.elements.get('decoy'), page = host.children[0]
   const plays = f.video.plays, position = f.video.currentTime
@@ -189,22 +189,28 @@ test('one cover survives hover, preference polling and saves; changing it leaves
   await f.poll()
   f.ui.coverPage.initialize('zh-CN')
   assert.equal(host.children[0], page)
-  const settings = JSON.stringify(f.peer.preferences())
+  const settings = f.peer.preferences()
   const playsAfterHover = f.video.plays
   assert.equal(playsAfterHover, plays + 1)
-  f.elements.get('changeCover').onclick(); await flush()
+  const style = page.dataset.template === 'report' ? 'tasks' : 'report'
+  f.elements.get('coverStyle').value = style
+  f.elements.get('coverStyle').onchange(); await flush()
   assert.notEqual(host.children[0], page)
-  assert.notEqual(host.children[0].dataset.template, page.dataset.template)
+  assert.equal(host.children[0].dataset.template, style)
   assert.equal(f.video.paused, false)
   assert.equal(f.video.plays, playsAfterHover)
   assert.equal(f.video.currentTime, position)
-  assert.equal(JSON.stringify(f.peer.preferences()), settings)
-  assert.equal(f.elements.get('settings').hidden, true)
+  assert.deepEqual(f.peer.preferences(), { ...settings, coverStyle: style })
+  assert.equal(f.elements.get('settings').hidden, false)
   await f.ui.pause()
-  await f.elements.get('prefs').onclick()
-  f.elements.get('changeCover').onclick(); await flush()
+  f.elements.get('coverStyle').value = 'minutes'
+  f.elements.get('coverStyle').onchange(); await flush()
   assert.equal(f.video.paused, true)
   assert.equal(f.video.plays, playsAfterHover)
+  assert.equal(f.elements.get('settings').hidden, false)
+  const saved = host.children[0]
+  await f.poll()
+  assert.equal(host.children[0], saved)
 })
 test('leaving the panel pauses synchronously and returning preserves the player and its position', async t => {
   const f = await hoveringPlayer(t)
@@ -222,6 +228,21 @@ test('leaving the panel pauses synchronously and returning preserves the player 
   assert.equal(f.video.plays, plays + 1)
   assert.equal(f.video.currentTime, 12)
   assert.equal(f.elements.get('playerContent').inert, false)
+})
+
+test('a cover style saved in another chat applies once and synchronizes an open Settings sheet', async t => {
+  const f = await hoveringPlayer(t)
+  await f.elements.get('prefs').onclick()
+  await f.settings({ coverStyle: 'minutes' }); await f.poll()
+  const page = f.elements.get('decoy').children[0]
+  assert.equal(page.dataset.template, 'minutes')
+  assert.equal(f.elements.get('coverStyle').value, 'minutes')
+  assert.equal(f.elements.get('settings').hidden, false)
+  await f.poll()
+  assert.equal(f.elements.get('decoy').children[0], page)
+  await f.settings({ hoverDecoyEnabled: false }); await f.poll()
+  assert.equal(f.elements.get('coverSettings').hidden, true)
+  assert.equal(f.elements.get('settings').hidden, false)
 })
 for (const cancel of ['manual', 'Stop', 'Interrupt', 'close']) test(`hover return cannot undo ${cancel}`, async t => {
   const f = await hoveringPlayer(t)

@@ -150,9 +150,18 @@
           <input type="checkbox" id="hoverDecoyEnabled" class="switch" />
         </label>
         <p class="settingsHint">移出红果面板显示替身并暂停，移回后继续；手动暂停保持不变</p>
-        <div class="coverSettings">
-          <p class="settingsHint">每次打开随机生成替身，本次打开保持不变</p>
-          <button type="button" id="changeCover" class="btn ghost">换一页</button>
+        <div id="coverSettings" class="coverSettings" hidden>
+          <label class="field">
+            <span>替身样式</span>
+            <select id="coverStyle">
+              <option value="random">随机</option>
+              <option value="tasks">项目待办</option>
+              <option value="document">技术文档</option>
+              <option value="report">测试报告</option>
+              <option value="minutes">会议纪要</option>
+            </select>
+          </label>
+          <p class="settingsHint">每次打开生成新内容，本次打开保持不变</p>
         </div>
         <label class="switchRow">
           <span>当前回合进行时显示推荐</span>

@@ -1,6 +1,7 @@
 import { App, applyDocumentTheme, applyHostStyleVariables } from '@modelcontextprotocol/ext-apps'
 import { trackInlineSize } from './inline-size'
 import pkg from '../../package.json' with { type: 'json' }
+import type { CoverStyle } from './cover-page'
 export type Context = {
   identified: boolean
   waitingTurn?: string
@@ -14,6 +15,7 @@ export type Preferences = {
   autoPlayOnStart: boolean
   defaultMuted: boolean
   hoverDecoyEnabled: boolean
+  coverStyle: CoverStyle
   volume: number
   searchTerms: string[]
 }

@@ -66,6 +66,7 @@ export const schemas = {
     autoPlayOnStart: z.boolean().optional(),
     defaultMuted: z.boolean().optional(),
     hoverDecoyEnabled: z.boolean().optional(),
+    coverStyle: z.enum(['random', 'tasks', 'document', 'report', 'minutes']).optional(),
     volume: z.number().positive().max(1).optional(),
   }),
   read_panel_chunk: z.object({

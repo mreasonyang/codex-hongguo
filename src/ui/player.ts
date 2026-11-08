@@ -71,7 +71,7 @@ let lastSave = 0,
 
 let prefs: Preferences = {
   autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
-  defaultMuted: true, volume: 0.7, hoverDecoyEnabled: false,
+  defaultMuted: true, volume: 0.7, hoverDecoyEnabled: false, coverStyle: 'random',
   searchTerms: ['总裁', '重生', '逆袭'],
 }
 let playback: 'idle' | 'playing' | 'finished' = 'idle'
@@ -116,10 +116,11 @@ const settings = createSettings({
     renderPicks()
     if (termsChanged && !series) void list().catch(error => notice(explain(error)))
   },
-  changeCover: () => { coverPage.change(); notice('已更换，移出面板可查看') },
   translate: tr,
 })
 function configureDecoy() {
+  coverPage.configure(prefs.coverStyle)
+  settings.sync()
   decoy.configure(prefs)
 }
 function decoyChanged(covered: boolean) {

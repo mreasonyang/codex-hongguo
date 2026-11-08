@@ -6,29 +6,37 @@ type Options = {
   save: (patch: Partial<Preferences>) => Promise<Preferences>
   applied: (settings: Preferences) => void
   edited: () => void
-  changeCover: () => void
   translate: (value: string) => string
 }
 
-/** Serialize small setting patches; only successful saves allow Close or Change page. */
+/** Autosave settings; only explicit dismissal closes the sheet after pending saves. */
 export function createSettings(options: Options, doc: Document = document) {
   const element = <T extends HTMLElement = HTMLElement>(id: string) => doc.getElementById(id) as T
   const form = element<HTMLFormElement>('settings'), terms = element<HTMLInputElement>('terms')
   const status = element('settingsStatus'), close = element<HTMLButtonElement>('settingsClose')
-  const change = element<HTMLButtonElement>('changeCover'), trigger = element<HTMLButtonElement>('prefs')
-  const content = element('playerContent')
+  const style = element<HTMLSelectElement>('coverStyle'), coverSettings = element('coverSettings')
+  const trigger = element<HTMLButtonElement>('prefs')
   let pending: Partial<Preferences> = {}, generation = 0, revision = 0, busy = 0
   let queue = Promise.resolve(), finishing: Promise<boolean> | undefined
   let invalidTerms = false, saved = false, termsBaseline = ''
   const revisions = new Map<keyof Preferences, number>()
   const keys = (patch: Partial<Preferences>) => Object.keys(patch) as (keyof Preferences)[]
-  const controls = [...switches.map(id => element<HTMLInputElement>(id)), terms, close, change]
+  const controls = [...switches.map(id => element<HTMLInputElement>(id)), style, terms, close]
+  function sync() {
+    if (form.hidden) return
+    const settings = options.read()
+    for (const key of switches) element<HTMLInputElement>(key).checked = pending[key] ?? settings[key]
+    style.value = pending.coverStyle ?? settings.coverStyle
+    coverSettings.hidden = !element<HTMLInputElement>('hoverDecoyEnabled').checked
+    style.disabled = !!finishing || coverSettings.hidden
+  }
   function showStatus() {
     const failed = !busy && keys(pending).length > 0
     status.dataset.state = invalidTerms || failed ? 'error' : 'status'
     status.textContent = options.translate(invalidTerms ? '请输入1～6个关键词，每个不超过30个字符'
-      : busy ? '正在保存…' : failed ? '设置未保存，请点击关闭或换一页重试'
+      : busy ? '正在保存…' : failed ? '设置未保存，请点击关闭重试'
       : terms.value !== termsBaseline ? '按 Enter 或离开输入框时保存' : saved ? '已自动保存' : '')
+    sync()
   }
   function enqueue(patch: Partial<Preferences>) {
     const epoch = generation, ticket = ++revision, fields = keys(patch)
@@ -75,7 +83,7 @@ export function createSettings(options: Options, doc: Document = document) {
     trigger.setAttribute('aria-expanded', 'false')
     trigger.focus()
   }
-  function finish(changeCover = false): Promise<boolean> {
+  function finish(): Promise<boolean> {
     if (finishing) return finishing
     if (!saveTerms()) { terms.focus(); return Promise.resolve(false) }
     const epoch = generation
@@ -84,19 +92,22 @@ export function createSettings(options: Options, doc: Document = document) {
     finishing = (async () => {
       await queue
       if (epoch !== generation || keys(pending).length) return false
-      if (changeCover) options.changeCover()
       hide()
       return true
     })().finally(() => {
       if (epoch === generation) {
         controls.forEach(control => { control.disabled = false })
         finishing = undefined
+        sync()
       }
     })
     return finishing
   }
   for (const key of switches) element<HTMLInputElement>(key).onchange = () => {
     void enqueue({ [key]: element<HTMLInputElement>(key).checked })
+  }
+  style.onchange = () => {
+    if (!form.hidden && !style.disabled) void enqueue({ coverStyle: style.value as Preferences['coverStyle'] })
   }
   terms.onblur = () => { if (!form.hidden) saveTerms() }
   terms.onkeydown = event => {
@@ -105,18 +116,17 @@ export function createSettings(options: Options, doc: Document = document) {
   terms.oninput = () => { invalidTerms = false; terms.removeAttribute('aria-invalid'); showStatus() }
   form.onsubmit = event => { event.preventDefault(); saveTerms() }
   close.onclick = () => { void finish() }
-  change.onclick = () => { void finish(true) }
   doc.addEventListener('click', event => {
-    if (form.hidden || content.inert || event.defaultPrevented) return
+    if (form.hidden || event.defaultPrevented) return
     const path = event.composedPath()
-    if (!path.includes(content) || path.includes(form) || path.includes(trigger)) return
+    if (path.includes(form) || path.includes(trigger)) return
     // Dismiss first, without also activating a player control beneath the click.
     event.preventDefault()
     event.stopPropagation()
     void finish()
   }, true)
   doc.addEventListener('keydown', event => {
-    if (form.hidden || content.inert || event.defaultPrevented || event.key !== 'Escape' ||
+    if (form.hidden || event.defaultPrevented || event.key !== 'Escape' ||
       event.isComposing || event.keyCode === 229) return
     event.preventDefault()
     event.stopPropagation()
@@ -124,6 +134,7 @@ export function createSettings(options: Options, doc: Document = document) {
   }, true)
   return {
     get busy() { return busy > 0 },
+    sync,
     open() {
       const settings = options.read()
       for (const key of switches) element<HTMLInputElement>(key).checked = pending[key] ?? settings[key]

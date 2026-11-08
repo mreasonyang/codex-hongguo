@@ -13,9 +13,11 @@ function fixture({ hoverDecoyEnabled = false } = {}) {
     })
     return elements.get(id)
   } })
+  document.getElementById('playerContent')
+  document.getElementById('decoy')
   let stored = { autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
-    defaultMuted: true, hoverDecoyEnabled, volume: 0.42, searchTerms: ['都市'] }
-  let current = structuredClone(stored), beforeSave = async () => {}, covers = 0, applied = 0
+    defaultMuted: true, hoverDecoyEnabled, coverStyle: 'random', volume: 0.42, searchTerms: ['都市'] }
+  let current = structuredClone(stored), beforeSave = async () => {}, applied = 0
   const requests = []
   const settings = createSettings({
     read: () => current,
@@ -24,11 +26,10 @@ function fixture({ hoverDecoyEnabled = false } = {}) {
       stored = { ...stored, ...patch }; return structuredClone(stored)
     },
     applied: value => { current = value; applied++ }, edited() {}, translate: value => value,
-    changeCover: () => { covers++ },
   }, document)
   settings.open()
   return { settings, elements, requests, document,
-    get stored() { return stored }, get covers() { return covers }, get applied() { return applied },
+    get stored() { return stored }, get applied() { return applied },
     beforeSave: callback => { beforeSave = callback },
     external(patch) { stored = { ...stored, ...patch }; current = structuredClone(stored) },
     dispatch(type, path = [], properties = {}) {
@@ -38,6 +39,7 @@ function fixture({ hoverDecoyEnabled = false } = {}) {
       return event
     },
     toggle(key, checked) { const input = elements.get(key); input.checked = checked; input.onchange() },
+    style(value) { const input = elements.get('coverStyle'); input.value = value; input.onchange() },
     terms(value) { const input = elements.get('terms'); input.value = value; input.oninput(); return input },
   }
 }
@@ -78,53 +80,94 @@ test('an IME composition Enter does not submit partial keywords', async () => {
   await settle(); assert.equal(f.requests.length, 0)
 })
 
-for (const value of ['', '，, ', 'a,b,c,d,e,f,g', 'x'.repeat(31)]) test(`invalid keywords prevent closing or changing the cover (${JSON.stringify(value)})`, async () => {
+for (const value of ['', '，, ', 'a,b,c,d,e,f,g', 'x'.repeat(31)]) test(`invalid keywords prevent closing (${JSON.stringify(value)})`, async () => {
   const f = fixture()
   f.terms(value)
-  assert.equal(await f.settings.finish(true), false)
-  assert.equal(f.covers, 0)
+  assert.equal(await f.settings.finish(), false)
   assert.equal(f.requests.length, 0)
   assert.equal(f.elements.get('settings').hidden, false)
   assert.equal(f.elements.get('terms').attributes['aria-invalid'], 'true')
   f.terms('都市，悬疑')
-  assert.equal(await f.settings.finish(true), true)
-  assert.equal(f.covers, 1)
+  assert.equal(await f.settings.finish(), true)
   assert.equal(f.elements.get('settings').hidden, true)
 })
 
-test('Change page waits for the current write, runs once, then closes Settings', async () => {
+test('cover styles follow the hover switch, save automatically and never dismiss Settings', async () => {
+  const f = fixture()
+  assert.equal(f.elements.get('coverSettings').hidden, true)
+  assert.equal(f.elements.get('coverStyle').disabled, true)
+  f.style('report'); await settle()
+  assert.equal(f.requests.length, 0)
+  f.toggle('hoverDecoyEnabled', true)
+  assert.equal(f.elements.get('coverSettings').hidden, false)
+  f.style('report'); await settle()
+  assert.deepEqual(f.requests, [{ hoverDecoyEnabled: true }, { coverStyle: 'report' }])
+  assert.equal(f.stored.coverStyle, 'report')
+  assert.equal(f.elements.get('settings').hidden, false)
+  for (const type of ['pointerleave', 'blur', 'focusout']) f.dispatch(type)
+  assert.equal(f.elements.get('settings').hidden, false)
+  f.toggle('hoverDecoyEnabled', false); await settle()
+  assert.equal(f.elements.get('coverSettings').hidden, true)
+  assert.equal(f.elements.get('coverStyle').disabled, true)
+  assert.equal(f.stored.coverStyle, 'report')
+  f.toggle('hoverDecoyEnabled', true); await settle()
+  assert.equal(f.elements.get('coverStyle').value, 'report')
+  assert.equal(f.elements.get('settings').hidden, false)
+})
+
+test('rapid style choices serialize with enabling hover and preserve the last choice', async () => {
   const f = fixture(), gate = deferred()
   f.beforeSave(() => gate.promise)
-  f.toggle('hoverDecoyEnabled', true)
-  const first = f.settings.finish(true), second = f.settings.finish(true)
-  assert.equal(first, second)
-  assert.equal(f.covers, 0)
+  f.toggle('hoverDecoyEnabled', true); await settle()
+  f.style('tasks'); f.style('minutes')
+  assert.equal(f.elements.get('coverStyle').value, 'minutes')
   assert.equal(f.elements.get('settings').hidden, false)
-  assert.equal(f.elements.get('settingsClose').disabled, true)
-  gate.resolve()
-  assert.equal(await first, true)
+  gate.resolve(); await settle()
   assert.equal(f.stored.hoverDecoyEnabled, true)
-  assert.equal(f.covers, 1)
-  assert.equal(f.elements.get('settings').hidden, true)
+  assert.equal(f.stored.coverStyle, 'minutes')
+  assert.deepEqual(f.requests, [{ hoverDecoyEnabled: true }, { coverStyle: 'minutes' }])
+  assert.equal(f.elements.get('settings').hidden, false)
 })
 
-test('a failed in-flight save blocks changing and closing; retry preserves the desired values', async () => {
+test('a failed style save retains its choice, reports failure and retries on Close', async () => {
+  const f = fixture({ hoverDecoyEnabled: true })
+  f.beforeSave(async () => { throw Error('synthetic failure') })
+  f.style('document'); await settle()
+  assert.equal(f.stored.coverStyle, 'random')
+  assert.equal(f.elements.get('coverStyle').value, 'document')
+  assert.equal(f.elements.get('settingsStatus').dataset.state, 'error')
+  assert.equal(f.elements.get('settings').hidden, false)
+  f.beforeSave(async () => {})
+  assert.equal(await f.settings.finish(), true)
+  assert.equal(f.stored.coverStyle, 'document')
+})
+
+test('an open sheet follows saved hover/style changes from another chat without discarding a keyword draft', () => {
+  const f = fixture({ hoverDecoyEnabled: true })
+  f.terms('未完成的输入')
+  f.external({ hoverDecoyEnabled: false, coverStyle: 'minutes' }); f.settings.sync()
+  assert.equal(f.elements.get('hoverDecoyEnabled').checked, false)
+  assert.equal(f.elements.get('coverSettings').hidden, true)
+  assert.equal(f.elements.get('coverStyle').value, 'minutes')
+  assert.equal(f.elements.get('terms').value, '未完成的输入')
+  assert.equal(f.elements.get('settings').hidden, false)
+})
+
+test('a failed in-flight save blocks closing; retry preserves the desired values', async () => {
   const f = fixture(), gate = deferred()
   f.beforeSave(async () => { await gate.promise; throw Error('synthetic failure') })
   f.toggle('defaultMuted', false)
-  const closing = f.settings.finish(true)
+  const closing = f.settings.finish()
   gate.resolve()
   assert.equal(await closing, false)
   assert.equal(f.stored.defaultMuted, true)
   assert.equal(f.elements.get('defaultMuted').checked, false)
   assert.equal(f.elements.get('settings').hidden, false)
-  assert.equal(f.covers, 0)
   assert.equal(f.elements.get('settingsClose').disabled, false)
   assert.equal(f.elements.get('settingsStatus').dataset.state, 'error')
   f.beforeSave(async () => {})
-  assert.equal(await f.settings.finish(true), true)
+  assert.equal(await f.settings.finish(), true)
   assert.equal(f.stored.defaultMuted, false)
-  assert.equal(f.covers, 1)
 })
 
 test('rapid edits serialize writes and coalesce obsolete queued values', async () => {
@@ -155,12 +198,11 @@ test('a closed player ignores late UI responses and cannot close a newly opened 
   const f = fixture(), gate = deferred()
   f.beforeSave(() => gate.promise)
   f.toggle('autoPrompt', false); await settle()
-  const closing = f.settings.finish(true)
+  const closing = f.settings.finish()
   f.settings.reset(); f.settings.open()
   gate.resolve()
   assert.equal(await closing, false)
   assert.equal(f.applied, 0)
-  assert.equal(f.covers, 0)
   assert.equal(f.elements.get('settings').hidden, false)
 })
 
@@ -177,8 +219,7 @@ for (const hoverDecoyEnabled of [false, true]) {
     gate.resolve(); await settle()
     assert.deepEqual(f.stored.searchTerms, ['都市', '悬疑'])
     assert.equal(f.elements.get('settings').hidden, true)
-    assert.equal(f.covers, 0)
-  })
+    })
 
   test(`Escape closes Settings with hover=${hoverDecoyEnabled}`, async () => {
     const f = fixture({ hoverDecoyEnabled })
@@ -190,9 +231,9 @@ for (const hoverDecoyEnabled of [false, true]) {
   })
 }
 
-test('clicks inside Settings, on its toggle, and outside player content do not dismiss it', async () => {
+test('clicks inside Settings and on its toggle do not dismiss it', async () => {
   const f = fixture()
-  for (const path of [['terms', 'settings', 'playerContent'], ['prefs', 'playerContent'], []]) {
+  for (const path of [['terms', 'settings', 'playerContent'], ['prefs', 'playerContent']]) {
     assert.equal(f.dispatch('click', path).defaultPrevented, false)
     await settle()
     assert.equal(f.elements.get('settings').hidden, false)
@@ -215,15 +256,13 @@ test('pointer movement, focus changes, IME Escape, and a canceled Escape leave S
   assert.equal(f.requests.length, 0)
 })
 
-test('the cover cannot dismiss Settings via a click or Escape while player content is inert', async () => {
+for (const dismissal of ['blank area', 'cover', 'Escape']) test(`${dismissal} dismisses Settings even outside or over concealed player content`, async () => {
   const f = fixture({ hoverDecoyEnabled: true })
   f.elements.get('playerContent').inert = true
-  assert.equal(f.dispatch('click', ['playerContent']).defaultPrevented, false)
-  assert.equal(f.dispatch('keydown', [], { key: 'Escape' }).defaultPrevented, false)
+  const event = dismissal === 'Escape' ? f.dispatch('keydown', [], { key: 'Escape' })
+    : f.dispatch('click', dismissal === 'cover' ? ['decoy'] : [])
   await settle()
-  assert.equal(f.elements.get('settings').hidden, false)
-  f.elements.get('playerContent').inert = false
-  f.dispatch('keydown', [], { key: 'Escape' }); await settle()
+  assert.equal(event.defaultPrevented, true)
   assert.equal(f.elements.get('settings').hidden, true)
 })
 

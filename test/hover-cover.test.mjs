@@ -23,6 +23,7 @@ test('upgrading deletes obsolete cover settings from storage while preserving ho
     store = new Store(root)
     assert.deepEqual(JSON.parse(store.db.prepare('SELECT body FROM player_preferences WHERE id=1').get().body), retained)
     assert.equal(store.preferences().hoverDecoyEnabled, true)
+    assert.equal(store.preferences().coverStyle, 'random')
     assert.equal('decoyUrl' in store.preferences(), false)
     assert.equal('decoyFrameUrl' in store.preferences(), false)
     assert.deepEqual(store.history(), history)
@@ -52,7 +53,29 @@ test('built-in cover has no URL setting, display grant, embedded website or fram
   assert.match(policy, /default-src 'none'/)
   assert.doesNotMatch(policy, /frame-src|127\.0\.0\.1/)
   const html = await response.text()
-  assert.match(html, /id="changeCover"/)
+  assert.match(html, /id="coverStyle"/)
+  assert.doesNotMatch(html, /changeCover|换一页|Change page/)
   assert.doesNotMatch(html, /<iframe|decoyUrl|decoyFrameUrl|decoyWebsite|canEmbedDecoy|data-decoy-origin/)
   assert.equal((await fetch(browser.origin + '/cover/' + '0'.repeat(48))).status, 401)
+})
+
+test('cover styles default for existing users, persist across restart and reject unsupported choices', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'hongguo-cover-style-'))
+  let store = new Store(root)
+  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }) })
+  store.db.prepare('INSERT OR REPLACE INTO player_preferences VALUES(1,?)').run(JSON.stringify({
+    hoverDecoyEnabled: true, volume: 0.43,
+  }))
+  assert.equal(store.preferences().coverStyle, 'random')
+  for (const coverStyle of ['tasks', 'document', 'report', 'minutes', 'random']) {
+    const service = new Service(store, {}), scope = service.panel(service.open({}).panel)
+    await service.call(scope, 'set_preferences', { coverStyle })
+    store.close(); store = new Store(root)
+    assert.equal(store.preferences().coverStyle, coverStyle)
+    assert.equal(store.preferences().hoverDecoyEnabled, true)
+    assert.equal(store.preferences().volume, 0.43)
+  }
+  const service = new Service(store, {}), scope = service.panel(service.open({}).panel)
+  for (const coverStyle of ['unknown', '', null, 1])
+    await assert.rejects(service.call(scope, 'set_preferences', { coverStyle }), /参数无效/)
 })
