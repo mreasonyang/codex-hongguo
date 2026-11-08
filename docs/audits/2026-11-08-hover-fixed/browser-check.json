@@ -1,0 +1,21 @@
+{
+  "environment": "Codex in-app browser; synthetic media; production HTTP player; not the native Codex panel",
+  "urlInputs": 0,
+  "embeddedWebsites": 0,
+  "covered": {
+    "paused": true,
+    "time": 19.338481
+  },
+  "coveredStable": {
+    "paused": true,
+    "time": 19.338481
+  },
+  "resumed": {
+    "paused": false,
+    "time": 19.491306
+  },
+  "advanced": {
+    "paused": false,
+    "time": 28.411599
+  }
+}

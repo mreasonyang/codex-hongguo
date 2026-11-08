@@ -1,0 +1,13 @@
+{
+  "installed": true,
+  "installedFilesMatch": true,
+  "closeButtonIncluded": true,
+  "saveAndCancelRemoved": true,
+  "changePageIncluded": true,
+  "noCustomUrlUi": true,
+  "currentResourceIncluded": true,
+  "settingsPreserved": true,
+  "watchProgressPreserved": true,
+  "hoverEnabled": true,
+  "readinessCheckPassed": true
+}

@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { prepareRuntime, findExecutable, spawnSync } from '../runtime/executables.mjs'
 import { hookAuthorizationHint } from '../server/setup.mjs'
-import { ensureFfmpeg, removeManagedFfmpeg } from '../runtime/ffmpeg-runtime.mjs'
+import { ensureFfmpeg, removeManagedFfmpeg, ffmpegPreparationTimeoutMs } from '../runtime/ffmpeg-runtime.mjs'
 import { removeUserData } from '../runtime/uninstall-data.mjs'
 import { assertWindowsPluginIdle } from '../runtime/windows-processes.mjs'
 import { marketplaceName } from '../runtime/distribution.mjs'
@@ -115,7 +115,7 @@ export async function main(argv = process.argv.slice(2)) {
     prepareRuntime()
     if (action === 'doctor') {
       if (options.length) throw Error('doctor 不接受额外参数。')
-      const checked = spawnSync(process.execPath, [fileURLToPath(new URL('../../dist/setup/check.mjs', import.meta.url))], { stdio: 'inherit', timeout: 15000 })
+      const checked = spawnSync(process.execPath, [fileURLToPath(new URL('../../dist/setup/check.mjs', import.meta.url))], { stdio: 'inherit', timeout: ffmpegPreparationTimeoutMs })
       if (checked.status !== 0) throw Error('环境检查未完成。')
       return
     }
@@ -147,7 +147,7 @@ export async function main(argv = process.argv.slice(2)) {
     }
     if (!dryRun) {
       if (source === defaultSource) await prepareLocalMarketplace()
-      console.log('正在准备播放组件，首次使用需要联网下载…')
+      console.log('正在准备播放组件，首次使用需要联网下载（下载总时限30分钟）…')
       await ensureFfmpeg()
     }
     install({ run: codexRunner(codex), source, dryRun })

@@ -1,0 +1,19 @@
+{
+  "version": "0.0.35-beta.6",
+  "before": {
+    "npmBytes": 13883015,
+    "zipBytes": 23842060,
+    "imageBytes": 9814338
+  },
+  "after": {
+    "npmBytes": 4222364,
+    "zipBytes": 4524657,
+    "imageBytes": 5346628
+  },
+  "checks": {
+    "npmScreenshotsExcluded": true,
+    "zipScreenshotsExcluded": true,
+    "npmGuideImagesPinned": true,
+    "zipGuideImagesPinned": true
+  }
+}

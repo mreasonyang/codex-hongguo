@@ -37,6 +37,16 @@ Keep the package name quoted so PowerShell treats the leading `@` literally. `np
 
 Default installation and updates do not require Git. The command checks Node, npm and the Codex CLI, prepares the playback component, then uses a local marketplace index to install the plugin from npm. The first installation requires a network connection; later runs reuse the local cache. The installer tells you to review, trust and enable `UserPromptSubmit`, `Stop` and `Interrupt` in Codex **Settings → Hooks**. Then open a new local chat to use the plugin.
 
+### Beta testing channel
+
+Test devices can use beta while stable users stay on `@latest`:
+
+```powershell
+npx.cmd "@kyun.si/codex-hongguo@beta" setup
+```
+
+Update with `npx.cmd "@kyun.si/codex-hongguo@beta" update`. On macOS / Linux, use `npx` instead of `npx.cmd`. Use `@latest setup` to return to stable. Switching channels replaces the current plugin and preserves preferences and progress. Close the previous player first and restart Codex afterward; review Hooks when prompted.
+
 ### Post-Install Setup
 
 - **Run the Setup guide**: Run **Setup** from the plugin details view (which invokes `hongguo-setup`), or say `配置红果短剧` in a local conversation. Setup checks Node, the progress database and the playback component, then shows a fixed reminder to check Hook authorization manually in Codex Settings → Hooks.
@@ -47,11 +57,11 @@ Default installation and updates do not require Git. The command checks Node, np
 
 **Show catalog**: Browse recommendations, search for shows, or continue where you left off.
 
-![Hongguo show catalog with recommendations, search, Continue watching, and watch history](docs/images/codex-hongguo-catalog.png)
+![Hongguo show catalog with recommendations, search, Continue watching, and watch history](docs/images/codex-hongguo-catalog.webp)
 
 **Player**: Watch beside your chat, choose episodes and autoplay the next episode. Playback can start once the first local fragments are ready while the rest continue processing in the background. With autoplay next enabled, the player preloads one upcoming episode during the last roughly 30 seconds (or the final quarter of shorter episodes), reducing the wait between episodes. Preload failures do not interrupt playback.
 
-![Watching Hongguo short dramas in the side panel while Codex works on a task](docs/images/codex-hongguo-player.png)
+![Watching Hongguo short dramas in the side panel while Codex works on a task](docs/images/codex-hongguo-player.webp)
 
 ## Usage
 
@@ -70,13 +80,16 @@ Default installation and updates do not require Git. The command checks Node, np
 
 ### Global playback settings
 
-Open **Settings** at the top right of the player, make your changes, and click **Save settings**.
+Open **Settings** at the top right of the player. Switches save automatically; recommendation keywords save on Enter or when leaving the field. **Close** waits for saving to finish. If saving fails, the panel stays open with a retry message.
 
 | Setting | Default | Behavior |
 | --- | --- | --- |
 | Pause automatically when a task ends | On | Pause and save your position when a task in this chat finishes or is interrupted. Turn it off for continuous playback. |
 | Play automatically when a task starts | On | Play the selected episode from its current position when a new task starts in the same chat. |
 | Mute by default | On | Set the initial mute state for new players. Changes immediately update the current player and sync to other open players. |
+| Enable decoy page | Off | When the pointer leaves the Hongguo panel, show a decoy page and pause playback. Playback resumes when the pointer returns, unless it was paused manually. |
+
+Hover mode follows the player panel boundary: moving to the chat, another panel, or another window conceals the show title, artwork and controls. The loaded video is retained, and task-end automatic pausing still applies while covered. The cover is generated offline from built-in project tasks, technical notes, test reports and meeting notes, with varied layouts and content. Cover style in Settings offers Random, Project tasks, Technical notes, Test report and Meeting notes. Choices save and apply immediately without closing Settings. Style options are hidden when hover mode is off. A specific style is retained across openings, with new content generated for each opening and kept stable until closed. Outside clicks, Escape and Close consistently dismiss Settings; pointer movement does not. Covers follow the interface language and theme. Codex manages native tab titles and suggestion cards already present in the chat; covering the panel does not replace those.
 
 Settings are independent, saved across restarts, and shared by all chats. Task playback switches and default mute sync to open players. The speaker button changes only the current player, leaving the default unchanged; repeated snapshots preserve that manual choice until the default changes. New players restore the remembered volume. Autoplay requires an open player with an episode selected; it does not choose a show or reopen a closed player. Manual pausing lasts for the current task; the autoplay switch determines whether the next task resumes playback. Updates preserve saved choices.
 

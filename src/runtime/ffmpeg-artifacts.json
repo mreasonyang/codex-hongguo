@@ -20,37 +20,47 @@
     "binarySha256": "a45b462cf91ed89148ae218c4577e30896485d7a6792c3673bcf5f823fa01b63"
   },
   "linux-x64": {
-    "version": "9.0.2-20261031",
-    "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-gpl-9.0.tar.xz",
+    "archiveBytes": 49975964,
+    "archiveSha256": "7b8114ee70e0f8dbee8eb10d9c702a028adb8760fd187e5538be0ca5ba7dd952",
+    "binaryBytes": 173534088,
+    "binarySha256": "384742b75419584d065bbf372613f9f7e8ccf22525b421c16a2ee679a78ee748",
+    "cacheKey": "73e29a56974ae5a6",
+    "entry": "ffmpeg",
     "format": "tar.xz",
-    "entry": "ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-gpl-9.0/bin/ffmpeg",
-    "archiveBytes": 153175100,
-    "archiveSha256": "73e29a56974ae5a651133a04584c7483b21afe941e17dc91d79814a758b608d3"
+    "url": "https://github.com/mreasonyang/codex-hongguo/releases/download/ffmpeg-9.0.2-20261031-r1/ffmpeg-9.0.2-20261031-linux-x64.tar.xz",
+    "version": "9.0.2-20261031"
   },
   "linux-arm64": {
-    "version": "9.0.2-20261031",
-    "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-linuxarm64-gpl-9.0.tar.xz",
+    "archiveBytes": 42121616,
+    "archiveSha256": "3a53b6e1780adf64957266454710af5d67ce09433e68765aa83a20337fb029f5",
+    "binaryBytes": 131591912,
+    "binarySha256": "091fe4df4902fedd20f4d5accab14d02947a531d14d789cc7e8f18b0a808e6d1",
+    "cacheKey": "6cad88ae5bcec356",
+    "entry": "ffmpeg",
     "format": "tar.xz",
-    "entry": "ffmpeg-n9.0.2-39-g7adfbe40dc-linuxarm64-gpl-9.0/bin/ffmpeg",
-    "archiveBytes": 128664064,
-    "archiveSha256": "6cad88ae5bcec356cfc5d7979a036cc4007128201928a0cf243df3db483276cc"
+    "url": "https://github.com/mreasonyang/codex-hongguo/releases/download/ffmpeg-9.0.2-20261031-r1/ffmpeg-9.0.2-20261031-linux-arm64.tar.xz",
+    "version": "9.0.2-20261031"
   },
   "win32-x64": {
-    "version": "9.0.2-20261031",
-    "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-win64-gpl-9.0.zip",
+    "archiveBytes": 64054522,
+    "archiveSha256": "4075ff555ebfaa05c00048d719c99abab4630bb9e651960332600a489614ec62",
+    "binaryBytes": 165984256,
+    "binarySha256": "c930b63cb1ee8b7e2eaf9c15161160edd5c9acad34f0303b5855c8eb142a7e8d",
+    "cacheKey": "693f3e224bc184b4",
+    "entry": "ffmpeg.exe",
     "format": "zip",
-    "entry": "ffmpeg-n9.0.2-39-g7adfbe40dc-win64-gpl-9.0/bin/ffmpeg.exe",
-    "archiveBytes": 195110184,
-    "archiveSha256": "693f3e224bc184b40524a62ca47526cfebaf2504414021b92fe75f677ad868b9"
+    "url": "https://github.com/mreasonyang/codex-hongguo/releases/download/ffmpeg-9.0.2-20261031-r1/ffmpeg-9.0.2-20261031-win32-x64.zip",
+    "version": "9.0.2-20261031"
   },
   "win32-arm64": {
-    "version": "9.0.2-20261031",
-    "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-winarm64-gpl-9.0.zip",
-    "format": "zip",
-    "entry": "ffmpeg-n9.0.2-39-g7adfbe40dc-winarm64-gpl-9.0/bin/ffmpeg.exe",
-    "archiveBytes": 136603040,
-    "archiveSha256": "8b3c394762f26716ccef03ac1b7ac76430759080e1255aa9bc01d74db590bcb5",
+    "archiveBytes": 44629873,
+    "archiveSha256": "111a8a31fb753c464c1e2308fec295f6ca1df40037550c9cf95f467ca561eeec",
     "binaryBytes": 95170560,
-    "binarySha256": "e2248aa5ecd155814e951fd0606df71589699a2fd4db14a9323a0b400a6c9b06"
+    "binarySha256": "e2248aa5ecd155814e951fd0606df71589699a2fd4db14a9323a0b400a6c9b06",
+    "cacheKey": "8b3c394762f26716",
+    "entry": "ffmpeg.exe",
+    "format": "zip",
+    "url": "https://github.com/mreasonyang/codex-hongguo/releases/download/ffmpeg-9.0.2-20261031-r1/ffmpeg-9.0.2-20261031-win32-arm64.zip",
+    "version": "9.0.2-20261031"
   }
 }

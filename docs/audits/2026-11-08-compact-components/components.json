@@ -1,0 +1,46 @@
+{
+  "linux-arm64": {
+    "archiveBytes": 42121616,
+    "archiveSha256": "3a53b6e1780adf64957266454710af5d67ce09433e68765aa83a20337fb029f5",
+    "binaryBytes": 131591912,
+    "binarySha256": "091fe4df4902fedd20f4d5accab14d02947a531d14d789cc7e8f18b0a808e6d1",
+    "cacheKey": "6cad88ae5bcec356",
+    "entry": "ffmpeg",
+    "format": "tar.xz",
+    "url": "https://github.com/mreasonyang/codex-hongguo/releases/download/ffmpeg-9.0.2-20261031-r1/ffmpeg-9.0.2-20261031-linux-arm64.tar.xz",
+    "version": "9.0.2-20261031"
+  },
+  "linux-x64": {
+    "archiveBytes": 49975964,
+    "archiveSha256": "7b8114ee70e0f8dbee8eb10d9c702a028adb8760fd187e5538be0ca5ba7dd952",
+    "binaryBytes": 173534088,
+    "binarySha256": "384742b75419584d065bbf372613f9f7e8ccf22525b421c16a2ee679a78ee748",
+    "cacheKey": "73e29a56974ae5a6",
+    "entry": "ffmpeg",
+    "format": "tar.xz",
+    "url": "https://github.com/mreasonyang/codex-hongguo/releases/download/ffmpeg-9.0.2-20261031-r1/ffmpeg-9.0.2-20261031-linux-x64.tar.xz",
+    "version": "9.0.2-20261031"
+  },
+  "win32-arm64": {
+    "archiveBytes": 44629873,
+    "archiveSha256": "111a8a31fb753c464c1e2308fec295f6ca1df40037550c9cf95f467ca561eeec",
+    "binaryBytes": 95170560,
+    "binarySha256": "e2248aa5ecd155814e951fd0606df71589699a2fd4db14a9323a0b400a6c9b06",
+    "cacheKey": "8b3c394762f26716",
+    "entry": "ffmpeg.exe",
+    "format": "zip",
+    "url": "https://github.com/mreasonyang/codex-hongguo/releases/download/ffmpeg-9.0.2-20261031-r1/ffmpeg-9.0.2-20261031-win32-arm64.zip",
+    "version": "9.0.2-20261031"
+  },
+  "win32-x64": {
+    "archiveBytes": 64054522,
+    "archiveSha256": "4075ff555ebfaa05c00048d719c99abab4630bb9e651960332600a489614ec62",
+    "binaryBytes": 165984256,
+    "binarySha256": "c930b63cb1ee8b7e2eaf9c15161160edd5c9acad34f0303b5855c8eb142a7e8d",
+    "cacheKey": "693f3e224bc184b4",
+    "entry": "ffmpeg.exe",
+    "format": "zip",
+    "url": "https://github.com/mreasonyang/codex-hongguo/releases/download/ffmpeg-9.0.2-20261031-r1/ffmpeg-9.0.2-20261031-win32-x64.zip",
+    "version": "9.0.2-20261031"
+  }
+}

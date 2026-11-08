@@ -14,6 +14,15 @@ npx.cmd "@kyun.si/codex-hongguo@latest" setup
 
 安装程序自动下载、校验并缓存 Windows 播放组件。安装完成后，在 Codex「设置 → Hooks → 红果短剧」人工审查、信任并启用 `UserPromptSubmit`、`Stop`、`Interrupt`，然后打开新的本地聊天。安装程序不读取或写入信任记录。
 
+从 0.0.35-beta.7 起，播放组件下载的总时限由 5 分钟增加到 30 分钟，最多三次尝试共用这个时限。
+网络中断后仍从头下载；超过总时限会明确提示「下载已超过30分钟」。
+并行安装时最多等待已有安装 32 分钟，环境检查也允许完整的准备时间。
+已校验的组件会复用缓存，普通更新不会重复下载同一组件。
+
+从 0.0.35-beta.8 起，Windows x64/ARM64 首次安装只下载包含 `ffmpeg.exe`、许可与来源信息的精简组件。
+它与此前使用的上游程序字节一致，不附带未使用的 ffprobe、ffplay。已安装的同一程序通过哈希校验后直接复用，
+无需因为归档重新打包而重复下载。组件由独立的 FFmpeg 预发布提供，npm 安装命令保持不变。
+
 更新前关闭播放器与分屏，然后运行：
 
 ```powershell
@@ -42,6 +51,14 @@ node "$env:TEMP\hongguo-windows-hooks.cjs"
 ```
 
 脚本列出插件版本、发行包中的钩子文件和 Windows 启动器是否存在，并通过 npm/PATH CLI 与可定位的桌面内置引擎分别查询钩子发现结果。它不执行钩子、不修改配置或信任记录，不输出命令参数、环境变量、原始日志或其他插件的配置。`desktopEngineFound: false` 表示没有定位到桌面内置引擎，不能把 CLI 的结果当成桌面版的结果。请将输出中的 JSON 提供给维护者；无需提交完整日志或认证配置。
+
+## Beta 测试安装
+
+```powershell
+npx.cmd "@kyun.si/codex-hongguo@beta" setup
+```
+
+后续更新使用同一命令的 `update`。关闭旧播放器和 Codex 后执行，完成后重新打开；保留观看进度和设置。返回正式渠道使用 `npx.cmd "@kyun.si/codex-hongguo@latest" setup`。测试版与正式版共用插件 ID，切换会替换当前安装，不同时运行两份。
 
 ## 离线 ZIP 安装
 
