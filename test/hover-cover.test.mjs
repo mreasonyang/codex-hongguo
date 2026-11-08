@@ -30,7 +30,7 @@ test('upgrading deletes obsolete cover settings from storage while preserving ho
   }
 })
 
-test('fixed cover has no URL setting, display grant, embedded website or frame permission', async t => {
+test('built-in cover has no URL setting, display grant, embedded website or frame permission', async t => {
   const store = new Store(undefined, true), service = new Service(store, {}), browser = new BrowserServer(service)
   t.after(() => { browser.close(); store.close() })
   const scope = service.panel(service.open({}).panel)
@@ -52,7 +52,7 @@ test('fixed cover has no URL setting, display grant, embedded website or frame p
   assert.match(policy, /default-src 'none'/)
   assert.doesNotMatch(policy, /frame-src|127\.0\.0\.1/)
   const html = await response.text()
-  assert.match(html, /class="decoyNotes"/)
+  assert.match(html, /id="changeCover"/)
   assert.doesNotMatch(html, /<iframe|decoyUrl|decoyFrameUrl|decoyWebsite|canEmbedDecoy|data-decoy-origin/)
   assert.equal((await fetch(browser.origin + '/cover/' + '0'.repeat(48))).status, 401)
 })

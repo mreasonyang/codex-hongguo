@@ -1,0 +1,91 @@
+{
+  "environment": "Codex in-app browser; production HTTP player; synthetic media; native Codex panel not tested",
+  "englishTemplates": [
+    "minutes",
+    "report",
+    "tasks",
+    "document"
+  ],
+  "chineseTemplates": [
+    "minutes",
+    "document",
+    "tasks",
+    "report"
+  ],
+  "narrowTemplates": [
+    "document",
+    "minutes",
+    "report",
+    "tasks"
+  ],
+  "checks": [
+    {
+      "template": "report",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "paused": true
+    },
+    {
+      "template": "minutes",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "paused": true
+    },
+    {
+      "template": "tasks",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "paused": true
+    },
+    {
+      "template": "document",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "paused": true
+    },
+    {
+      "scrollWidth": 360,
+      "template": "document",
+      "width": 360,
+      "narrow": true
+    },
+    {
+      "scrollWidth": 360,
+      "template": "minutes",
+      "width": 360,
+      "narrow": true
+    },
+    {
+      "scrollWidth": 360,
+      "template": "report",
+      "width": 360,
+      "narrow": true
+    },
+    {
+      "scrollWidth": 360,
+      "template": "document",
+      "width": 360,
+      "narrow": true
+    },
+    {
+      "scrollWidth": 360,
+      "template": "tasks",
+      "width": 360,
+      "narrow": true
+    }
+  ],
+  "hoverPageStable": true,
+  "covered": {
+    "paused": true,
+    "time": 80.084642
+  },
+  "coveredStable": true,
+  "resumed": {
+    "paused": false,
+    "time": 80.247942
+  },
+  "advanced": {
+    "paused": false,
+    "time": 86.18486
+  }
+}

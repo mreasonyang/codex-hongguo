@@ -6,6 +6,7 @@ import { finishedTurn, startedTurn } from './playback-turn'
 import { browser, call, connect, hostLocale, type Context, type State, type Preferences } from './api'
 import { pickLabel, showWaitingPicks, waitingCard, type WaitingSelection } from './waiting'
 import { createHoverDecoy } from './hover-decoy'
+import { createCoverPage } from './cover-page'
 
 type Series = {
   id: string
@@ -97,6 +98,7 @@ type HoverResume = { action: number; selection: number; episodeId: string; turn?
 let hoverResume: HoverResume | undefined, activeStart: { turn?: string; automatic: boolean } | undefined
 let turnStateAvailable = false
 const decoy = createHoverDecoy({ changed: decoyChanged })
+const coverPage = createCoverPage(el('decoy'))
 function configureDecoy() {
   decoy.configure(prefs)
 }
@@ -1114,6 +1116,10 @@ el('copy').onclick = async () => {
   }
 }
 el('settingsCancel').onclick = () => el('prefs').click()
+el('changeCover').onclick = () => {
+  coverPage.change()
+  text('coverChanged', '已更换，移出面板可查看')
+}
 el('prefs').onclick = async () => {
   if (!playerReady) return
   try {
@@ -1287,7 +1293,9 @@ const waiting = isWaiting ? waitingCard(
   selected => { void initPlayer(selected).catch(e => notice(explain(e))) }, closePlayer,
 ) : null
 void connect(ctx => {
-  initLocale(hostLocale())
+  const locale = hostLocale()
+  initLocale(locale)
+  coverPage.initialize(locale)
   context = ctx
   if (waiting) { if (ctx.waitingTurn) waiting.connected() }
   else void initPlayer().catch(e => notice(explain(e)))

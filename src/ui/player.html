@@ -149,6 +149,11 @@
           <input type="checkbox" id="hoverDecoyEnabled" class="switch" />
         </label>
         <p class="settingsHint">移出红果面板显示替身并暂停，移回后继续；手动暂停保持不变</p>
+        <div class="coverSettings">
+          <p class="settingsHint">每次打开随机生成替身，本次打开保持不变</p>
+          <button type="button" id="changeCover" class="btn ghost">换一页</button>
+        </div>
+        <p id="coverChanged" class="settingsHint" role="status"></p>
         <label class="switchRow">
           <span>当前回合进行时显示推荐</span>
           <input type="checkbox" id="autoPrompt" class="switch" />
@@ -325,17 +330,7 @@
         </div>
       </section>
     </main>
-    <section id="decoy" aria-label="工作笔记" aria-hidden="true">
-      <div class="decoyNotes">
-        <p class="decoyEyebrow">工作空间</p>
-        <h1>工作笔记</h1>
-        <p class="decoyIntro">计划、记录与待办事项</p>
-        <h2>本周计划</h2>
-        <ul><li>整理接口文档</li><li>核对测试结果</li><li>准备迭代评审</li></ul>
-        <h2>记录</h2>
-        <div class="decoyLines" aria-hidden="true"></div>
-      </div>
-    </section>
+    <section id="decoy" aria-label="工作空间" aria-hidden="true"></section>
     </div>
     <script nonce="__NONCE__">
       /*SCRIPT*/

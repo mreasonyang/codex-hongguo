@@ -8,6 +8,7 @@ import { webcrypto } from 'node:crypto'
 import { transformSync } from 'esbuild'
 import { Store } from '../src/server/store.mjs'
 import { Service } from '../src/server/service.mjs'
+import { createCoverPage } from '../src/ui/cover-page.ts'
 
 class Element extends EventTarget {
   hidden = true; checked = false; value = '1'; dataset = {}; children = []; textContent = ''
@@ -35,9 +36,10 @@ class Video extends Element {
 const source = readFileSync(new URL('../src/ui/player.ts', import.meta.url), 'utf8') + `
 export const fixture = {
   poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer,
-  decoy,
+  decoy, coverPage,
   unload() { loaded = false },
   selected() {
+    coverPage.initialize('zh-CN');
     context = { identified: true }; pageActive = playerReady = loaded = true;
     series = { id: 'hg-1', title: 'Test' };
     episode = { id: 'hg-11', label: '1', number: 1, codec: 'h264', playable: true };
@@ -61,8 +63,9 @@ function setup(t) {
   const video = new Video(), elements = new Map()
   const document = Object.assign(new EventTarget(), {
     hidden: false, documentElement: new Element(), hasFocus: () => true,
-    getElementById(id) { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id) },
-    querySelector: () => video, querySelectorAll: () => [], createElement: () => new Element(),
+    getElementById(id) { if (!elements.has(id)) elements.set(id, this.createElement()); return elements.get(id) },
+    querySelector: () => video, querySelectorAll: () => [],
+    createElement: () => Object.assign(new Element(), { ownerDocument: document }),
   })
   const window = Object.assign(new EventTarget(), { innerWidth: 900, innerHeight: 700, setInterval: () => 1, clearInterval() {}, scrollTo() {} })
   const api = {
@@ -74,6 +77,7 @@ function setup(t) {
     AbortController, DOMException, setTimeout, clearTimeout,
     require(name) {
       if (name === './api') return api
+      if (name === './cover-page') return { createCoverPage }
       if (name === './hover-decoy') {
         const exports = {}, decoyContext = vm.createContext({ module: { exports }, exports, document, window, setTimeout, clearTimeout })
         vm.runInContext(decoyCode, decoyContext)
@@ -173,6 +177,30 @@ async function hoveringPlayer(t, playing = true) {
   if (playing) await f.ui.start()
   return f
 }
+test('one cover survives hover, preference polling and saves; changing it leaves playback and saved settings intact', async t => {
+  const f = await hoveringPlayer(t)
+  const host = f.elements.get('decoy'), page = host.children[0]
+  const plays = f.video.plays, position = f.video.currentTime
+  f.ui.decoy.conceal(); await enterPanel(t, f); await f.poll()
+  await f.elements.get('prefs').onclick()
+  f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
+  f.ui.coverPage.initialize('zh-CN')
+  assert.equal(host.children[0], page)
+  const settings = JSON.stringify(f.peer.preferences())
+  const playsAfterHover = f.video.plays
+  assert.equal(playsAfterHover, plays + 1)
+  f.elements.get('changeCover').onclick()
+  assert.notEqual(host.children[0], page)
+  assert.notEqual(host.children[0].dataset.template, page.dataset.template)
+  assert.equal(f.video.paused, false)
+  assert.equal(f.video.plays, playsAfterHover)
+  assert.equal(f.video.currentTime, position)
+  assert.equal(JSON.stringify(f.peer.preferences()), settings)
+  await f.ui.pause()
+  f.elements.get('changeCover').onclick()
+  assert.equal(f.video.paused, true)
+  assert.equal(f.video.plays, playsAfterHover)
+})
 test('leaving the panel pauses synchronously and returning preserves the player and its position', async t => {
   const f = await hoveringPlayer(t)
   f.document.documentElement.dispatchEvent(new Event('pointerleave'))
