@@ -170,6 +170,11 @@ function movePointer(f, x = 40, y = 40) {
   Object.assign(event, { clientX: x, clientY: y, pointerType: 'mouse' })
   f.document.dispatchEvent(event)
 }
+function leavePanel(f) {
+  const event = new Event('pointerleave')
+  Object.assign(event, { clientX: -1, clientY: 40 })
+  f.document.documentElement.dispatchEvent(event)
+}
 async function enterPanel(t, f) { movePointer(f); t.mock.timers.tick(150); await flush() }
 async function hoveringPlayer(t, playing = true) {
   t.mock.timers.enable({ apis: ['setTimeout'] })
@@ -193,8 +198,8 @@ test('selecting a cover style keeps Settings open and preserves playback and unr
   const playsAfterHover = f.video.plays
   assert.equal(playsAfterHover, plays + 1)
   const style = page.dataset.template === 'report' ? 'tasks' : 'report'
-  f.elements.get('coverStyle').value = style
-  f.elements.get('coverStyle').onchange(); await flush()
+  f.elements.get('coverStyle').onclick()
+  f.elements.get('coverStyle-' + style).onclick(); await flush()
   assert.notEqual(host.children[0], page)
   assert.equal(host.children[0].dataset.template, style)
   assert.equal(f.video.paused, false)
@@ -203,8 +208,8 @@ test('selecting a cover style keeps Settings open and preserves playback and unr
   assert.deepEqual(f.peer.preferences(), { ...settings, coverStyle: style })
   assert.equal(f.elements.get('settings').hidden, false)
   await f.ui.pause()
-  f.elements.get('coverStyle').value = 'minutes'
-  f.elements.get('coverStyle').onchange(); await flush()
+  f.elements.get('coverStyle').onclick()
+  f.elements.get('coverStyle-minutes').onclick(); await flush()
   assert.equal(f.video.paused, true)
   assert.equal(f.video.plays, playsAfterHover)
   assert.equal(f.elements.get('settings').hidden, false)
@@ -214,7 +219,7 @@ test('selecting a cover style keeps Settings open and preserves playback and unr
 })
 test('leaving the panel pauses synchronously and returning preserves the player and its position', async t => {
   const f = await hoveringPlayer(t)
-  f.document.documentElement.dispatchEvent(new Event('pointerleave'))
+  leavePanel(f)
   assert.equal(f.ui.decoy.covered, true)
   assert.equal(f.video.paused, true)
   assert.equal(f.elements.get('playerContent').inert, true)
@@ -230,13 +235,60 @@ test('leaving the panel pauses synchronously and returning preserves the player 
   assert.equal(f.elements.get('playerContent').inert, false)
 })
 
+test('menu retargeting events inside the viewport never conceal the player or interrupt playback', async t => {
+  const f = await hoveringPlayer(t)
+  await f.elements.get('prefs').onclick()
+  f.elements.get('coverStyle').onclick()
+  for (const type of ['pointerout', 'mouseout']) {
+    const event = new Event(type)
+    Object.assign(event, { clientX: 40, clientY: 80, relatedTarget: null })
+    f.document.dispatchEvent(event)
+    assert.equal(f.ui.decoy.covered, false)
+    assert.equal(f.video.paused, false)
+    assert.equal(f.elements.get('settings').hidden, false)
+    assert.equal(f.elements.get('coverStyleOptions').hidden, false)
+  }
+  const actualExit = new Event('pointerout')
+  Object.assign(actualExit, { clientX: -1, clientY: 80, relatedTarget: null })
+  f.document.dispatchEvent(actualExit)
+  assert.equal(f.ui.decoy.covered, true)
+  assert.equal(f.video.paused, true)
+})
+
+for (const type of ['pointerleave', 'mouseleave']) test(`first ${type} after changing style and dismissing Settings conceals even with last in-panel coordinates`, async t => {
+  const f = await hoveringPlayer(t)
+  await f.elements.get('prefs').onclick()
+  f.elements.get('coverStyle').onclick()
+  f.elements.get('coverStyle-report').onclick(); await flush()
+  assert.equal(f.peer.preferences().coverStyle, 'report')
+  const click = new Event('click', { cancelable: true })
+  Object.assign(click, { composedPath: () => [f.elements.get('title')], clientX: 40, clientY: 80 })
+  f.document.dispatchEvent(click); await flush()
+  assert.equal(f.elements.get('settings').hidden, true)
+  assert.equal(f.ui.decoy.covered, false)
+  assert.equal(f.video.paused, false)
+  const exit = new Event(type)
+  Object.assign(exit, { clientX: 40, clientY: 80, relatedTarget: null })
+  ;(type === 'pointerleave' ? f.document.documentElement : f.document).dispatchEvent(exit)
+  assert.equal(f.ui.decoy.covered, true)
+  assert.equal(f.elements.get('decoy').children[0].dataset.template, 'report')
+  assert.equal(f.video.paused, true)
+  await f.poll(); t.mock.timers.tick(150); await flush()
+  assert.equal(f.ui.decoy.covered, true)
+  assert.equal(f.video.paused, true)
+  await enterPanel(t, f)
+  assert.equal(f.ui.decoy.covered, false)
+  assert.equal(f.elements.get('settings').hidden, true)
+  assert.equal(f.video.paused, false)
+})
+
 test('a cover style saved in another chat applies once and synchronizes an open Settings sheet', async t => {
   const f = await hoveringPlayer(t)
   await f.elements.get('prefs').onclick()
   await f.settings({ coverStyle: 'minutes' }); await f.poll()
   const page = f.elements.get('decoy').children[0]
   assert.equal(page.dataset.template, 'minutes')
-  assert.equal(f.elements.get('coverStyle').value, 'minutes')
+  assert.equal(f.elements.get('coverStyle').dataset.value, 'minutes')
   assert.equal(f.elements.get('settings').hidden, false)
   await f.poll()
   assert.equal(f.elements.get('decoy').children[0], page)
@@ -337,7 +389,7 @@ test('disabling hover mode restores a covered player and later pointer exits kee
   await f.settings({ hoverDecoyEnabled: false }); await f.poll()
   assert.equal(f.ui.decoy.covered, false)
   assert.equal(f.video.paused, false)
-  f.document.documentElement.dispatchEvent(new Event('pointerleave'))
+  leavePanel(f)
   assert.equal(f.video.paused, false)
 })
 for (const enabled of [true, false]) test(`leaving and returning preserves open Settings with hover=${enabled}`, async t => {
@@ -347,7 +399,7 @@ for (const enabled of [true, false]) test(`leaving and returning preserves open 
     f.elements.get('hoverDecoyEnabled').checked = false
     f.elements.get('hoverDecoyEnabled').onchange(); await flush()
   }
-  f.document.documentElement.dispatchEvent(new Event('pointerleave'))
+  leavePanel(f)
   assert.equal(f.elements.get('settings').hidden, false)
   assert.equal(f.ui.decoy.covered, enabled)
   assert.equal(f.video.paused, enabled)

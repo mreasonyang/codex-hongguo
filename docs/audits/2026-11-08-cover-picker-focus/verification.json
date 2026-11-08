@@ -1,0 +1,54 @@
+{
+  "version": "0.0.35-beta.10",
+  "published": false,
+  "sourceBaseCommit": "458c4ef4c3bb722cc2904da8aa22a74e4e41dbc8",
+  "uiSha256": "3c0662531bf4e90ce632c4ee4e7b4e39af37a828b600540c88894ccfb01bea02",
+  "testedUiMatchesCurrent": false,
+  "installedUiMatchesCurrent": false,
+  "nativePointer": {
+    "browser": "Brave on macOS",
+    "rounds": 2,
+    "choicesPerRound": 5,
+    "passed": true,
+    "unexpectedCover": false,
+    "settingsClosed": false
+  },
+  "nativeKeyboard": {
+    "menuSurvivesPolling": true,
+    "highlightSurvivesPolling": true,
+    "escapeCancelsWithoutClosingSettings": true
+  },
+  "boundary": {
+    "genuineDepartureConceals": true,
+    "firstReturnRetainsSettings": true
+  },
+  "narrowPanel": {
+    "browser": "Codex in-app browser",
+    "width": 360,
+    "height": 520,
+    "menu": {
+      "top": 232.78125,
+      "bottom": 409.7734375,
+      "left": 27,
+      "right": 333,
+      "placement": "above"
+    },
+    "withinPanel": true
+  },
+  "settings": {
+    "switchOffHidesChoices": true,
+    "switchOnRetainsChoice": true,
+    "outsideClickCloses": true,
+    "saveFailureRetainsSelectionAndSheet": true,
+    "successfulRetryPersistsSelection": true
+  },
+  "regression": {
+    "total": 236,
+    "passed": 229,
+    "skipped": 7,
+    "failed": 0
+  },
+  "codexNativeValidation": "User confirmed the menu stopped flickering, but reported that the first exit after style change and outside-click dismissal did not cover the player. Candidate was not accepted or published; see dismiss-exit follow-up evidence.",
+  "checkedAt": "2026-11-08T12:55:42.041Z",
+  "supersededBy": "dismiss-exit-verification.json"
+}

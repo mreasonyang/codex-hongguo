@@ -24,6 +24,7 @@ const catalog = {
 }
 const service = new Service(store, catalog), browser = new BrowserServer(service)
 let rejectSettings = false
+const observations = []
 const call = service.call.bind(service)
 service.call = (...args) => {
   if (args[1] === 'set_preferences' && rejectSettings) return Promise.reject(Error('Synthetic save failure'))
@@ -31,12 +32,58 @@ service.call = (...args) => {
 }
 const request = browser.request.bind(browser)
 browser.request = async (req, res) => {
+  if (req.headers.host === new URL(browser.origin).host && req.url === '/validation-events' && req.method === 'POST') {
+    let data = ''
+    for await (const chunk of req) { data += chunk; if (data.length > 1024) { res.writeHead(413).end(); return } }
+    try {
+      const row = JSON.parse(data)
+      if (typeof row.type === 'string' && typeof row.covered === 'boolean') observations.push(row)
+      if (observations.length > 2000) observations.shift()
+    } catch { /* Ignore invalid fixture-only observations. */ }
+    res.writeHead(204).end(); return
+  }
+  if (req.headers.host === new URL(browser.origin).host && req.url === '/validation-events' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(observations)); return
+  }
+  if (req.headers.host === new URL(browser.origin).host && req.url === '/validation-reset' && req.method === 'POST') {
+    observations.length = 0; res.writeHead(204).end(); return
+  }
   const embedded = browser.sessions.get(/^\/p\/([a-f0-9]{24})\//.exec(req.url)?.[1])?.testEmbedded
   if (embedded) {
     const setHeader = res.setHeader.bind(res)
     // This local fixture alone permits its synthetic host to frame the real HTTP player.
     res.setHeader = (name, value) => setHeader(name, name.toLowerCase() === 'content-security-policy'
       ? value.replace("frame-ancestors 'none'", 'frame-ancestors http://127.0.0.1:' + website.address().port) : value)
+    const end = res.end.bind(res)
+    res.end = (value, ...args) => {
+      if (typeof value === 'string' && value.includes('id="playerRoot"')) {
+        const nonce = /<script nonce="([^"]+)"/.exec(value)?.[1]
+        if (nonce) value = value.replace('</body>', `<script nonce="${nonce}">
+          (() => {
+            const root = document.documentElement, settings = document.getElementById('settings');
+            const combo = document.getElementById('coverStyle');
+            function record(type, event) {
+              fetch('/validation-events', { method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({type, covered:root.dataset.decoyCovered==='true',
+                  settingsOpen:!settings.hidden, menuOpen:combo.getAttribute('aria-expanded')==='true',
+                  style:combo.dataset.value||'', at:performance.now(),
+                  x:event?.clientX,y:event?.clientY,width:innerWidth,height:innerHeight}) }).catch(()=>{});
+            }
+            let previous = root.dataset.decoyCovered;
+            new MutationObserver(()=>{if(previous!==root.dataset.decoyCovered){previous=root.dataset.decoyCovered;record('cover');}})
+              .observe(root,{attributes:true,attributeFilter:['data-decoy-covered']});
+            for(const type of ['click','keydown']) document.addEventListener(type,()=>record(type));
+            for(const type of ['pointerout','mouseout','mouseleave']) document.addEventListener(type,event=>{
+              if(!event.relatedTarget)record(type,event);
+            },true);
+            root.addEventListener('pointerleave',event=>record('root-leave',event));
+            window.addEventListener('blur',()=>record('blur'));
+            record('ready');
+          })();
+        </script></body>`)
+      }
+      return end(value, ...args)
+    }
   }
   if (!['/', '/embedded'].includes(req.url) || req.method !== 'GET' || req.headers.host !== new URL(browser.origin).host)
     return request(req, res)

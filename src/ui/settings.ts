@@ -1,4 +1,5 @@
 import type { Preferences } from './api'
+import { createCoverStylePicker } from './cover-style-picker.ts'
 
 const switches = ['autoPauseOnFinish', 'autoPlayOnStart', 'defaultMuted', 'hoverDecoyEnabled', 'autoPrompt'] as const
 type Options = {
@@ -14,21 +15,24 @@ export function createSettings(options: Options, doc: Document = document) {
   const element = <T extends HTMLElement = HTMLElement>(id: string) => doc.getElementById(id) as T
   const form = element<HTMLFormElement>('settings'), terms = element<HTMLInputElement>('terms')
   const status = element('settingsStatus'), close = element<HTMLButtonElement>('settingsClose')
-  const style = element<HTMLSelectElement>('coverStyle'), coverSettings = element('coverSettings')
+  const coverSettings = element('coverSettings')
   const trigger = element<HTMLButtonElement>('prefs')
+  const content = element('playerContent'), cover = element('decoy')
   let pending: Partial<Preferences> = {}, generation = 0, revision = 0, busy = 0
   let queue = Promise.resolve(), finishing: Promise<boolean> | undefined
   let invalidTerms = false, saved = false, termsBaseline = ''
+  let revealClick = false
   const revisions = new Map<keyof Preferences, number>()
   const keys = (patch: Partial<Preferences>) => Object.keys(patch) as (keyof Preferences)[]
-  const controls = [...switches.map(id => element<HTMLInputElement>(id)), style, terms, close]
+  const controls = [...switches.map(id => element<HTMLInputElement>(id)), terms, close]
+  const style = createCoverStylePicker({ changed: coverStyle => { void enqueue({ coverStyle }) },
+    translate: options.translate }, doc)
   function sync() {
     if (form.hidden) return
     const settings = options.read()
     for (const key of switches) element<HTMLInputElement>(key).checked = pending[key] ?? settings[key]
-    style.value = pending.coverStyle ?? settings.coverStyle
     coverSettings.hidden = !element<HTMLInputElement>('hoverDecoyEnabled').checked
-    style.disabled = !!finishing || coverSettings.hidden
+    style.sync(pending.coverStyle ?? settings.coverStyle, !!finishing || coverSettings.hidden)
   }
   function showStatus() {
     const failed = !busy && keys(pending).length > 0
@@ -79,6 +83,7 @@ export function createSettings(options: Options, doc: Document = document) {
     return true
   }
   function hide() {
+    style.close()
     form.hidden = true
     trigger.setAttribute('aria-expanded', 'false')
     trigger.focus()
@@ -89,6 +94,7 @@ export function createSettings(options: Options, doc: Document = document) {
     const epoch = generation
     if (!busy && keys(pending).length) void enqueue({ ...pending })
     controls.forEach(control => { control.disabled = true })
+    style.sync(pending.coverStyle ?? options.read().coverStyle, true)
     finishing = (async () => {
       await queue
       if (epoch !== generation || keys(pending).length) return false
@@ -106,9 +112,6 @@ export function createSettings(options: Options, doc: Document = document) {
   for (const key of switches) element<HTMLInputElement>(key).onchange = () => {
     void enqueue({ [key]: element<HTMLInputElement>(key).checked })
   }
-  style.onchange = () => {
-    if (!form.hidden && !style.disabled) void enqueue({ coverStyle: style.value as Preferences['coverStyle'] })
-  }
   terms.onblur = () => { if (!form.hidden) saveTerms() }
   terms.onkeydown = event => {
     if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); saveTerms() }
@@ -116,8 +119,14 @@ export function createSettings(options: Options, doc: Document = document) {
   terms.oninput = () => { invalidTerms = false; terms.removeAttribute('aria-invalid'); showStatus() }
   form.onsubmit = event => { event.preventDefault(); saveTerms() }
   close.onclick = () => { void finish() }
+  doc.addEventListener('pointerdown', event => {
+    // A press can start on the cover and finish after hover has revealed the
+    // player. It is a reveal gesture, not an outside click on Settings.
+    revealClick = content.inert || event.composedPath().includes(cover)
+  }, true)
   doc.addEventListener('click', event => {
-    if (form.hidden || event.defaultPrevented) return
+    if (revealClick) { revealClick = false; return }
+    if (form.hidden || content.inert || event.defaultPrevented) return
     const path = event.composedPath()
     if (path.includes(form) || path.includes(trigger)) return
     // Dismiss first, without also activating a player control beneath the click.
@@ -126,10 +135,11 @@ export function createSettings(options: Options, doc: Document = document) {
     void finish()
   }, true)
   doc.addEventListener('keydown', event => {
-    if (form.hidden || event.defaultPrevented || event.key !== 'Escape' ||
+    if (form.hidden || content.inert || event.defaultPrevented || event.key !== 'Escape' ||
       event.isComposing || event.keyCode === 229) return
     event.preventDefault()
     event.stopPropagation()
+    if (style.expanded) { style.close(); return }
     void finish()
   }, true)
   return {
@@ -147,6 +157,8 @@ export function createSettings(options: Options, doc: Document = document) {
     finish,
     reset() {
       ++generation
+      style.close()
+      revealClick = false
       pending = {}; revisions.clear(); busy = 0; invalidTerms = saved = false; finishing = undefined
       controls.forEach(control => { control.disabled = false })
       terms.removeAttribute('aria-invalid')

@@ -151,16 +151,24 @@
         </label>
         <p class="settingsHint">移出红果面板显示替身并暂停，移回后继续；手动暂停保持不变</p>
         <div id="coverSettings" class="coverSettings" hidden>
-          <label class="field">
-            <span>替身样式</span>
-            <select id="coverStyle">
-              <option value="random">随机</option>
-              <option value="tasks">项目待办</option>
-              <option value="document">技术文档</option>
-              <option value="report">测试报告</option>
-              <option value="minutes">会议纪要</option>
-            </select>
-          </label>
+          <div class="field">
+            <span id="coverStyleLabel">替身样式</span>
+            <div id="coverStylePicker" class="coverStylePicker">
+              <div id="coverStyle" class="coverStyleControl" role="combobox" tabindex="0"
+                aria-haspopup="listbox" aria-expanded="false" aria-controls="coverStyleOptions"
+                aria-labelledby="coverStyleLabel">
+                <span id="coverStyleValue">随机</span>
+                <svg class="i" aria-hidden="true"><use href="#i-down" /></svg>
+              </div>
+              <div id="coverStyleOptions" class="coverStyleOptions" role="listbox" aria-labelledby="coverStyleLabel" hidden>
+                <div id="coverStyle-random" role="option" aria-selected="true">随机</div>
+                <div id="coverStyle-tasks" role="option" aria-selected="false">项目待办</div>
+                <div id="coverStyle-document" role="option" aria-selected="false">技术文档</div>
+                <div id="coverStyle-report" role="option" aria-selected="false">测试报告</div>
+                <div id="coverStyle-minutes" role="option" aria-selected="false">会议纪要</div>
+              </div>
+            </div>
+          </div>
           <p class="settingsHint">每次打开生成新内容，本次打开保持不变</p>
         </div>
         <label class="switchRow">

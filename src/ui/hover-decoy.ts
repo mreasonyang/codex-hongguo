@@ -24,6 +24,8 @@ export function createHoverDecoy({ changed }: Options) {
     changed(covered)
   }
   function conceal() { inside = false; if (enabled) setCovered(true) }
+  const outside = (event: MouseEvent) => event.clientX < 0 || event.clientY < 0 ||
+    event.clientX >= window.innerWidth || event.clientY >= window.innerHeight
   function enter() {
     if (document.hidden) return
     inside = true
@@ -33,11 +35,14 @@ export function createHoverDecoy({ changed }: Options) {
   function move(event: PointerEvent) {
     if (event.pointerType === 'touch') return
     // Native controls can capture the pointer; then pointerleave is delayed until release.
-    if (event.clientX < 0 || event.clientY < 0 || event.clientX >= window.innerWidth || event.clientY >= window.innerHeight)
-      conceal()
+    if (outside(event)) conceal()
     else enter()
   }
-  const out = (event: MouseEvent) => { if (event.relatedTarget === null) conceal() }
+  // Removed menu options can emit null-related out events inside the viewport.
+  // Only these bubbling element events need the coordinate guard. Root/document
+  // leave events mark the panel boundary, even if the host retains the last
+  // in-panel coordinates after dismissing Settings.
+  const out = (event: MouseEvent) => { if (event.relatedTarget === null && outside(event)) conceal() }
   const visibility = () => { if (document.hidden) conceal() }
   root.addEventListener('pointerenter', enter)
   root.addEventListener('pointerleave', conceal)

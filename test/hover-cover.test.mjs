@@ -54,6 +54,8 @@ test('built-in cover has no URL setting, display grant, embedded website or fram
   assert.doesNotMatch(policy, /frame-src|127\.0\.0\.1/)
   const html = await response.text()
   assert.match(html, /id="coverStyle"/)
+  assert.doesNotMatch(html, /<select\b[^>]*id="coverStyle"/)
+  assert.match(html, /id="coverStyleOptions"[^>]*role="listbox"/)
   assert.doesNotMatch(html, /changeCover|换一页|Change page/)
   assert.doesNotMatch(html, /<iframe|decoyUrl|decoyFrameUrl|decoyWebsite|canEmbedDecoy|data-decoy-origin/)
   assert.equal((await fetch(browser.origin + '/cover/' + '0'.repeat(48))).status, 401)

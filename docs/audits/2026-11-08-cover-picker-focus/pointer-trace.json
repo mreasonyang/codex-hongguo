@@ -1,0 +1,114 @@
+{
+  "candidate": "unreleased fix on beta.9",
+  "summary": {
+    "events": 12,
+    "unexpectedCover": false,
+    "settingsClosed": false,
+    "blurEvents": 0,
+    "styles": [
+      "random",
+      "tasks",
+      "document",
+      "report",
+      "minutes"
+    ]
+  },
+  "trace": [
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "random",
+      "at": 37509.39999997616
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "random",
+      "at": 38336.59999990463
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "random",
+      "at": 39384.299999952316
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "tasks",
+      "at": 40186.89999997616
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "tasks",
+      "at": 41250.699999928474
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "document",
+      "at": 42285
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "document",
+      "at": 43320.5
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "report",
+      "at": 44353.699999928474
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "report",
+      "at": 45171.39999997616
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 45967.699999928474
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "minutes",
+      "at": 46738.199999928474
+    },
+    {
+      "type": "keydown",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "minutes",
+      "at": 46796.799999952316
+    }
+  ]
+}

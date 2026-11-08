@@ -39,7 +39,7 @@ function fixture({ hoverDecoyEnabled = false } = {}) {
       return event
     },
     toggle(key, checked) { const input = elements.get(key); input.checked = checked; input.onchange() },
-    style(value) { const input = elements.get('coverStyle'); input.value = value; input.onchange() },
+    style(value) { const input = elements.get('coverStyle'); if (input.attributes['aria-expanded'] !== 'true') input.onclick(); elements.get('coverStyle-' + value).onclick() },
     terms(value) { const input = elements.get('terms'); input.value = value; input.oninput(); return input },
   }
 }
@@ -95,7 +95,7 @@ for (const value of ['', '，, ', 'a,b,c,d,e,f,g', 'x'.repeat(31)]) test(`invali
 test('cover styles follow the hover switch, save automatically and never dismiss Settings', async () => {
   const f = fixture()
   assert.equal(f.elements.get('coverSettings').hidden, true)
-  assert.equal(f.elements.get('coverStyle').disabled, true)
+  assert.equal((f.elements.get('coverStyle').attributes['aria-disabled'] === 'true'), true)
   f.style('report'); await settle()
   assert.equal(f.requests.length, 0)
   f.toggle('hoverDecoyEnabled', true)
@@ -108,10 +108,10 @@ test('cover styles follow the hover switch, save automatically and never dismiss
   assert.equal(f.elements.get('settings').hidden, false)
   f.toggle('hoverDecoyEnabled', false); await settle()
   assert.equal(f.elements.get('coverSettings').hidden, true)
-  assert.equal(f.elements.get('coverStyle').disabled, true)
+  assert.equal((f.elements.get('coverStyle').attributes['aria-disabled'] === 'true'), true)
   assert.equal(f.stored.coverStyle, 'report')
   f.toggle('hoverDecoyEnabled', true); await settle()
-  assert.equal(f.elements.get('coverStyle').value, 'report')
+  assert.equal(f.elements.get('coverStyle').dataset.value, 'report')
   assert.equal(f.elements.get('settings').hidden, false)
 })
 
@@ -120,7 +120,7 @@ test('rapid style choices serialize with enabling hover and preserve the last ch
   f.beforeSave(() => gate.promise)
   f.toggle('hoverDecoyEnabled', true); await settle()
   f.style('tasks'); f.style('minutes')
-  assert.equal(f.elements.get('coverStyle').value, 'minutes')
+  assert.equal(f.elements.get('coverStyle').dataset.value, 'minutes')
   assert.equal(f.elements.get('settings').hidden, false)
   gate.resolve(); await settle()
   assert.equal(f.stored.hoverDecoyEnabled, true)
@@ -134,7 +134,7 @@ test('a failed style save retains its choice, reports failure and retries on Clo
   f.beforeSave(async () => { throw Error('synthetic failure') })
   f.style('document'); await settle()
   assert.equal(f.stored.coverStyle, 'random')
-  assert.equal(f.elements.get('coverStyle').value, 'document')
+  assert.equal(f.elements.get('coverStyle').dataset.value, 'document')
   assert.equal(f.elements.get('settingsStatus').dataset.state, 'error')
   assert.equal(f.elements.get('settings').hidden, false)
   f.beforeSave(async () => {})
@@ -148,9 +148,80 @@ test('an open sheet follows saved hover/style changes from another chat without 
   f.external({ hoverDecoyEnabled: false, coverStyle: 'minutes' }); f.settings.sync()
   assert.equal(f.elements.get('hoverDecoyEnabled').checked, false)
   assert.equal(f.elements.get('coverSettings').hidden, true)
-  assert.equal(f.elements.get('coverStyle').value, 'minutes')
+  assert.equal(f.elements.get('coverStyle').dataset.value, 'minutes')
   assert.equal(f.elements.get('terms').value, '未完成的输入')
   assert.equal(f.elements.get('settings').hidden, false)
+})
+
+test('moving through every open dropdown option and polling cannot save, close or reset the menu', () => {
+  const f = fixture({ hoverDecoyEnabled: true }), combo = f.elements.get('coverStyle')
+  combo.onclick()
+  for (const key of ['random', 'tasks', 'document', 'report', 'minutes']) {
+    f.elements.get('coverStyle-' + key).onpointermove()
+    for (let poll = 0; poll < 5; poll++) f.settings.sync()
+    assert.equal(combo.attributes['aria-expanded'], 'true')
+    assert.equal(combo.attributes['aria-activedescendant'], 'coverStyle-' + key)
+    assert.equal(f.elements.get('settings').hidden, false)
+    assert.equal(f.elements.get('coverStyleOptions').hidden, false)
+  }
+  assert.equal(f.requests.length, 0)
+  assert.equal(f.stored.coverStyle, 'random')
+  f.dispatch('keydown', ['coverStyle'], { key: 'Escape' })
+  assert.equal(f.elements.get('coverStyleOptions').hidden, true)
+  assert.equal(f.elements.get('settings').hidden, false)
+  f.dispatch('keydown', [], { key: 'Escape' })
+})
+
+test('keyboard navigation commits only with Enter or Tab and keeps Settings open', async () => {
+  const f = fixture({ hoverDecoyEnabled: true }), combo = f.elements.get('coverStyle')
+  const key = key => combo.onkeydown({ key, preventDefault() {}, isComposing: false })
+  key('ArrowDown'); key('End')
+  assert.equal(f.requests.length, 0)
+  f.settings.sync()
+  assert.equal(combo.attributes['aria-activedescendant'], 'coverStyle-minutes')
+  key('Enter'); await settle()
+  assert.equal(f.stored.coverStyle, 'minutes')
+  assert.equal(f.elements.get('settings').hidden, false)
+  key('Home'); key('ArrowDown'); key('Tab'); await settle()
+  assert.equal(f.stored.coverStyle, 'tasks')
+  assert.equal(f.elements.get('coverStyleOptions').hidden, true)
+  assert.equal(f.elements.get('settings').hidden, false)
+})
+
+test('closing while saving dismisses and disables the style popup until the save finishes', async () => {
+  const f = fixture({ hoverDecoyEnabled: true }), gate = deferred()
+  f.beforeSave(() => gate.promise)
+  f.toggle('defaultMuted', false)
+  f.elements.get('coverStyle').onclick()
+  const closing = f.settings.finish()
+  assert.equal(f.elements.get('coverStyleOptions').hidden, true)
+  assert.equal(f.elements.get('coverStyle').attributes['aria-disabled'], 'true')
+  f.style('minutes')
+  gate.resolve(); await closing
+  assert.equal(f.stored.coverStyle, 'random')
+  assert.equal(f.elements.get('settings').hidden, true)
+})
+
+test('one outside click closes both the style popup and Settings', async () => {
+  const f = fixture({ hoverDecoyEnabled: true })
+  f.elements.get('coverStyle').onclick()
+  f.dispatch('pointerdown', ['playerContent'])
+  f.dispatch('click', ['playerContent']); await settle()
+  assert.equal(f.elements.get('coverStyleOptions').hidden, true)
+  assert.equal(f.elements.get('settings').hidden, true)
+})
+
+test('a press on the cover cannot dismiss Settings even if reveal completes before click', async () => {
+  const f = fixture({ hoverDecoyEnabled: true })
+  f.elements.get('playerContent').inert = true
+  f.dispatch('pointerdown', ['decoy'])
+  assert.equal(f.dispatch('keydown', [], { key: 'Escape' }).defaultPrevented, false)
+  f.elements.get('playerContent').inert = false
+  f.dispatch('click', ['playerContent']); await settle()
+  assert.equal(f.elements.get('settings').hidden, false)
+  f.dispatch('pointerdown', ['playerContent'])
+  f.dispatch('click', ['playerContent']); await settle()
+  assert.equal(f.elements.get('settings').hidden, true)
 })
 
 test('a failed in-flight save blocks closing; retry preserves the desired values', async () => {
@@ -256,9 +327,8 @@ test('pointer movement, focus changes, IME Escape, and a canceled Escape leave S
   assert.equal(f.requests.length, 0)
 })
 
-for (const dismissal of ['blank area', 'cover', 'Escape']) test(`${dismissal} dismisses Settings even outside or over concealed player content`, async () => {
+for (const dismissal of ['blank area', 'Escape']) test(`${dismissal} dismisses visible Settings without requiring a click inside player content`, async () => {
   const f = fixture({ hoverDecoyEnabled: true })
-  f.elements.get('playerContent').inert = true
   const event = dismissal === 'Escape' ? f.dispatch('keydown', [], { key: 'Escape' })
     : f.dispatch('click', dismissal === 'cover' ? ['decoy'] : [])
   await settle()

@@ -1,0 +1,45 @@
+{
+  "version": "0.0.35-beta.10",
+  "published": false,
+  "uiResource": "v29",
+  "uiSha256": "bbcbd0982da721e03be71ce44151cae7f7fc873191fe7e187fe334f1cbb99e03",
+  "testedUiMatchesCurrent": true,
+  "installedUiMatchesCurrent": true,
+  "nativeMouse": {
+    "choices": 5,
+    "allFirstExitsCovered": true,
+    "allSettingsClosed": true
+  },
+  "inApp": {
+    "blankAreaCovered": "false",
+    "pureExitResult": {
+      "covered": "true",
+      "rootHeight": 800,
+      "settingsClosed": true,
+      "template": "minutes",
+      "viewportHeight": 800
+    },
+    "interaction": "mouse movement only on exit; no outside click",
+    "screenshot": "dismiss-exit-fixed.jpg"
+  },
+  "regression": {
+    "total": 238,
+    "passed": 231,
+    "skipped": 7,
+    "failed": 0
+  },
+  "installation": {
+    "exitCode": 0,
+    "enabled": true,
+    "installedFilesMatch": true,
+    "preferencesPreserved": true,
+    "progressPreserved": true
+  },
+  "codexNativeValidation": {
+    "pickerFlicker": "user confirmed resolved",
+    "firstExitAfterDismissal": "user confirmed resolved in the locally installed resource v29",
+    "releaseAuthorization": "user requested beta publication"
+  },
+  "checkedAt": "2026-11-08T13:04:22.634Z",
+  "acceptedAt": "2026-11-08T13:08:31.099Z"
+}

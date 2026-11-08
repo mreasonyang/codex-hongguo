@@ -1,0 +1,22 @@
+{
+  "before": {
+    "exitCode": 1,
+    "checks": [
+      "not ok 1 - first pointerleave after changing style and dismissing Settings conceals even with last in-panel coordinates",
+      "not ok 2 - first mouseleave after changing style and dismissing Settings conceals even with last in-panel coordinates",
+      "# tests 2",
+      "# pass 0",
+      "# fail 2"
+    ]
+  },
+  "after": {
+    "exitCode": 0,
+    "checks": [
+      "ok 1 - first pointerleave after changing style and dismissing Settings conceals even with last in-panel coordinates",
+      "ok 2 - first mouseleave after changing style and dismissing Settings conceals even with last in-panel coordinates",
+      "# tests 2",
+      "# pass 2",
+      "# fail 0"
+    ]
+  }
+}

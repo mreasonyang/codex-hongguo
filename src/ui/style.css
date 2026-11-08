@@ -186,7 +186,11 @@ html[data-surface='waiting'] #playerRoot { display: none; }
 .coverActions li p { color: var(--text-2); font-size: 11px; margin: 4px 0 0; }
 .coverCheck { color: var(--text-2); }
 .coverSettings { display: grid; gap: 6px; }
-.coverSettings select {
+.coverStylePicker { position: relative; }
+.coverStyleControl {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   width: 100%;
   min-width: 0;
   padding: 8px 10px;
@@ -195,7 +199,26 @@ html[data-surface='waiting'] #playerRoot { display: none; }
   background: var(--surface);
   color: var(--text);
   font: inherit;
+  cursor: pointer;
 }
+.coverStyleControl:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.coverStyleControl[aria-disabled='true'] { opacity: .5; cursor: default; }
+.coverStyleOptions {
+  position: absolute;
+  z-index: 5;
+  inset: calc(100% + 4px) 0 auto;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: var(--_shadow);
+}
+.coverStyleOptions[data-side='above'] { inset: auto 0 calc(100% + 4px); }
+.coverStyleOptions [role='option'] { padding: 8px 10px; border-radius: var(--r-sm); cursor: pointer; }
+.coverStyleOptions [data-active='true'] { background: var(--active); }
 #settingsStatus:empty { display: none; }
 #settingsStatus[data-state='error'] { color: var(--danger); }
 @media (max-width: 800px) { .coverContents { display: none; } .coverArticleGrid { grid-template-columns: minmax(0, 1fr); } }
@@ -230,6 +253,9 @@ html {
   -webkit-font-smoothing: antialiased;
   text-size-adjust: 100%;
 }
+/* Root leave events must describe the whole panel, including blank space after
+   Settings collapses. Waiting cards keep their content-driven height. */
+html[data-surface='player'] { min-height: 100vh; }
 body {
   margin: 0;
 }
