@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto'
 import { projectRoot } from './paths.mjs'
 import { PlayerError, message } from './errors.mjs'
 import { secret } from './service.mjs'
-import { decoyDocument, decoyOrigin } from './decoy.mjs'
+import { decoyDocument, decoyOrigin, normalizeDecoyUrl, coverDocument } from './decoy.mjs'
 
 export function range(header, size) {
   if (header === undefined) return null
@@ -44,6 +44,8 @@ export class BrowserServer {
     this.service = service
     this.tickets = new Map()
     this.sessions = new Map()
+    this.covers = new Map()
+    service.coverFrame = (scope, url) => this.coverFrame(scope, url)
   }
   async listen() {
     if (!this.starting) {
@@ -73,8 +75,28 @@ export class BrowserServer {
     return this.starting
   }
   prune() {
-    for (const map of [this.sessions, this.tickets])
+    for (const map of [this.sessions, this.tickets, this.covers])
       for (const [key, obj] of map) if (obj.expires < Date.now()) map.delete(key)
+  }
+  coverFrame(scope, input) {
+    if (!this.origin) return undefined
+    const url = normalizeDecoyUrl(input)
+    if (!url || decoyOrigin(url) === this.origin) {
+      if (scope.coverGrant) this.covers.delete(scope.coverGrant.key)
+      scope.coverGrant = undefined
+      return undefined
+    }
+    this.prune()
+    let grant = scope.coverGrant
+    if (!grant || grant.url !== url || !this.covers.has(grant.key)) {
+      if (grant) this.covers.delete(grant.key)
+      const key = randomBytes(24).toString('hex')
+      grant = scope.coverGrant = { key, url, expires: 0 }
+      this.covers.set(key, grant)
+    }
+    grant.expires = Date.now() + 12 * 3600000
+    // Read-only, in-memory capability, transferred directly to the UI in hidden tool metadata.
+    return this.origin + '/cover/' + grant.key
   }
   async pair(scope) {
     await this.listen()
@@ -92,7 +114,7 @@ export class BrowserServer {
       throw new PlayerError('请求来源无效', 403)
     const path = req.url,
       nonce = randomBytes(16).toString('base64')
-    const settings = this.service.store.preferences(), frameOrigin = decoyOrigin(settings.decoyUrl)
+    const settings = this.service.store.preferences(), frameOrigin = this.origin
     res.setHeader(
       'Content-Security-Policy',
       `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; frame-src ${frameOrigin || "'none'"}; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`,
@@ -107,6 +129,17 @@ export class BrowserServer {
     }
     if (path === '/pair' && req.method === 'GET') return html(pairHTML)
     this.prune()
+    const cover = /^\/cover\/([a-f0-9]{48})$/.exec(path)
+    if (cover && req.method === 'GET') {
+      const grant = this.covers.get(cover[1])
+      if (!grant) throw new PlayerError('替身页面已失效，请重新保存设置', 404)
+      // The stable local frame has its own exact destination policy; the player never reloads.
+      // No scripts, fetch proxy, cookies or media grants are exposed by this document.
+      res.setHeader('Content-Security-Policy',
+        `default-src 'none'; style-src 'unsafe-inline'; frame-src ${decoyOrigin(grant.url)}; base-uri 'none'; form-action 'none'`)
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      return res.end(coverDocument(grant.url))
+    }
     if (path === '/exchange' && req.method === 'POST') {
       const input = await body(req),
         item = this.tickets.get(input?.ticket)
@@ -172,6 +205,7 @@ export class BrowserServer {
     throw new PlayerError('找不到该页面', 404)
   }
   close() {
+    this.covers.clear()
     this.server?.closeAllConnections()
     this.server?.close()
   }

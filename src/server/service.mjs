@@ -94,6 +94,11 @@ export class Service {
     this.catalog = catalog
     this.panels = new Map()
   }
+  preferences(scope) {
+    const settings = this.store.preferences()
+    const decoyFrameUrl = this.coverFrame?.(scope, settings.hoverDecoyEnabled ? settings.decoyUrl : '')
+    return decoyFrameUrl ? { ...settings, decoyFrameUrl } : settings
+  }
   open(meta) {
     const key = secret(),
       scope = { sessionId: callerId(meta), choices: new Map(), lastSeen: Date.now() }
@@ -225,7 +230,7 @@ export class Service {
           if (p.turnId || (scope.waiting && !scope.waiting.taken)) throw new PlayerError('请先打开播放器', 403)
           return {
             ...this.store.state(scope.sessionId, browser ? scope.fixedTurn : undefined),
-            preferences: this.store.preferences(),
+            preferences: this.preferences(scope),
           }
         }
         const fixed = scope.waiting?.turnId ?? (browser ? scope.fixedTurn : null)
@@ -302,7 +307,7 @@ export class Service {
         return result
       }
       case 'get_preferences':
-        return this.store.preferences()
+        return this.preferences(scope)
       case 'set_preferences': {
         if (!this.store.persistent) throw new PlayerError('本机设置目录不可写', 503)
         const previous = this.store.preferences()
@@ -311,7 +316,7 @@ export class Service {
           this.catalog.feed = null
           this.catalog.refresh = null
         }
-        return settings
+        return this.preferences(scope)
       }
       case 'get_health':
         if (!this.catalog.ffmpeg) void this.catalog.prepareMediaRuntime?.().catch(() => {})

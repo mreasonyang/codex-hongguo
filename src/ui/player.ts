@@ -99,7 +99,7 @@ let turnStateAvailable = false
 const decoy = createHoverDecoy({ canEmbed: canEmbedDecoy, changed: decoyChanged })
 function configureDecoy() {
   decoy.configure(prefs)
-  text('decoyStatus', decoy.needsReopen ? '已保存，重新打开播放器后应用此网址' : '')
+  text('decoyStatus', decoy.unavailable ? '替身网页暂时无法加载，已使用内置页面' : '')
 }
 function decoyChanged(covered: boolean) {
   if (covered) {
@@ -1152,7 +1152,7 @@ el('settings').onsubmit = (e) => {
       syncDefaultMute(updated)
       prefs = updated
       configureDecoy()
-      if (decoy.needsReopen) notice('已保存，重新打开播放器后应用此网址')
+      notice(decoy.unavailable ? '替身网页暂时无法加载，已使用内置页面' : '设置已保存')
       autoNext.checked = prefs.autoplayNext
       el('settings').hidden = true
       el('prefs').setAttribute('aria-expanded', 'false')

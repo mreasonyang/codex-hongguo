@@ -1,4 +1,4 @@
-type Settings = { hoverDecoyEnabled: boolean; decoyUrl: string }
+type Settings = { hoverDecoyEnabled: boolean; decoyUrl: string; decoyFrameUrl?: string }
 type Options = { changed: (covered: boolean) => void; canEmbed: (url: string) => boolean }
 
 /** Panel-local hover state. Conceal synchronously; only revealing is debounced. */
@@ -8,7 +8,7 @@ export function createHoverDecoy({ changed, canEmbed }: Options) {
   const layer = document.getElementById('decoy')!
   const frameHost = document.getElementById('decoyWebsite')!
   let enabled = root.dataset.hoverDecoy === 'on', inside = false, covered = enabled, configured = false
-  let timer: ReturnType<typeof setTimeout> | undefined, url = '', framedUrl = ''
+  let timer: ReturnType<typeof setTimeout> | undefined, url = '', framedUrl = '', unavailable = false
   const paint = () => {
     root.dataset.hoverDecoy = enabled ? 'on' : 'off'
     root.dataset.decoyCovered = covered ? 'true' : 'false'
@@ -53,7 +53,7 @@ export function createHoverDecoy({ changed, canEmbed }: Options) {
   return {
     get covered() { return covered },
     get enabled() { return enabled },
-    get needsReopen() { return !!url && !canEmbed(url) },
+    get unavailable() { return unavailable },
     configure(settings: Settings) {
       const nextEnabled = !!settings.hoverDecoyEnabled
       if (nextEnabled !== enabled) {
@@ -61,7 +61,9 @@ export function createHoverDecoy({ changed, canEmbed }: Options) {
         setCovered(enabled && (!inside || document.hidden))
       }
       url = settings.decoyUrl || ''
-      const nextFrame = enabled && url && canEmbed(url) ? url : ''
+      const frameUrl = settings.decoyFrameUrl || ''
+      const nextFrame = enabled && url && frameUrl && canEmbed(frameUrl) ? frameUrl : ''
+      unavailable = !!(enabled && url && !nextFrame)
       if (nextFrame !== framedUrl) {
         framedUrl = nextFrame
         frameHost.replaceChildren()

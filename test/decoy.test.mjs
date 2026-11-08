@@ -22,7 +22,7 @@ test('custom cover URLs normalize without allowing credentials, executable schem
   assert.doesNotMatch(html, /view=work/)
 })
 
-test('real browser responses bootstrap the cover and allow only the configured frame origin', async t => {
+test('saved cover URLs update only the local display frame, with exact target policies and revoked old grants', async t => {
   const root = mkdtempSync(join(tmpdir(), 'hongguo-decoy-'))
   const store = new Store(root), service = new Service(store, {}), browser = new BrowserServer(service)
   t.after(() => { browser.close(); store.close(); rmSync(root, { recursive: true, force: true }) })
@@ -36,8 +36,38 @@ test('real browser responses bootstrap the cover and allow only the configured f
   const get = () => fetch(browser.origin + page, { headers: { Cookie: cookie } })
   const response = await get()
   assert.equal(response.status, 200)
-  assert.match(response.headers.get('content-security-policy'), /frame-src https:\/\/example.org;/)
-  assert.match(await response.text(), /data-hover-decoy="on" data-decoy-origin="https:\/\/example.org"/)
-  store.setPreferences({ decoyUrl: '' })
-  assert.match((await get()).headers.get('content-security-policy'), /frame-src 'none';/)
+  assert.ok(response.headers.get('content-security-policy').includes('frame-src ' + browser.origin + ';'))
+  assert.ok((await response.text()).includes('data-hover-decoy="on" data-decoy-origin="' + browser.origin + '"'))
+  const save = async patch => {
+    const response = await fetch(browser.origin + page + 'api/set_preferences', {
+      method: 'POST', headers: { Cookie: cookie, Origin: browser.origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+    assert.equal(response.status, 200)
+    return response.json()
+  }
+  const first = await save({ decoyUrl: 'https://example.org/notes?view=work&name=__NONCE__' })
+  assert.equal(new URL(first.decoyFrameUrl).origin === browser.origin, true)
+  const cover = await fetch(first.decoyFrameUrl)
+  assert.equal(cover.status, 200)
+  const policy = cover.headers.get('content-security-policy')
+  assert.match(policy, /frame-src https:\/\/example.org;/)
+  assert.match(policy, /default-src 'none'/)
+  const html = await cover.text()
+  assert.match(html, /view=work&amp;name=__NONCE__/)
+  assert.doesNotMatch(html, /<script/)
+  assert.equal(html.includes(new URL(first.decoyFrameUrl).pathname), false)
+  const second = await save({ decoyUrl: 'https://notes.example.net/next' })
+  assert.equal(second.decoyFrameUrl === first.decoyFrameUrl, false)
+  const changed = await fetch(second.decoyFrameUrl)
+  assert.equal(changed.status, 200)
+  assert.match(changed.headers.get('content-security-policy'), /frame-src https:\/\/notes.example.net;/)
+  assert.equal((await fetch(first.decoyFrameUrl)).status, 404)
+  assert.equal('decoyFrameUrl' in store.preferences(), false, 'display capabilities must stay out of the preferences database')
+  const repeated = await save({ volume: 0.5 })
+  assert.equal(repeated.decoyFrameUrl === second.decoyFrameUrl, true, 'unrelated settings must not reload the cover')
+  const cleared = await save({ decoyUrl: '' })
+  assert.equal(typeof cleared.decoyFrameUrl, 'undefined')
+  assert.equal((await fetch(second.decoyFrameUrl)).status, 404)
+  assert.equal((await fetch(browser.origin + '/cover/' + '0'.repeat(48))).status, 404)
 })

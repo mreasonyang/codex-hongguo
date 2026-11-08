@@ -15,6 +15,7 @@ export type Preferences = {
   defaultMuted: boolean
   hoverDecoyEnabled: boolean
   decoyUrl: string
+  decoyFrameUrl?: string
   volume: number
   searchTerms: string[]
 }

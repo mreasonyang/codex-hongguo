@@ -52,11 +52,17 @@ const website = createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
   res.end('<!doctype html><html lang="zh-CN"><title>项目工作台</title><body style="margin:40px;background:#f4f6f8;color:#26313c;font:16px system-ui"><h1>项目工作台</h1><p>自定义替身网页 · 本机测试</p><hr><p>迭代计划</p><p>接口评审</p><p>测试记录</p></body></html>')
 })
+const secondWebsite = createServer((_req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+  res.end('<!doctype html><html lang="zh-CN"><title>工作记录</title><body style="margin:40px;background:#f7f4ed;color:#34312d;font:16px system-ui"><h1>工作记录</h1><p>第二个网站 · 保存后直接生效</p></body></html>')
+})
 await new Promise(resolve => website.listen(0, '127.0.0.1', resolve))
+await new Promise(resolve => secondWebsite.listen(0, '127.0.0.1', resolve))
 await browser.listen()
 console.log('Player UI: ' + browser.origin + '/')
 console.log('Test cover website: http://127.0.0.1:' + website.address().port + '/')
+console.log('Second test website: http://127.0.0.1:' + secondWebsite.address().port + '/')
 console.log('Nested panel host: http://127.0.0.1:' + website.address().port + '/host')
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
-  browser.close(); website.close(); store.close(); rmSync(root, { recursive: true, force: true }); process.exit()
+  browser.close(); website.close(); secondWebsite.close(); store.close(); rmSync(root, { recursive: true, force: true }); process.exit()
 })

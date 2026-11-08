@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-08",
+  "surface": "Production browser UI, real Service/SQLite, synthetic media; no player/page reload during URL changes",
+  "checks": [
+    {
+      "check": "before-first-save",
+      "paused": false,
+      "readyState": 4,
+      "time": 5.228136
+    },
+    {
+      "check": "after-first-save-without-reload",
+      "paused": false,
+      "readyState": 4,
+      "time": 16.140532
+    },
+    {
+      "check": "first-site-visible-without-reload",
+      "visible": true
+    },
+    {
+      "check": "before-second-save",
+      "paused": false,
+      "readyState": 4,
+      "time": 23.464083
+    },
+    {
+      "check": "after-cross-origin-save-without-reload",
+      "paused": false,
+      "readyState": 4,
+      "time": 26.626084
+    },
+    {
+      "check": "second-site-visible-without-reload",
+      "visible": true
+    },
+    {
+      "check": "clear-url-restores-built-in-immediately",
+      "visible": true
+    }
+  ]
+}

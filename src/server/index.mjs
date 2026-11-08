@@ -10,7 +10,7 @@ import { Service, schemas } from './service.mjs'
 import { Catalog } from './catalog.mjs'
 import { BrowserServer } from './browser.mjs'
 import { message } from './errors.mjs'
-import { decoyOrigin, decoyPolicyKey, decoyDocument } from './decoy.mjs'
+import { decoyPolicyKey, decoyDocument } from './decoy.mjs'
 
 process.umask(0o077)
 let store
@@ -22,9 +22,10 @@ try {
 const catalog = new Catalog(store),
   service = new Service(store, catalog)
 const browser = new BrowserServer(service)
+await browser.listen()
 service.pair = (scope) => browser.pair(scope)
 const server = new McpServer({ name: 'codex-hongguo', version: pkg.version })
-const uri = 'ui://hongguo/v20/player', waitingUri = 'ui://hongguo/v20/waiting',
+const uri = 'ui://hongguo/v21/player', waitingUri = 'ui://hongguo/v21/waiting',
   mimeType = 'text/html;profile=mcp-app'
 const ui = { visibility: ['app'] }
 // Both resources can become the player. hls.js attaches its in-memory MediaSource via a blob URL.
@@ -32,14 +33,14 @@ const ui = { visibility: ['app'] }
 const policies = new Map()
 let policyId
 function currentPolicy() {
-  const settings = store.preferences(), origin = decoyOrigin(settings.decoyUrl)
+  const settings = store.preferences(), origin = browser.origin
   const id = `${settings.hoverDecoyEnabled ? 'on' : 'off'}-${decoyPolicyKey(origin)}`
   policies.set(id, { origin, hoverDecoyEnabled: settings.hoverDecoyEnabled })
   return id
 }
 policyId = currentPolicy()
-const resourceUri = base => policyId === 'off-builtin' ? base : base + '/' + policyId
-function resourceMeta(waiting, origin = '') {
+const resourceUri = base => base + '/' + policyId
+function resourceMeta(waiting, origin = browser.origin) {
   const scopeMeta = { ui: { csp: { connectDomains: [], resourceDomains: ['blob:'], frameDomains: origin ? [origin] : [] }, prefersBorder: false } }
   return waiting ? {
     ...scopeMeta,
@@ -52,7 +53,7 @@ function resourceMeta(waiting, origin = '') {
 for (const [resourceUri, name] of [[uri, '红果短剧'], [waitingUri, '等待时看一集']]) {
   const waiting = resourceUri === waitingUri
   const meta = resourceMeta(waiting)
-  const read = (requested, snapshot = { origin: '', hoverDecoyEnabled: false }) => {
+  const read = (requested, snapshot = { origin: browser.origin, hoverDecoyEnabled: false }) => {
     const html = readFileSync(join(projectRoot, 'dist/ui/player.html'), 'utf8')
     const text = decoyDocument(html, snapshot, snapshot.origin)
     return { contents: [{ uri: requested.href, mimeType, _meta: resourceMeta(waiting, snapshot.origin),
@@ -67,11 +68,14 @@ for (const [resourceUri, name] of [[uri, '红果短剧'], [waitingUri, '等待�
       return read(requested, snapshot)
     })
   // Older conversations can reopen their original URI without advertising a second entry.
-  for (const prefix of ['ui://hongguo/', 'ui://hongguo/v2/', 'ui://hongguo/v3/', 'ui://hongguo/v4/', 'ui://hongguo/v5/', 'ui://hongguo/v6/', 'ui://hongguo/v7/', 'ui://hongguo/v8/', 'ui://hongguo/v9/', 'ui://hongguo/v10/', 'ui://hongguo/v11/', 'ui://hongguo/v12/', 'ui://hongguo/v13/', 'ui://hongguo/v14/', 'ui://hongguo/v15/', 'ui://hongguo/v16/', 'ui://hongguo/v17/', 'ui://hongguo/v18/', 'ui://hongguo/v19/']) {
+  for (const prefix of ['ui://hongguo/', 'ui://hongguo/v2/', 'ui://hongguo/v3/', 'ui://hongguo/v4/', 'ui://hongguo/v5/', 'ui://hongguo/v6/', 'ui://hongguo/v7/', 'ui://hongguo/v8/', 'ui://hongguo/v9/', 'ui://hongguo/v10/', 'ui://hongguo/v11/', 'ui://hongguo/v12/', 'ui://hongguo/v13/', 'ui://hongguo/v14/', 'ui://hongguo/v15/', 'ui://hongguo/v16/', 'ui://hongguo/v17/', 'ui://hongguo/v18/', 'ui://hongguo/v19/', 'ui://hongguo/v20/']) {
     const oldUri = prefix + (waiting ? 'waiting' : 'player')
     if (oldUri === resourceUri) continue
     const legacy = new ResourceTemplate(oldUri, { list: undefined })
     server.registerResource(name + '（' + prefix + '）', legacy, { mimeType, _meta: meta },
+      requested => read(requested, policies.get(currentPolicy())))
+    if (prefix === 'ui://hongguo/v20/') server.registerResource(name + '（旧显示策略）',
+      new ResourceTemplate(oldUri + '/{policy}', { list: undefined }), { mimeType, _meta: meta },
       requested => read(requested, policies.get(currentPolicy())))
   }
 }
@@ -133,9 +137,14 @@ for (const [name, schema] of Object.entries(schemas)) {
     },
   )
 }
+let disposed = false
 server.server.onclose = () => {
+  if (disposed) return
+  disposed = true
   catalog.panelMedia?.close()
   browser.close()
   store.close()
 }
 await server.connect(new StdioServerTransport())
+// The local cover listener is now active before any browser pairing. EOF must close it too.
+process.stdin.once('end', () => { void server.close() })
