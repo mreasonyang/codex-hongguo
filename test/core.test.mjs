@@ -314,7 +314,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   })
   assert.equal(data.isError, true)
   const resources = (await client.listResources()).resources
-  const playerUri = 'ui://hongguo/v22/player', waitingUri = 'ui://hongguo/v22/waiting'
+  const playerUri = 'ui://hongguo/v23/player', waitingUri = 'ui://hongguo/v23/waiting'
   assert.equal(tools.find(t => t.name === 'show_waiting_picks')._meta.ui.resourceUri, waitingUri)
   assert.equal(tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri, playerUri)
   assert.deepEqual(resources.map(r => r.uri).sort(), [playerUri, waitingUri])
@@ -327,7 +327,8 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
     'ui://hongguo/v8/player', 'ui://hongguo/v9/waiting', 'ui://hongguo/v11/player', 'ui://hongguo/v12/waiting',
     'ui://hongguo/v16/player', 'ui://hongguo/v16/waiting', 'ui://hongguo/v17/player', 'ui://hongguo/v17/waiting',
     'ui://hongguo/v18/player', 'ui://hongguo/v18/waiting', 'ui://hongguo/v19/player', 'ui://hongguo/v19/waiting',
-    'ui://hongguo/v20/player', 'ui://hongguo/v20/waiting', 'ui://hongguo/v21/player', 'ui://hongguo/v21/waiting']) {
+    'ui://hongguo/v20/player', 'ui://hongguo/v20/waiting', 'ui://hongguo/v21/player', 'ui://hongguo/v21/waiting',
+    'ui://hongguo/v22/player', 'ui://hongguo/v22/waiting']) {
     const read = (await client.readResource({ uri })).contents[0]
     assert.equal(read.uri, uri)
     assert.deepEqual(read._meta.ui.csp, policy)

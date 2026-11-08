@@ -64,6 +64,7 @@ type Provider = { id: string; name: string; available: boolean; enabled?: boolea
 let providers: Provider[] = [{ id: 'hongguo', name: '红果', available: true }]
 let providerOptions: Provider[] = []
 const providerInputs = new Map<string, HTMLInputElement>()
+let sourceMenuTimer: ReturnType<typeof setTimeout> | undefined
 async function refreshProviders() {
   providerOptions = (await call<{ items: Provider[] }>('get_providers')).items
   providers = providerOptions.filter(provider => provider.available)
@@ -87,6 +88,7 @@ function renderProviderSettings() {
   }))
 }
 function closeSourceMenu(focus = false) {
+  clearTimeout(sourceMenuTimer)
   el('sourceMenu').hidden = true
   el('source').setAttribute('aria-expanded', 'false')
   if (focus) el('source').focus()
@@ -97,12 +99,10 @@ function syncSourceButton() {
   control.dataset.busy = String(switchingSource)
   const name = providers.find(provider => provider.id === activeSource)?.name || activeSource
   el('sourceName').textContent = activeSource === 'hongguo' ? tr('红果短剧') : activeSource === 'hghub' ? tr('黄果短剧') : name
-  const next = providers.length === 2 ? providers.find(provider => provider.id !== activeSource) : undefined
-  const label = next ? tr(next.id === 'hongguo' ? '切换至红果' : next.id === 'hghub' ? '切换至黄果' : '切换视频源') : tr('切换视频源')
+  const label = tr('切换视频源')
   control.setAttribute('aria-label', providers.length < 2 ? tr(name) : label)
-  control.title = providers.length < 2 ? tr(name) : label
   control.disabled = switchingSource || providers.length < 2
-  if (providers.length > 2) {
+  if (providers.length > 1) {
     control.setAttribute('aria-haspopup', 'menu')
     control.setAttribute('aria-controls', 'sourceMenu')
     control.setAttribute('aria-expanded', String(!el('sourceMenu').hidden))
@@ -112,23 +112,27 @@ function syncSourceButton() {
     control.removeAttribute('aria-expanded')
   }
 }
-function showSourceMenu() {
+function showSourceMenu(focus = false) {
+  if (el<HTMLButtonElement>('source').disabled) return
+  clearTimeout(sourceMenuTimer)
   const menu = el('sourceMenu')
-  const items = providers.map(provider => {
-    const b = button('', async () => { closeSourceMenu(true); await changeSource(provider.id) })
-    b.setAttribute('role', 'menuitemradio')
-    b.setAttribute('aria-checked', String(provider.id === activeSource))
-    const dot = document.createElement('span'), name = document.createElement('span')
-    dot.className = 'sourceDot'; dot.dataset.source = provider.id; dot.setAttribute('aria-hidden', 'true')
-    name.className = 'sourceLabel'; name.textContent = tr(provider.name)
-    b.append(dot, name)
-    if (provider.id === activeSource) b.append(icon('check'))
-    return b
-  })
-  menu.replaceChildren(...items)
-  menu.hidden = false
-  el('source').setAttribute('aria-expanded', 'true')
-  items.find((_, i) => providers[i].id === activeSource)?.focus()
+  if (menu.hidden) {
+    const items = providers.map(provider => {
+      const b = button('', async () => { closeSourceMenu(true); await changeSource(provider.id) })
+      b.setAttribute('role', 'menuitemradio')
+      b.setAttribute('aria-checked', String(provider.id === activeSource))
+      const dot = document.createElement('span'), name = document.createElement('span')
+      dot.className = 'sourceDot'; dot.dataset.source = provider.id; dot.setAttribute('aria-hidden', 'true')
+      name.className = 'sourceLabel'; name.textContent = tr(provider.name)
+      b.append(dot, name)
+      if (provider.id === activeSource) b.append(icon('check'))
+      return b
+    })
+    menu.replaceChildren(...items)
+    menu.hidden = false
+    el('source').setAttribute('aria-expanded', 'true')
+  }
+  if (focus) menu.querySelector<HTMLButtonElement>('button[aria-checked="true"]')?.focus()
 }
 let action = 0,
   selection = 0,
@@ -1162,16 +1166,24 @@ async function changeSource(next: SourceId) {
   }
   finally { switchingSource = false; syncSourceButton() }
 }
-el('source').onclick = () => {
-  if (el<HTMLButtonElement>('source').disabled) return
-  if (providers.length === 2) {
-    const next = providers.find(provider => provider.id !== activeSource)
-    if (next) void changeSource(next.id)
-  } else if (providers.length > 2) {
-    if (el('sourceMenu').hidden) showSourceMenu()
-    else closeSourceMenu()
-  }
+el('source').onclick = e => {
+  showSourceMenu(e?.detail === 0)
 }
+el('source').onpointerenter = e => { if (e.pointerType !== 'touch') showSourceMenu() }
+el('source').onkeydown = e => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); showSourceMenu(true) }
+}
+el('sourceControl').onpointerenter = () => clearTimeout(sourceMenuTimer)
+el('sourceControl').onpointerleave = e => {
+  if (e?.pointerType === 'touch') return
+  clearTimeout(sourceMenuTimer)
+  sourceMenuTimer = setTimeout(() => {
+    if (!el('sourceMenu').contains(document.activeElement)) closeSourceMenu()
+  }, 160)
+}
+el('sourceControl').addEventListener('focusout', e => {
+  if (!el('sourceControl').contains(e.relatedTarget as Node | null)) closeSourceMenu()
+})
 el('sourceMenu').onkeydown = e => {
   if (e.key === 'Escape') { e.preventDefault(); closeSourceMenu(true) }
   else if (e.key === 'Tab') closeSourceMenu()

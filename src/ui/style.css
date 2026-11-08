@@ -525,6 +525,14 @@ h1 {
   background: transparent;
   text-align: start;
 }
+.sourceMenu::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -8px;
+  height: 8px;
+}
 .sourceMenu button:hover, .sourceMenu button:focus-visible { background: var(--hover); }
 .sourceMenu button[aria-checked='true'] { background: var(--surface); }
 .sourceMenu .sourceLabel { flex: 1; overflow: hidden; text-overflow: ellipsis; }

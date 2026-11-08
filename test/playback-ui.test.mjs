@@ -21,7 +21,8 @@ class Element extends EventTarget {
   replaceChildren(...children) { this.children = children }
   append(...children) { this.children.push(...children) }
   querySelectorAll() { return [] }
-  querySelector() { return null }
+  querySelector(selector) { return selector === 'button[aria-checked="true"]' ? this.children.find(child => child.getAttribute('aria-checked') === 'true') : null }
+  contains(target) { return target === this || this.children.some(child => child.contains?.(target)) }
   focus() {}
   removeAttribute(name) { this.attributes.delete(name) }
 }
@@ -66,8 +67,10 @@ function setup(t) {
   const video = new Video(), elements = new Map()
   const document = Object.assign(new EventTarget(), {
     hidden: false, documentElement: { dataset: {} }, hasFocus: () => true,
-    getElementById(id) { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id) },
-    querySelector: () => video, querySelectorAll: () => [], createElement: () => new Element(),
+    getElementById(id) { if (!elements.has(id)) { const e = new Element(); e.focus = () => { document.activeElement = e }; elements.set(id, e) } return elements.get(id) },
+    querySelector: () => video, querySelectorAll: () => [], createElement: () => {
+      const e = new Element(); e.focus = () => { document.activeElement = e }; return e
+    },
   })
   const window = Object.assign(new EventTarget(), { setInterval: () => 1, clearInterval() {}, scrollTo() {} })
   const api = {
@@ -107,19 +110,58 @@ function setup(t) {
 const turnHelpers = await import('../src/ui/playback-turn.ts')
 const mediaHelpers = await import('../src/ui/media-startup.ts')
 
-test('the source mark switches two providers directly and restores its target label', async t => {
+test('hovering or clicking the source mark opens a menu; only choosing a provider switches sources', async t => {
   const f = setup(t)
   f.service.catalog = { list: async () => ({ items: [] }) }
   const control = f.elements.get('source')
-  assert.equal(control.getAttribute('aria-label'), '切换至黄果')
+  const menu = f.elements.get('sourceMenu'), query = f.elements.get('query')
+  f.document.activeElement = query
+  assert.equal(control.getAttribute('aria-label'), '切换视频源')
+  control.onpointerenter({ pointerType: 'touch' })
+  assert.equal(menu.hidden, true)
+  control.onpointerenter({ pointerType: 'mouse' })
+  assert.equal(menu.hidden, false)
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+  assert.equal(f.document.activeElement, query)
   control.onclick(); await flush()
+  assert.equal(menu.hidden, false)
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+  menu.children[1].onclick(); await flush()
   assert.equal(f.ui.sourceState().source, 'hghub')
   assert.equal(control.dataset.source, 'hghub')
-  assert.equal(control.getAttribute('aria-label'), '切换至红果')
+  assert.equal(control.getAttribute('aria-label'), '切换视频源')
   assert.equal(f.elements.get('sourceName').textContent, '黄果短剧')
   assert.equal(f.elements.get('sourceMenu').hidden, true)
   assert.equal(control.disabled, false)
   control.onclick(); await flush()
+  assert.equal(f.ui.sourceState().source, 'hghub')
+  menu.children[0].onclick(); await flush()
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+})
+test('leaving the source popover closes it, while crossing into it cancels dismissal', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const f = setup(t), control = f.elements.get('sourceControl'), menu = f.elements.get('sourceMenu')
+  f.elements.get('source').onclick({ detail: 1 })
+  control.onpointerleave({ pointerType: 'touch' }); t.mock.timers.tick(160)
+  assert.equal(menu.hidden, false)
+  menu.onkeydown({ key: 'Escape', preventDefault() {} })
+  f.elements.get('source').onpointerenter({ pointerType: 'mouse' })
+  control.onpointerleave(); t.mock.timers.tick(80)
+  assert.equal(menu.hidden, false)
+  control.onpointerenter(); t.mock.timers.tick(160)
+  assert.equal(menu.hidden, false)
+  control.onpointerleave(); t.mock.timers.tick(160)
+  assert.equal(menu.hidden, true)
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+})
+test('keyboard opening focuses the current provider and Escape returns to the source button', t => {
+  const f = setup(t), control = f.elements.get('source'), menu = f.elements.get('sourceMenu')
+  control.onkeydown({ key: 'ArrowDown', preventDefault() {} })
+  assert.equal(menu.hidden, false)
+  assert.equal(f.document.activeElement, menu.children[0])
+  menu.onkeydown({ key: 'Escape', preventDefault() {} })
+  assert.equal(menu.hidden, true)
+  assert.equal(f.document.activeElement, control)
   assert.equal(f.ui.sourceState().source, 'hongguo')
 })
 test('additional providers use a checked menu and select through the existing source service', async t => {
@@ -145,7 +187,9 @@ test('a single available provider disables switching instead of opening an empty
   f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'hghub', name: '黄果', available: false }])
   const control = f.elements.get('source')
   assert.equal(control.disabled, true)
+  control.onpointerenter({ pointerType: 'mouse' })
   control.onclick()
+  assert.equal(f.elements.get('sourceMenu').hidden, true)
   assert.equal(f.ui.sourceState().source, 'hongguo')
 })
 test('the settings form enables Huangguo explicitly, then disabling it returns to Hongguo', async t => {
