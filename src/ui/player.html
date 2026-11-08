@@ -93,6 +93,10 @@
         <circle cx="12" cy="12" r="8.5" />
         <path d="M12 8v4.5M12 16h.01" />
       </symbol>
+      <symbol id="i-info" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 11v5M12 7.5h.01" />
+      </symbol>
     </svg>
     <section id="waitingCard" aria-label="等待时看一集" hidden>
       <div class="waitingHead">
@@ -135,28 +139,41 @@
           <span>任务结束自动暂停</span>
           <input type="checkbox" id="autoPauseOnFinish" class="switch" />
         </label>
-        <label class="switchRow">
-          <span>任务开始自动播放</span>
-          <input type="checkbox" id="autoPlayOnStart" class="switch" />
-        </label>
-        <p class="settingsHint">自动播放已选中的剧集，从上次位置继续</p>
-        <label class="switchRow">
-          <span>默认静音</span>
-          <input type="checkbox" id="defaultMuted" class="switch" />
-        </label>
-        <p class="settingsHint">修改后同步当前播放器；新打开时也沿用此设置</p>
-        <label class="switchRow">
-          <span>悬停时显示播放器</span>
-          <input type="checkbox" id="hoverDecoyEnabled" class="switch" />
-        </label>
-        <p class="settingsHint">移出红果面板显示替身并暂停，移回后继续；手动暂停保持不变</p>
+        <div class="switchRow">
+          <span class="settingLabel">
+            <label for="autoPlayOnStart">任务开始自动播放</label>
+            <button id="autoPlayOnStartHelp" type="button" class="settingHelp" aria-label="自动播放说明" aria-describedby="autoPlayOnStartTip"><svg class="i" aria-hidden="true"><use href="#i-info" /></svg></button>
+          </span>
+          <input type="checkbox" id="autoPlayOnStart" class="switch" aria-describedby="autoPlayOnStartTip" />
+          <span id="autoPlayOnStartTip" class="settingTip" role="tooltip" hidden>自动播放已选中的剧集，从上次位置继续</span>
+        </div>
+        <div class="switchRow">
+          <span class="settingLabel">
+            <label for="defaultMuted">默认静音</label>
+            <button id="defaultMutedHelp" type="button" class="settingHelp" aria-label="默认静音说明" aria-describedby="defaultMutedTip"><svg class="i" aria-hidden="true"><use href="#i-info" /></svg></button>
+          </span>
+          <input type="checkbox" id="defaultMuted" class="switch" aria-describedby="defaultMutedTip" />
+          <span id="defaultMutedTip" class="settingTip" role="tooltip" hidden>修改后同步当前播放器；新打开时也沿用此设置</span>
+        </div>
+        <div class="switchRow">
+          <span class="settingLabel">
+            <label for="hoverDecoyEnabled">启用替身页面</label>
+            <button id="hoverDecoyEnabledHelp" type="button" class="settingHelp" aria-label="替身页面说明" aria-describedby="hoverDecoyEnabledTip"><svg class="i" aria-hidden="true"><use href="#i-info" /></svg></button>
+          </span>
+          <input type="checkbox" id="hoverDecoyEnabled" class="switch" aria-describedby="hoverDecoyEnabledTip" />
+          <span id="hoverDecoyEnabledTip" class="settingTip" role="tooltip" hidden>鼠标移出红果面板时显示替身页面并暂停播放；移回后继续播放。手动暂停时不会自动继续。</span>
+        </div>
         <div id="coverSettings" class="coverSettings" hidden>
           <div class="field">
-            <span id="coverStyleLabel">替身样式</span>
+            <span class="settingLabel">
+              <span id="coverStyleLabel">替身样式</span>
+              <button id="coverStyleHelp" type="button" class="settingHelp" aria-label="替身样式说明" aria-describedby="coverStyleTip"><svg class="i" aria-hidden="true"><use href="#i-info" /></svg></button>
+            </span>
+            <span id="coverStyleTip" class="settingTip" role="tooltip" hidden>每次打开生成新内容，本次打开保持不变</span>
             <div id="coverStylePicker" class="coverStylePicker">
               <div id="coverStyle" class="coverStyleControl" role="combobox" tabindex="0"
                 aria-haspopup="listbox" aria-expanded="false" aria-controls="coverStyleOptions"
-                aria-labelledby="coverStyleLabel">
+                aria-labelledby="coverStyleLabel" aria-describedby="coverStyleTip">
                 <span id="coverStyleValue">随机</span>
                 <svg class="i" aria-hidden="true"><use href="#i-down" /></svg>
               </div>
@@ -169,17 +186,19 @@
               </div>
             </div>
           </div>
-          <p class="settingsHint">每次打开生成新内容，本次打开保持不变</p>
         </div>
         <label class="switchRow">
           <span>当前回合进行时显示推荐</span>
           <input type="checkbox" id="autoPrompt" class="switch" />
         </label>
-        <label class="field">
-          <span>推荐补充关键词</span>
-          <input id="terms" maxlength="185" placeholder="用逗号分隔" />
-        </label>
-        <p class="settingsHint">按 Enter 或离开输入框时保存</p>
+        <div class="field">
+          <span class="settingLabel">
+            <label for="terms">推荐补充关键词</label>
+            <button id="termsHelp" type="button" class="settingHelp" aria-label="关键词说明" aria-describedby="termsTip"><svg class="i" aria-hidden="true"><use href="#i-info" /></svg></button>
+          </span>
+          <input id="terms" maxlength="185" placeholder="用逗号分隔" aria-describedby="termsTip" />
+          <span id="termsTip" class="settingTip" role="tooltip" hidden>按 Enter 或离开输入框时保存</span>
+        </div>
         <p id="settingsStatus" class="settingsHint" role="status" aria-live="polite"></p>
         <div class="sheetActions">
           <button type="button" id="settingsClose" class="btn primary">关闭</button>

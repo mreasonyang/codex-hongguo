@@ -1,5 +1,6 @@
 import type { Preferences } from './api'
 import { createCoverStylePicker } from './cover-style-picker.ts'
+import { createSettingsHelp } from './settings-help.ts'
 
 const switches = ['autoPauseOnFinish', 'autoPlayOnStart', 'defaultMuted', 'hoverDecoyEnabled', 'autoPrompt'] as const
 type Options = {
@@ -27,12 +28,14 @@ export function createSettings(options: Options, doc: Document = document) {
   const controls = [...switches.map(id => element<HTMLInputElement>(id)), terms, close]
   const style = createCoverStylePicker({ changed: coverStyle => { void enqueue({ coverStyle }) },
     translate: options.translate }, doc)
+  const help = createSettingsHelp(doc)
   function sync() {
     if (form.hidden) return
     const settings = options.read()
     for (const key of switches) element<HTMLInputElement>(key).checked = pending[key] ?? settings[key]
     coverSettings.hidden = !element<HTMLInputElement>('hoverDecoyEnabled').checked
     style.sync(pending.coverStyle ?? settings.coverStyle, !!finishing || coverSettings.hidden)
+    help.sync()
   }
   function showStatus() {
     const failed = !busy && keys(pending).length > 0
@@ -83,6 +86,7 @@ export function createSettings(options: Options, doc: Document = document) {
     return true
   }
   function hide() {
+    help.close()
     style.close()
     form.hidden = true
     trigger.setAttribute('aria-expanded', 'false')
@@ -139,6 +143,7 @@ export function createSettings(options: Options, doc: Document = document) {
       event.isComposing || event.keyCode === 229) return
     event.preventDefault()
     event.stopPropagation()
+    if (help.close()) return
     if (style.expanded) { style.close(); return }
     void finish()
   }, true)
@@ -146,6 +151,7 @@ export function createSettings(options: Options, doc: Document = document) {
     get busy() { return busy > 0 },
     sync,
     open() {
+      help.close()
       const settings = options.read()
       for (const key of switches) element<HTMLInputElement>(key).checked = pending[key] ?? settings[key]
       terms.value = (pending.searchTerms ?? settings.searchTerms).join('，')
@@ -157,6 +163,7 @@ export function createSettings(options: Options, doc: Document = document) {
     finish,
     reset() {
       ++generation
+      help.close()
       style.close()
       revealClick = false
       pending = {}; revisions.clear(); busy = 0; invalidTerms = saved = false; finishing = undefined

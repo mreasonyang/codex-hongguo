@@ -1,0 +1,20 @@
+{
+  "version": "0.0.35-beta.11",
+  "candidate": true,
+  "published": false,
+  "uiResource": "v30",
+  "setupExitCode": 0,
+  "enabled": true,
+  "installedFilesMatch": true,
+  "testedUiMatchesInstalled": true,
+  "preferencesPreserved": true,
+  "progressPreserved": true,
+  "uiSha256": "a0eabc2be29609b29666ceb64f944f9193e2ca6a0252372805f2db2a1991988b",
+  "regression": {
+    "total": 241,
+    "passed": 234,
+    "skipped": 7,
+    "failed": 0
+  },
+  "verifiedAt": "2026-11-08T13:43:37.946Z"
+}

@@ -647,6 +647,37 @@ h1 {
   color: var(--text-2);
   line-height: 1.5;
 }
+.settingLabel { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.settingLabel label { cursor: pointer; }
+.settingHelp {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 3px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-3);
+}
+.settingHelp:hover, .settingHelp:focus-visible { color: var(--text); background: var(--hover); }
+.settingHelp .i { width: 14px; height: 14px; }
+.settingTip {
+  position: fixed;
+  z-index: 10;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--raised);
+  box-shadow: var(--_shadow);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  font-weight: 400;
+  cursor: auto;
+  overflow-wrap: anywhere;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+}
 .field {
   display: grid;
   gap: 6px;
