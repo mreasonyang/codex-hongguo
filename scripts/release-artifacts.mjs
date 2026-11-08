@@ -114,7 +114,7 @@ export async function qualifiedCandidate(root, expectedSha) {
 }
 
 export async function registryPackage(candidate, fetchImpl = fetch) {
-  const response = await fetchImpl('https://registry.npmjs.org/' + encodeURIComponent(candidate.name) + '/' + candidate.version, { headers: { 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(10000) })
+  const response = await fetchImpl('https://registry.npmjs.org/' + candidate.name.replace('/', '%2f') + '/' + candidate.version, { headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(10000) })
   if (response.status === 404) return null
   check(response.ok, 'Registry request failed')
   const pkg = await response.json()
@@ -123,13 +123,14 @@ export async function registryPackage(candidate, fetchImpl = fetch) {
 }
 
 export async function registryTags(candidate, fetchImpl = fetch) {
-  const response = await fetchImpl('https://registry.npmjs.org/' + encodeURIComponent(candidate.name), {
-    headers: { Accept: 'application/vnd.npm.install-v1+json', 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(10000),
+  // Query tags directly instead of a potentially stale package metadata document.
+  const response = await fetchImpl('https://registry.npmjs.org/-/package/' + candidate.name.replace('/', '%2f') + '/dist-tags', {
+    headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(10000),
   })
   if (response.status === 404) return {}
   check(response.ok, 'Registry channel request failed')
-  const pkg = await response.json(), tags = pkg['dist-tags']
-  check(pkg.name === name && tags && typeof tags === 'object', 'Invalid registry channels')
+  const tags = await response.json()
+  check(tags && typeof tags === 'object' && !Array.isArray(tags), 'Invalid registry channels')
   for (const channel of ['latest', 'beta']) check(tags[channel] === undefined ||
     (isVersion(tags[channel]) && releaseChannel(tags[channel]) === channel), 'Invalid registry channel version')
   return tags

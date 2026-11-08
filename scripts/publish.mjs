@@ -44,13 +44,14 @@ export async function publishRelease({ root = process.cwd(), execute = false, en
     }
   }
   let confirmed = false, confirmedTags
-  for (let attempt = 0; attempt < 5; attempt++) {
+  // npm publication and read replicas need not become visible simultaneously.
+  for (let attempt = 0; attempt < 24; attempt++) {
     if (await registryPackage(candidate, fetchImpl)) {
       const tags = await registryTags(candidate, fetchImpl)
       if (channel === 'beta' && tags.latest !== before.latest) throw Error('Stable npm channel changed during beta publication')
       if (tags[channel] === candidate.version) { confirmed = true; confirmedTags = tags; break }
     }
-    if (attempt < 4) await delay(2000)
+    if (attempt < 23) await delay(5000)
   }
   if (!confirmed) throw Error('Registry integrity has not been confirmed')
   await writeFile(resolve(root, 'release/publication.json'), JSON.stringify({
@@ -81,6 +82,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         ['Registry integrity has not been confirmed', 'REGISTRY_CONFIRMATION'],
         ['Invalid registry channels', 'REGISTRY_CHANNELS'],
         ['Invalid registry channel version', 'REGISTRY_CHANNEL_VERSION'],
+        ['Registry request failed', 'REGISTRY_HTTP'],
+        ['Registry package differs', 'REGISTRY_INTEGRITY'],
+        ['Registry channel request failed', 'REGISTRY_TAG_HTTP'],
       ])
       const code = /^NPM_[A-Z0-9_]+$/.test(error.code) ? error.code : reasons.get(error.message) || 'CHECKS'
       console.error(`Publication checks failed [${code}]; the marketplace index was not advanced.`)

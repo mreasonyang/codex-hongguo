@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, writeFile, readFile, rm, access } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { git, resolveRelease, prepareCandidate, validateCandidate, sealReceipt, collectReceipts, qualifiedCandidate, updatePublishedIndex } from '../scripts/release-artifacts.mjs'
+import { git, resolveRelease, prepareCandidate, validateCandidate, sealReceipt, collectReceipts, qualifiedCandidate, updatePublishedIndex, registryPackage, registryTags } from '../scripts/release-artifacts.mjs'
 import { publishRelease, publicationFailureCode } from '../scripts/publish.mjs'
 
 const name = '@kyun.si/codex-hongguo', version = '0.0.34'
@@ -12,7 +12,7 @@ const readJson = async path => JSON.parse(await readFile(path, 'utf8'))
 const index = version => ({ plugins: [{ source: { source: 'npm', package: name, version } }] })
 const missing = path => assert.rejects(access(path), { code: 'ENOENT' })
 const registry = (candidate, tags = candidate.channel === 'beta' ? { latest: version, beta: candidate.version } : { latest: candidate.version }) =>
-  async () => ({ ok: true, status: 200, json: async () => ({ name, version: candidate.version, dist: { integrity: candidate.integrity }, 'dist-tags': tags }) })
+  async url => ({ ok: true, status: 200, json: async () => url?.endsWith('/dist-tags') ? tags : ({ name, version: candidate.version, dist: { integrity: candidate.integrity } }) })
 const absent = async () => ({ ok: false, status: 404 })
 
 test('publication diagnostics expose fixed categories without retaining tool output', () => {
@@ -188,7 +188,7 @@ test('beta publication uses the beta tag, confirms it, and leaves the stable ind
   const before = await readFile(join(root, '.agents/plugins/marketplace.json'), 'utf8')
   let uploaded = false
   const fetchImpl = async url => url.endsWith('/' + candidate.version) && !uploaded
-    ? absent() : registry(candidate, { latest: version, ...(uploaded ? { beta: candidate.version } : {}) })()
+    ? absent() : registry(candidate, { latest: version, ...(uploaded ? { beta: candidate.version } : {}) })(url)
   await publishRelease({ root, execute: true, env, fetchImpl, publishImpl: async (archive, options) => {
     assert.equal(archive, join(root, 'release', candidate.filename))
     assert.deepEqual(options, { channel: 'beta' })
@@ -215,10 +215,40 @@ test('beta refuses changed latest, a missing beta pointer, and downgrading an ex
     let uploaded = false
     const tags = () => ({ latest: scenario === 'latest-changed' && uploaded ? '0.0.35' : version,
       ...(scenario === 'newer-beta' ? { beta: '0.0.35-beta.2' } : uploaded && scenario !== 'beta-missing' ? { beta: candidate.version } : {}) })
-    const fetchImpl = async url => url.endsWith('/' + candidate.version) && !uploaded ? absent() : registry(candidate, tags())()
+    const fetchImpl = async url => url.endsWith('/' + candidate.version) && !uploaded ? absent() : registry(candidate, tags())(url)
     await assert.rejects(publishRelease({ root, execute: true, env, fetchImpl, delay: async () => {},
       publishImpl: async () => { assert.notEqual(scenario, 'newer-beta'); uploaded = true },
     }), /channel changed|not been confirmed|newer version/)
     await missing(join(root, 'release/publication.json'))
   }
+})
+
+test('registry reads use canonical scoped URLs and the dedicated tag endpoint', async t => {
+  const { candidate } = await fixture(t, { version: '0.0.35-beta.1' })
+  const requests = []
+  const fetchImpl = async (url, options) => {
+    requests.push(url)
+    assert.equal(options.headers.Accept, 'application/json')
+    return registry(candidate)(url)
+  }
+  await registryPackage(candidate, fetchImpl); await registryTags(candidate, fetchImpl)
+  assert.deepEqual(requests, [
+    'https://registry.npmjs.org/@kyun.si%2fcodex-hongguo/0.0.35-beta.1',
+    'https://registry.npmjs.org/-/package/@kyun.si%2fcodex-hongguo/dist-tags',
+  ])
+})
+
+test('publication tolerates tag propagation beyond the original short confirmation window', async t => {
+  const { root, candidate, env } = await fixture(t, { version: '0.0.35-beta.1' })
+  let uploaded = false, reads = 0, waits = 0
+  const fetchImpl = async url => {
+    if (url.endsWith('/' + candidate.version) && !uploaded) return absent()
+    const visible = uploaded && ++reads > 20
+    return registry(candidate, { latest: version, ...(visible ? { beta: candidate.version } : {}) })(url)
+  }
+  await publishRelease({ root, execute: true, env, fetchImpl, publishImpl: async () => { uploaded = true },
+    delay: async milliseconds => { assert.equal(milliseconds, 5000); waits++ },
+  })
+  assert.ok(waits >= 5)
+  assert.equal((await readJson(join(root, 'release/publication.json'))).channel, 'beta')
 })
