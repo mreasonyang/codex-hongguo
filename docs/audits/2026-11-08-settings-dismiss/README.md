@@ -25,6 +25,11 @@ Validation before beta publication:
   confirmed pointer exit/return preserves Settings with hover on and off.
 - All browser data and save-failure controls belonged to the isolated fixture;
   the user's database and provider services were not used for these checks.
+- The UI checks used the beta.4 build. Its release was blocked because the
+  installation verifier still expected resource v24. The verifier was corrected
+  to v25; beta.5 has the same UI implementation. `npm run package` and
+  `npm run verify:install` then passed locally for beta.5, including a disposable
+  Codex profile, native npm installation, host resource checks, and data retention.
 
 See [browser-check.json](browser-check.json) and [Settings after leaving the
 panel with hover off](settings-open.png). These checks do not establish native

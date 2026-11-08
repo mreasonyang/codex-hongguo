@@ -1,5 +1,6 @@
 {
   "version": "0.0.35-beta.4",
+  "releaseCandidate": "0.0.35-beta.5",
   "browser": "Codex in-app browser",
   "fixture": "Production HTTP UI with isolated Service/SQLite and synthetic media",
   "checks": [
