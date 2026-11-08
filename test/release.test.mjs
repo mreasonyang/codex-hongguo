@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, access } from 'node:fs/promise
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { git, resolveRelease, prepareCandidate, validateCandidate, sealReceipt, collectReceipts, qualifiedCandidate, updatePublishedIndex } from '../scripts/release-artifacts.mjs'
-import { publishRelease } from '../scripts/publish.mjs'
+import { publishRelease, publicationFailureCode } from '../scripts/publish.mjs'
 
 const name = '@kyun.si/codex-hongguo', version = '0.0.34'
 const writeJson = (path, value) => writeFile(path, JSON.stringify(value) + '\n')
@@ -14,6 +14,14 @@ const missing = path => assert.rejects(access(path), { code: 'ENOENT' })
 const registry = (candidate, tags = candidate.channel === 'beta' ? { latest: version, beta: candidate.version } : { latest: candidate.version }) =>
   async () => ({ ok: true, status: 200, json: async () => ({ name, version: candidate.version, dist: { integrity: candidate.integrity }, 'dist-tags': tags }) })
 const absent = async () => ({ ok: false, status: 404 })
+
+test('publication diagnostics expose fixed categories without retaining tool output', () => {
+  assert.equal(publicationFailureCode('npm error code E403\nsynthetic private diagnostic'), 'NPM_E403')
+  assert.equal(publicationFailureCode('npm ERR! code ENEEDAUTH'), 'NPM_ENEEDAUTH')
+  assert.equal(publicationFailureCode('trusted publisher failed'), 'NPM_OIDC')
+  assert.equal(publicationFailureCode('provenance failed'), 'NPM_PROVENANCE')
+  assert.equal(publicationFailureCode('synthetic private diagnostic'), 'NPM_FAILED')
+})
 
 async function fixture(t, { tagged = true, qualified = true, version: targetVersion = version } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'hongguo-release-'))

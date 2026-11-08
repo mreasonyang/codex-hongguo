@@ -6,6 +6,14 @@ import { fileURLToPath } from 'node:url'
 import { git, qualifiedCandidate, registryPackage, registryTags } from './release-artifacts.mjs'
 import { releaseChannel, compareVersions } from '../src/runtime/version.mjs'
 
+export function publicationFailureCode(output) {
+  const code = /npm (?:error|ERR!) code (E[A-Z0-9_]+)/.exec(output)?.[1]
+  if (['E403', 'E404', 'ENEEDAUTH', 'EOTP', 'EUSAGE', 'EINTEGRITY', 'EPUBLISHCONFLICT', 'EPRIVATE', 'EUNSCOPED'].includes(code)) return 'NPM_' + code
+  if (/oidc|openid|trusted publish/i.test(output)) return 'NPM_OIDC'
+  if (/provenance|sigstore|attestation/i.test(output)) return 'NPM_PROVENANCE'
+  return 'NPM_FAILED'
+}
+
 export async function publishRelease({ root = process.cwd(), execute = false, env = process.env, fetchImpl = fetch,
   delay = ms => new Promise(done => setTimeout(done, ms)), publishImpl } = {}) {
   const candidate = await qualifiedCandidate(root, env.RELEASE_SOURCE_SHA)
@@ -28,9 +36,11 @@ export async function publishRelease({ root = process.cwd(), execute = false, en
     if (publishImpl) await publishImpl(resolve(root, 'release', candidate.filename), { channel })
     else {
       const result = spawnSync('npm', ['publish', resolve(root, 'release', candidate.filename), '--tag', channel, '--access', 'public', '--registry', 'https://registry.npmjs.org', '--provenance'], {
-        cwd: root, stdio: 'ignore', timeout: 120000,
+        cwd: root, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', maxBuffer: 4 * 1024 * 1024, timeout: 120000,
       })
-      if (result.status !== 0) throw Error('npm publication failed')
+      if (result.status !== 0) throw Object.assign(Error('npm publication failed'), {
+        code: publicationFailureCode((result.stderr || '') + '\n' + (result.stdout || '')),
+      })
     }
   }
   let confirmed = false, confirmedTags
@@ -60,6 +70,21 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   } else {
     publishRelease({ execute: flags.includes('--publish') }).then(candidate => {
       console.log(`${flags.includes('--publish') ? 'Registry integrity confirmed' : 'Publication preview only'}: ${candidate.name}@${candidate.version}`)
-    }).catch(() => { console.error('Publication checks failed; the marketplace index was not advanced.'); process.exitCode = 1 })
+    }).catch(error => {
+      const reasons = new Map([
+        ['Publishing requires GitHub Actions OIDC', 'OIDC_ENV'],
+        ['Publishing requires the qualified version tag', 'TAG'],
+        ['Publish source differs from qualified source', 'SOURCE'],
+        ['Registry channel already has a newer version', 'NEWER_CHANNEL'],
+        ['Beta version must follow the stable version', 'OLDER_BETA'],
+        ['Stable npm channel changed during beta publication', 'STABLE_CHANNEL_CHANGED'],
+        ['Registry integrity has not been confirmed', 'REGISTRY_CONFIRMATION'],
+        ['Invalid registry channels', 'REGISTRY_CHANNELS'],
+        ['Invalid registry channel version', 'REGISTRY_CHANNEL_VERSION'],
+      ])
+      const code = /^NPM_[A-Z0-9_]+$/.test(error.code) ? error.code : reasons.get(error.message) || 'CHECKS'
+      console.error(`Publication checks failed [${code}]; the marketplace index was not advanced.`)
+      process.exitCode = 1
+    })
   }
 }
