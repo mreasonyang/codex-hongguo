@@ -570,6 +570,15 @@ h1 {
   color: var(--text-2);
   line-height: 1.5;
 }
+.providerAccount { padding: 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+.accountHeader { display: flex; align-items: center; gap: 10px; }
+.accountMark { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 10px; color: #fb7299; background: color-mix(in srgb, #fb7299 12%, transparent); font-weight: 700; }
+.accountInfo { min-width: 0; }
+.accountInfo strong { display: block; overflow-wrap: anywhere; font-size: var(--fs-sm); }
+.accountInfo p { margin: 3px 0 0; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.5; }
+.accountQrArea { margin: 14px auto 0; padding: 8px; width: 200px; max-width: 100%; border-radius: 10px; background: #fff; }
+.accountQrArea img { display: block; width: 100%; height: auto; aspect-ratio: 1; }
+.accountActions { display: flex; gap: 6px; margin: 10px 0 8px; flex-wrap: wrap; }
 .field {
   display: grid;
   gap: 6px;

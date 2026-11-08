@@ -11,7 +11,7 @@ export function allowedURL(input, allows) {
   return url
 }
 export async function boundedResponse(input, {
-  allows, budget, timeout = 10000, signal, headers = {}, method = 'GET', body, range,
+  allows, budget, timeout = 10000, signal, headers = {}, method = 'GET', body, range, followRedirects = true,
 }) {
   const deadline = Date.now() + timeout
   let target = allowedURL(input, allows)
@@ -31,6 +31,7 @@ export async function boundedResponse(input, {
     const res = await fetch(target, { headers: outgoing, method, body,
       redirect: 'manual', signal: AbortSignal.any(signals) })
     if ([301, 302, 303, 307, 308].includes(res.status)) {
+      if (!followRedirects) return { response: res, url: target.href }
       const location = res.headers.get('location'); await res.body?.cancel()
       if (!location || redirect === 3) throw invalid()
       const next = allowedURL(new URL(location, target), allows)

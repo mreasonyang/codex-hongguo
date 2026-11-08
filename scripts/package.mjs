@@ -54,6 +54,7 @@ await cp('third_party/ffmpeg', join(notices, 'ffmpeg'), { recursive: true })
 await cp('src/runtime/ffmpeg-artifacts.json', join(notices, 'ffmpeg/ffmpeg-artifacts.json'))
 await cp('third_party/amagi', join(notices, 'amagi'), { recursive: true })
 await cp('third_party/legacy-project', join(notices, 'legacy-project'), { recursive: true })
+await cp('third_party/qrcode-generator', join(notices, 'qrcode-generator'), { recursive: true })
 // Include the complete preferred form for our part of the combined distribution.
 // Only repository source/build inputs are collected; no user data or caches.
 const sourceEntries = {}

@@ -93,7 +93,7 @@ export class BrowserServer {
       nonce = randomBytes(16).toString('base64')
     res.setHeader(
       'Content-Security-Policy',
-      `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`,
+      `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`,
     )
     const html = (text) => {
       res.setHeader('Content-Type', 'text/html; charset=utf-8')

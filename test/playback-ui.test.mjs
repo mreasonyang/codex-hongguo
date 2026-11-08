@@ -83,6 +83,7 @@ function setup(t) {
     module: { exports }, exports, document, window, navigator: {}, crypto: webcrypto,
     AbortController, DOMException, setTimeout, clearTimeout,
     require(name) {
+      if (name === './provider-account') return { ProviderAccount: class { hide() {} show() {} } }
       if (name === './api') return api
       if (name === './locale') return { tr: value => value }
       if (name === './playback-turn') return turnHelpers

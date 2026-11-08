@@ -21,6 +21,7 @@ export type Preferences = {
   searchTerms: string[]
 }
 export type State = {
+  authRevision?: string
   source?: SourceId
   state: 'unknown' | 'submitted' | 'stopped' | 'interrupted'
   turnId: string | null

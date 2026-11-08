@@ -24,7 +24,7 @@ await catalog.sources.ready
 const browser = new BrowserServer(service)
 service.pair = (scope) => browser.pair(scope)
 const server = new McpServer({ name: 'codex-hongguo', version: pkg.version })
-const uri = 'ui://hongguo/v25/player', waitingUri = 'ui://hongguo/v25/waiting',
+const uri = 'ui://hongguo/v26/player', waitingUri = 'ui://hongguo/v26/waiting',
   mimeType = 'text/html;profile=mcp-app'
 const ui = { visibility: ['app'] }
 // Both resources can become the player. hls.js attaches its in-memory MediaSource via a blob URL.
@@ -46,7 +46,7 @@ for (const [resourceUri, name] of [[uri, '红果短剧'], [waitingUri, '等待�
   }
   server.registerResource(name, resourceUri, { mimeType, _meta: meta }, read)
   // Older conversations can reopen their original URI without advertising a second entry.
-  for (const prefix of ['ui://hongguo/', 'ui://hongguo/v2/', 'ui://hongguo/v3/', 'ui://hongguo/v4/', 'ui://hongguo/v5/', 'ui://hongguo/v6/', 'ui://hongguo/v7/', 'ui://hongguo/v8/', 'ui://hongguo/v9/', 'ui://hongguo/v10/', 'ui://hongguo/v11/', 'ui://hongguo/v12/', 'ui://hongguo/v13/', 'ui://hongguo/v14/', 'ui://hongguo/v15/', 'ui://hongguo/v16/', 'ui://hongguo/v17/', 'ui://hongguo/v18/', 'ui://hongguo/v19/', 'ui://hongguo/v20/', 'ui://hongguo/v21/', 'ui://hongguo/v22/', 'ui://hongguo/v23/', 'ui://hongguo/v24/']) {
+  for (const prefix of ['ui://hongguo/', 'ui://hongguo/v2/', 'ui://hongguo/v3/', 'ui://hongguo/v4/', 'ui://hongguo/v5/', 'ui://hongguo/v6/', 'ui://hongguo/v7/', 'ui://hongguo/v8/', 'ui://hongguo/v9/', 'ui://hongguo/v10/', 'ui://hongguo/v11/', 'ui://hongguo/v12/', 'ui://hongguo/v13/', 'ui://hongguo/v14/', 'ui://hongguo/v15/', 'ui://hongguo/v16/', 'ui://hongguo/v17/', 'ui://hongguo/v18/', 'ui://hongguo/v19/', 'ui://hongguo/v20/', 'ui://hongguo/v21/', 'ui://hongguo/v22/', 'ui://hongguo/v23/', 'ui://hongguo/v24/', 'ui://hongguo/v25/']) {
     const oldUri = prefix + (waiting ? 'waiting' : 'player')
     if (oldUri === resourceUri) continue
     const legacy = new ResourceTemplate(oldUri, { list: undefined })

@@ -63,6 +63,11 @@ export const schemas = {
   set_setup_dismissed: z.object({ dismissed: z.boolean() }),
   get_preferences: z.object({}),
   get_providers: z.object({}),
+  get_provider_auth: z.object({ source }),
+  start_provider_login: z.object({ source }),
+  poll_provider_login: z.object({ source, loginId: id }),
+  cancel_provider_login: z.object({ source, loginId: id }),
+  logout_provider: z.object({ source }),
   set_preferences: z.object({
     autoPrompt: z.boolean().optional(),
     searchTerms: z.array(z.string().trim().min(1).max(30)).min(1).max(6).optional(),
@@ -164,6 +169,9 @@ export class Service {
     for (const panel of new Set([...this.panels.values(), scope])) {
       const source = this.catalog.sources.fallback(panel.source)
       if (source !== panel.source) this.resetSource(panel, source)
+      const revision = this.catalog.sources.get(source).auth?.revision?.()
+      if (panel.authRevision !== undefined && panel.authRevision !== revision) this.resetSource(panel, source)
+      panel.authRevision = revision
     }
   }
   preferences() {
@@ -258,6 +266,7 @@ export class Service {
             ...this.store.state(scope.sessionId, browser ? scope.fixedTurn : undefined),
             preferences: this.preferences(),
             source: scope.source,
+            authRevision: scope.authRevision,
           }
         }
         const fixed = scope.waiting?.turnId ?? (browser ? scope.fixedTurn : null)
@@ -347,6 +356,21 @@ export class Service {
       }
       case 'get_preferences':
         return this.preferences()
+      case 'get_provider_auth':
+      case 'start_provider_login':
+      case 'poll_provider_login':
+      case 'cancel_provider_login':
+      case 'logout_provider': {
+        const auth = this.catalog.sources?.get(p.source).auth
+        if (!auth) throw new PlayerError('该片源不支持登录')
+        if (name === 'get_provider_auth') return auth.status()
+        if (name === 'start_provider_login') return auth.start(scope)
+        if (name === 'poll_provider_login') return auth.poll(scope, p.loginId)
+        if (name === 'cancel_provider_login') return auth.cancel(scope, p.loginId)
+        const result = await auth.logout()
+        for (const panel of this.panels.values()) if (panel.source === p.source) this.resetSource(panel, panel.source)
+        return result
+      }
       case 'get_providers':
         await this.catalog.sources?.ready
         return { items: this.catalog.sources?.list() ?? [

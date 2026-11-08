@@ -6,6 +6,7 @@ import { projectRoot } from '../paths.mjs'
 import { PlayerError } from '../errors.mjs'
 import { decodeCursor, encodeCursor } from './contracts.mjs'
 import { allowedURL, responseBytes } from './network.mjs'
+import { BilibiliAuth } from './bilibili-auth.mjs'
 
 export const bilibiliMediaHosts = host => /(?:^|\.)(?:bilivideo\.com|bilivideo\.cn|bilivideo\.net|hdslb\.com)$/.test(host)
 const headers = { Referer: 'https://www.bilibili.com/', 'User-Agent': 'Mozilla/5.0' }
@@ -24,11 +25,13 @@ export function bangumiLink(input) {
   return { [match[1] === 'ss' ? 'season_id' : 'ep_id']: match[1] + match[2] }
 }
 function apiError(code) {
-  return new PlayerError(code === -101 ? 'B 站需要登录后观看'
+  const error = new PlayerError(code === -101 ? 'B 站需要登录后观看'
     : code === -10403 || code === 10004 ? '该番剧需要账号拥有对应会员或购买权益'
     : code === -404 ? '番剧已下架或不存在'
     : [-412, -352, 429].includes(code) ? 'B 站暂时限制了请求，请稍后重试'
     : 'B 站暂时不可达，请稍后重试', 503)
+  if (code === -101) error.code = 'LOGIN_REQUIRED'
+  return error
 }
 const preview = data => [true, 1, '1'].includes(data.is_preview) ||
   data.play_check?.play_detail === 'PLAY_PREVIEW' || data.play_video_type === 'preview'
@@ -41,14 +44,15 @@ export class BilibiliSource {
   id = 'bilibili'
   discovery = false
   constructor(context, { loadSdk = () => import(pathToFileURL(join(projectRoot, 'dist/vendor/amagi/index.mjs')).href).then(m => m.sdk), cookie = '' } = {}) {
-    this.context = context; this.loadSdk = loadSdk; this.cookie = cookie
+    this.context = context; this.loadSdk = loadSdk
     this.seasons = new Map(); this.pending = new Map()
     mkdirSync(context.dataDir, { recursive: true, mode: 0o700 })
     this.db = new DatabaseSync(join(context.dataDir, 'library.sqlite'))
     this.db.exec('PRAGMA busy_timeout=3000; CREATE TABLE IF NOT EXISTS library(id TEXT PRIMARY KEY, added INTEGER NOT NULL)')
     this.fetchMedia = context.mediaFetcher(headers)
+    this.auth = new BilibiliAuth(context, (...args) => this.request(...args), { cookie, onChange: () => this.seasons.clear() })
   }
-  async request(method, options, signal) {
+  async request(method, options, signal, { cookie = this.auth.cookie() } = {}) {
     const signals = [this.context.signal, signal].filter(Boolean)
     const combined = signals.length ? AbortSignal.any(signals) : undefined
     if (combined?.aborted) throw new PlayerError('请求已取消', 499)
@@ -58,11 +62,12 @@ export class BilibiliSource {
         const url = new URL(config.url)
         for (const [key, value] of Object.entries(config.params || {})) url.searchParams.set(key, String(value))
         const response = await this.context.fetch(url, { signal: combined,
-          headers: { ...headers, ...(this.cookie ? { Cookie: this.cookie } : {}) } })
+          headers: { ...headers, ...(cookie && url.hostname === 'api.bilibili.com' ? { Cookie: cookie } : {}) } })
         if (!response.ok) throw apiError(response.status)
         const data = await response.json()
         if (data.code !== 0) throw apiError(Number(data.code))
-        return { data, status: response.status, statusText: '', headers: {}, config }
+        const responseHeaders = { 'set-cookie': response.headers.getSetCookie() }
+        return { data, status: response.status, statusText: '', headers: responseHeaders, config }
       } catch (error) {
         failure = error instanceof PlayerError ? error : apiError()
         throw failure
@@ -178,5 +183,5 @@ export class BilibiliSource {
     if (data.durl?.length === 1) return { candidates: [{ kind: 'file', codec: 'h264', url: locator(data.durl[0]).url }], fetchMedia: this.fetchMedia }
     throw new PlayerError('该集暂未提供大小合适的 AVC/AAC 完整片源')
   }
-  dispose() { this.seasons.clear(); this.cookie = ''; this.db.close() }
+  dispose() { this.seasons.clear(); this.auth.dispose(); this.db.close() }
 }

@@ -135,6 +135,19 @@
           <div id="providerSettings"></div>
           <p class="settingsHint">默认只启用红果，其他片源需手动开启</p>
         </fieldset>
+        <section id="providerAccount" class="providerAccount" aria-label="B 站账号" hidden>
+          <div class="accountHeader">
+            <span class="accountMark" aria-hidden="true">B</span>
+            <div class="accountInfo"><strong id="accountName">B 站账号</strong><p id="accountStatus" role="status" aria-live="polite">未登录，可观看允许匿名访问的番剧</p></div>
+          </div>
+          <div id="accountQrArea" class="accountQrArea" hidden><img id="accountQr" alt="哔哩哔哩登录二维码" width="184" height="184" /></div>
+          <div class="accountActions">
+            <button type="button" id="accountLogin" class="btn">扫码登录</button>
+            <button type="button" id="accountCancel" class="btn ghost" hidden>取消登录</button>
+            <button type="button" id="accountLogout" class="btn ghost" hidden>退出登录</button>
+          </div>
+          <p class="settingsHint">登录态仅保存在本机；会员与购买权益以 B 站账号为准</p>
+        </section>
         <label class="switchRow">
           <span>任务结束自动暂停</span>
           <input type="checkbox" id="autoPauseOnFinish" class="switch" />

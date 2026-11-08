@@ -1,0 +1,21 @@
+{
+  "result": "PASS",
+  "realAccountConfirmed": true,
+  "persistedAcrossMcpProcess": "PASS",
+  "membership": "standard",
+  "regularEpisodes": 13,
+  "authenticatedPlayback": "PASS",
+  "mcpFragmentBytes": 319085,
+  "pageReload": "PASS",
+  "browserPlayback": {
+    "result": "PASS",
+    "readyState": 4,
+    "width": 672,
+    "height": 480,
+    "durationMs": 1436992,
+    "positionObservedSeconds": 15
+  },
+  "logoutStopsPlayback": "PASS",
+  "logoutPersistsAcrossMcpProcess": "PASS",
+  "premiumContentVerified": false
+}

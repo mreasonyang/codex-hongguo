@@ -3,6 +3,7 @@ import { coverArt, fill, icon, setCover, setIcon } from './ui-kit'
 import { panelStream } from './panel-stream'
 import { mediaErrorMessage, waitForMetadata } from './media-startup'
 import { finishedTurn, startedTurn } from './playback-turn'
+import { ProviderAccount } from './provider-account'
 import { browser, call, connect, hostLocale, type Context, type State, type Preferences, type SourceId } from './api'
 import { pickLabel, showWaitingPicks, waitingCard, type WaitingSelection } from './waiting'
 
@@ -60,11 +61,18 @@ let activeQuery = '',
 let activeSource: SourceId = 'hongguo', sourceGeneration = 0, switchingSource = false
 let sourceUpdate = Promise.resolve()
 const sourceOf = (id: string): SourceId => id.startsWith('p.') ? id.split('.')[1] : 'hongguo'
-type Provider = { id: string; name: string; available: boolean; enabled?: boolean; configurable?: boolean; code?: string; queryHint?: string; queryMode?: 'search' | 'link'; emptyMessage?: string }
+type Provider = { id: string; name: string; available: boolean; enabled?: boolean; configurable?: boolean; code?: string; queryHint?: string; queryMode?: 'search' | 'link'; emptyMessage?: string; authentication?: 'qrcode' }
 let providers: Provider[] = [{ id: 'hongguo', name: '红果', available: true }]
 let providerOptions: Provider[] = []
 const providerInputs = new Map<string, HTMLInputElement>()
 let sourceMenuTimer: ReturnType<typeof setTimeout> | undefined
+let authRevision: string | undefined
+const account = new ProviderAccount(async () => {
+  if (providers.find(provider => provider.id === activeSource)?.authentication) {
+    authRevision = undefined
+    await home()
+  }
+})
 async function refreshProviders() {
   providerOptions = (await call<{ items: Provider[] }>('get_providers')).items
   providers = providerOptions.filter(provider => provider.available)
@@ -824,6 +832,8 @@ async function readTurnState() {
       observeSession: true, playerInstance: document.hidden ? undefined : instance,
     }, 1800)
     if (!pageActive) return
+    if (state.authRevision && authRevision && state.authRevision !== authRevision) await home()
+    authRevision = state.authRevision
     if (state.preferences) {
       const promptChanged = prefs.autoPrompt !== state.preferences.autoPrompt
       const providersChanged = JSON.stringify(prefs.enabledProviders) !== JSON.stringify(state.preferences.enabledProviders)
@@ -1245,6 +1255,12 @@ el('copy').onclick = async () => {
 el('settingsCancel').onclick = () => el('prefs').click()
 el('prefs').onclick = async () => {
   if (!playerReady) return
+  if (!el('settings').hidden) {
+    account.hide()
+    el('settings').hidden = true
+    el('prefs').setAttribute('aria-expanded', 'false')
+    return
+  }
   try {
     await openingPreferences()
     await refreshProviders()
@@ -1257,6 +1273,8 @@ el('prefs').onclick = async () => {
     el<HTMLInputElement>('defaultMuted').checked = prefs.defaultMuted
     el<HTMLInputElement>('terms').value = prefs.searchTerms.join('，')
     renderProviderSettings()
+    if (el('settings').hidden) account.hide()
+    else void account.show(providerOptions.find(provider => provider.enabled && provider.available && provider.authentication)?.id)
   } catch (error) { notice(explain(error)) }
 }
 el('settings').onsubmit = (e) => {
@@ -1285,6 +1303,7 @@ el('settings').onsubmit = (e) => {
       await refreshProviders()
       autoNext.checked = prefs.autoplayNext
       el('settings').hidden = true
+      account.hide()
       el('prefs').setAttribute('aria-expanded', 'false')
       renderPicks()
       if (!series) await list()
@@ -1362,7 +1381,7 @@ function activatePage() {
 document.addEventListener('visibilitychange', syncVisibility)
 window.addEventListener('blur', rememberBackgroundPlayback)
 window.addEventListener('focus', restoreAfterFocus)
-window.addEventListener('pagehide', () => void suspend())
+window.addEventListener('pagehide', () => { account.hide(); void suspend() })
 window.addEventListener('pageshow', activatePage)
 
 async function initPlayer(selection?: WaitingSelection) {
@@ -1405,6 +1424,7 @@ async function initPlayer(selection?: WaitingSelection) {
   await catalog
 }
 function closePlayer() {
+  account.hide()
   closeSourceMenu()
   const stopped = suspend()
   playerReady = false

@@ -12,8 +12,9 @@ const methods = ['listSeries', 'getSeries', 'listEpisodes', 'getCover', 'resolve
 export const builtins = [
   { manifest: { apiVersion: 1, id: 'hongguo', name: '红果', version: '1.0.0' }, createProvider: ctx => new HongguoSource(ctx.root) },
   { manifest: { apiVersion: 1, id: 'bilibili', name: '哔哩哔哩', version: '1.0.0',
+    authentication: 'qrcode',
     queryMode: 'link', queryHint: '粘贴番剧链接或 ss/ep 编号', emptyMessage: '粘贴 B 站番剧链接后，已添加的番剧会显示在这里',
-    network: { api: ['api.bilibili.com'], media: ['*.bilivideo.com', '*.bilivideo.cn', '*.bilivideo.net', '*.hdslb.com'] } },
+    network: { api: ['api.bilibili.com', 'passport.bilibili.com', 'passport.biligame.com'], media: ['*.bilivideo.com', '*.bilivideo.cn', '*.bilivideo.net', '*.hdslb.com'] } },
     createProvider: ctx => new BilibiliSource(ctx, { cookie: process.env.HONGGUO_BILIBILI_COOKIE || '' }) },
 ]
 function validate(manifest) {
@@ -27,6 +28,7 @@ function validate(manifest) {
   for (const key of ['queryHint', 'emptyMessage'])
     if (manifest[key] !== undefined && (typeof manifest[key] !== 'string' || manifest[key].length > 160)) throw Error('MANIFEST')
   if (manifest.queryMode !== undefined && !['search', 'link'].includes(manifest.queryMode)) throw Error('MANIFEST')
+  if (manifest.authentication !== undefined && manifest.authentication !== 'qrcode') throw Error('MANIFEST')
   return manifest
 }
 function allows(hosts = []) {
@@ -68,12 +70,14 @@ export class ProviderRegistry {
           signal: AbortSignal.any([controller.signal, ...(options.signal ? [options.signal] : [])]),
           allows: allows(network.api), budget: Math.min(options.budget || 2 * 1024 * 1024, 2 * 1024 * 1024),
           timeout: Math.min(options.timeout || 10000, 30000) })
-        return new Response(await responseBytes(response.body, 2 * 1024 * 1024), { status: response.status, headers: response.headers })
+        return new Response(response.body ? await responseBytes(response.body, 2 * 1024 * 1024) : null,
+          { status: response.status, headers: response.headers })
       },
     }
   }
   accept(manifest, adapter, builtin, context) {
     if (this.adapters.has(manifest.id) || !adapter || adapter.id !== manifest.id || methods.some(method => typeof adapter[method] !== 'function')) throw Error('CONTRACT')
+    if (manifest.authentication && ['status', 'start', 'poll', 'cancel', 'logout'].some(method => typeof adapter.auth?.[method] !== 'function')) throw Error('AUTH_CONTRACT')
     this.adapters.set(manifest.id, adapter)
     this.fetchers.set(manifest.id, adapter.fetchMedia || context.fetchMedia)
     Object.assign(this.definitions.get(manifest.id).status, { available: true, code: undefined })
@@ -85,6 +89,7 @@ export class ProviderRegistry {
       ...(manifest.queryHint ? { queryHint: manifest.queryHint } : {}),
       ...(manifest.queryMode ? { queryMode: manifest.queryMode } : {}),
       ...(manifest.emptyMessage ? { emptyMessage: manifest.emptyMessage } : {}),
+      ...(manifest.authentication ? { authentication: manifest.authentication } : {}),
       enabled: this.enabled.has(manifest.id) && manifest.enabled !== false,
       configurable: manifest.enabled !== false, available: false, code: 'DISABLED' }
     const definition = { manifest, factory, builtin, status }
