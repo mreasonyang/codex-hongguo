@@ -171,6 +171,14 @@ try {
   await access(join(installedRoot, 'bin/run-node-arm64.exe'))
   await access(join(installedRoot, 'dist/vendor/openhongguo/dist/openhongguo.wasm'))
   await assert.rejects(access(join(installedRoot, 'node_modules')))
+  await assert.rejects(access(join(installedRoot, 'docs/images')), { code: 'ENOENT' }, 'README 截图不得随插件安装')
+  const screenshotRoot = `https://raw.githubusercontent.com/mreasonyang/codex-hongguo/v${version}/docs/images/`
+  for (const guide of ['README.md', 'README.en.md']) {
+    const contents = await readFile(join(installedRoot, guide), 'utf8')
+    const images = [...contents.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)].map(match => match[1])
+    assert.equal(images.length, 2, '中英文安装指南必须保留两张界面截图')
+    assert.ok(images.every(url => url.startsWith(screenshotRoot)), '安装指南截图必须引用对应版本的远程图片')
+  }
   const checked = spawnSync(process.execPath, [join(installedRoot, 'dist/setup/check.mjs')], {
     cwd: root, env, encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'ignore'],
   })

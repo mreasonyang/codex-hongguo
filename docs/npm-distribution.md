@@ -38,6 +38,10 @@ MCP 使用同名的 `bin/run-node` / Windows `bin/run-node.exe` 入口，Hooks �
 - `dist/vendor/openhongguo/`，包括 WASM。
 - 截取后的中英文 README、项目 MIT 许可证 `LICENSE` 和 `licenses/` 第三方许可声明。
 
+README 的界面截图以无损 WebP 留在源码仓库中，npm 包和离线 ZIP 均不携带截图。
+打包后的中英文 README 使用与发行版本标签绑定的 GitHub 图片地址，保留截图展示。
+安装验收检查安装目录中没有截图，且两份 README 的图片链接均指向该版本。
+
 包不声明安装依赖或生命周期脚本，也不包含本机绝对路径、观看媒体、设备档案、测试数据和凭据。便携清单保留在源码，安装包采用已验证的兼容清单。项目采用 [MIT 许可证](../LICENSE)，npm 元数据使用 `MIT`；第三方依赖仍按各自许可分发。
 
 ## 产物与验收
