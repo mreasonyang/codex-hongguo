@@ -6,7 +6,6 @@ import { tmpdir } from 'node:os'
 import { ProviderRegistry } from '../src/server/providers/registry.mjs'
 import { qualify, parseId, matchesSeries } from '../src/server/sources/ids.mjs'
 import { HongguoSource } from '../src/server/sources/hongguo.mjs'
-import { HghubSource } from '../src/server/sources/hghub.mjs'
 import { decodeCursor, sourceCall } from '../src/server/sources/contracts.mjs'
 import { boundedResponse, responseBytes } from '../src/server/sources/network.mjs'
 import { Store } from '../src/server/store.mjs'
@@ -22,7 +21,7 @@ async function temporary(t) {
 function adapter(id) {
   return { id, async listSeries() { return { items: [{ id: '1', title: id }], cursor: null } },
     async getSeries() { return { id: '1', title: id } },
-    async listEpisodes() { return { items: [{ id: id === 'hghub' ? '1_1' : '1', number: 1, label: '1', playable: true }], cursor: null } },
+    async listEpisodes() { return { items: [{ id: '1', number: 1, label: '1', playable: true }], cursor: null } },
     async getCover() { return null }, async resolvePlayback() { return { candidates: [] } } }
 }
 const pluginCode = `export function createProvider(context) {
@@ -41,7 +40,7 @@ async function install(root, folder, patch = {}, code = pluginCode) {
   return dir
 }
 function fixtures(create = id => adapter(id)) {
-  return ['hongguo', 'hghub'].map(id => ({
+  return ['hongguo', 'demo'].map(id => ({
     manifest: { apiVersion: 1, id, name: id, version: '1.0.0' }, createProvider: context => create(id, context),
   }))
 }
@@ -53,16 +52,16 @@ test('only Hongguo starts by default; enabling, stopping and restarting a provid
   }) })
   await registry.ready; t.after(() => registry.dispose())
   assert.deepEqual(created.map(([id]) => id), ['hongguo'])
-  assert.equal(registry.list().find(p => p.id === 'hghub').enabled, false)
-  assert.throws(() => registry.get('hghub'), /片源插件不可用/)
-  await registry.configure(['hongguo', 'hghub'])
-  assert.equal(registry.get('hghub').id, 'hghub')
+  assert.equal(registry.list().find(p => p.id === 'demo').enabled, false)
+  assert.throws(() => registry.get('demo'), /片源插件不可用/)
+  await registry.configure(['hongguo', 'demo'])
+  assert.equal(registry.get('demo').id, 'demo')
   await registry.configure(['hongguo'])
-  assert.deepEqual(disposed, ['hghub'])
+  assert.deepEqual(disposed, ['demo'])
   assert.equal(created[1][1].aborted, true)
-  assert.throws(() => registry.get('hghub'))
-  await registry.configure(['hongguo', 'hghub'])
-  assert.deepEqual(created.map(([id]) => id), ['hongguo', 'hghub', 'hghub'])
+  assert.throws(() => registry.get('demo'))
+  await registry.configure(['hongguo', 'demo'])
+  assert.deepEqual(created.map(([id]) => id), ['hongguo', 'demo', 'demo'])
   assert.equal(created[2][1].aborted, false)
 })
 test('discovery does not import unconfigured local providers', async t => {
@@ -88,28 +87,28 @@ test('provider settings persist, sync between services, reject old cached media 
   }
   const a = make(store), b = make(peer)
   assert.deepEqual((await a.service.call(a.scope, 'get_providers', {})).items.filter(p => p.available).map(p => p.id), ['hongguo'])
-  await assert.rejects(a.service.call(a.scope, 'set_source', { source: 'hghub' }))
-  await a.service.call(a.scope, 'set_preferences', { enabledProviders: ['hongguo', 'hghub'] })
-  await b.service.call(b.scope, 'set_source', { source: 'hghub' })
-  await b.service.call(b.scope, 'get_episodes', { seriesId: 'hh-1' })
-  b.scope.grants = new Set(['hh-1_1']); b.scope.streams = new Map([['hh-1_1', 'old']]); b.scope.playing = 'hh-1_1'
-  b.scope.selection = { seriesId: 'hh-1', episodeId: 'hh-1_1' }
-  b.scope.waiting = { selected: { id: 'hh-1', title: 'Old pick' } }
-  await b.service.call(b.scope, 'save_progress', { seriesId: 'hh-1', episodeId: 'hh-1_1', title: 'Kept', label: '1', positionMs: 1234, durationMs: 5000 })
+  await assert.rejects(a.service.call(a.scope, 'set_source', { source: 'demo' }))
+  await a.service.call(a.scope, 'set_preferences', { enabledProviders: ['hongguo', 'demo'] })
+  await b.service.call(b.scope, 'set_source', { source: 'demo' })
+  await b.service.call(b.scope, 'get_episodes', { seriesId: 'p.demo.s.MQ' })
+  b.scope.grants = new Set(['p.demo.e.MQ']); b.scope.streams = new Map([['p.demo.e.MQ', 'old']]); b.scope.playing = 'p.demo.e.MQ'
+  b.scope.selection = { seriesId: 'p.demo.s.MQ', episodeId: 'p.demo.e.MQ' }
+  b.scope.waiting = { selected: { id: 'p.demo.s.MQ', title: 'Old pick' } }
+  await b.service.call(b.scope, 'save_progress', { seriesId: 'p.demo.s.MQ', episodeId: 'p.demo.e.MQ', title: 'Kept', label: '1', positionMs: 1234, durationMs: 5000 })
   const restarted = make(peer)
   await restarted.sources.ready
-  assert.equal(restarted.sources.get('hghub').id, 'hghub')
+  assert.equal(restarted.sources.get('demo').id, 'demo')
   await a.service.call(a.scope, 'set_preferences', { enabledProviders: ['hongguo'] })
   await b.service.call(b.scope, 'get_providers', {})
   assert.equal(b.scope.source, 'hongguo'); assert.equal(b.scope.allowed.size, 0)
   assert.equal(b.scope.grants.size, 0); assert.equal(b.scope.streams.size, 0)
   assert.equal(b.scope.selection, undefined); assert.equal(b.scope.waiting.selected, null)
   assert.equal(store.preferences().defaultSource, 'hongguo')
-  await assert.rejects(b.service.call(b.scope, 'get_episodes', { seriesId: 'hh-1' }))
-  assert.throws(() => b.catalog.prepare('hh-1_1', true))
-  assert.equal(peer.history(undefined, undefined, 30, 'hghub')[0].positionMs, 1234)
+  await assert.rejects(b.service.call(b.scope, 'get_episodes', { seriesId: 'p.demo.s.MQ' }))
+  assert.throws(() => b.catalog.prepare('p.demo.e.MQ', true))
+  assert.equal(peer.history(undefined, undefined, 30, 'demo')[0].positionMs, 1234)
   await assert.rejects(a.service.call(a.scope, 'set_preferences', { enabledProviders: ['hongguo', 'missing'] }))
-  await assert.rejects(a.service.call(a.scope, 'set_preferences', { enabledProviders: ['hghub'] }))
+  await assert.rejects(a.service.call(a.scope, 'set_preferences', { enabledProviders: ['demo'] }))
   assert.deepEqual(peer.preferences().enabledProviders, ['hongguo'])
 })
 test('local providers load through the same contract, retain opaque IDs and dispose cleanly', async t => {
@@ -137,7 +136,7 @@ test('local providers load through the same contract, retain opaque IDs and disp
   await registry.dispose()
   assert.equal(provider.disposed, true); assert.equal(provider.signal.aborted, true)
 })
-test('invalid, duplicate, disabled, escaping and broken plugins leave both builtins operational', async t => {
+test('invalid, duplicate, disabled, escaping and broken plugins leave Hongguo operational', async t => {
   const root = await temporary(t), directory = join(root, 'plugins'); await mkdir(directory)
   await install(directory, 'bad-version', { apiVersion: 2 })
   await install(directory, 'duplicate', { id: 'hongguo' })
@@ -147,10 +146,9 @@ test('invalid, duplicate, disabled, escaping and broken plugins leave both built
   await install(directory, 'incomplete', {}, 'export function createProvider(){return {id:"incomplete"}}')
   const linked = await install(directory, 'linked')
   await rm(join(linked, 'index.mjs')); await symlink(join(directory, 'broken/index.mjs'), join(linked, 'index.mjs'))
-  const registry = new ProviderRegistry(root, { directory, enabled: ['hongguo', 'hghub', 'broken', 'incomplete'] }); await registry.ready
-  assert.deepEqual(registry.list().filter(p => p.available).map(p => p.id), ['hongguo', 'hghub'])
+  const registry = new ProviderRegistry(root, { directory, enabled: ['hongguo', 'broken', 'incomplete'] }); await registry.ready
+  assert.deepEqual(registry.list().filter(p => p.available).map(p => p.id), ['hongguo'])
   assert.equal(registry.get('hongguo') instanceof HongguoSource, true)
-  assert.equal(registry.get('hghub') instanceof HghubSource, true)
   assert.ok(!JSON.stringify(registry.list()).includes('private diagnostic'))
   assert.ok(!JSON.stringify(registry.list()).includes(root))
   await registry.dispose()
@@ -163,60 +161,50 @@ test('an unavailable local directory is isolated and a removed default falls bac
   assert.equal(registry.list().at(-1).code, 'DIRECTORY_UNAVAILABLE')
   await registry.dispose()
 })
+test('removed sources cannot reopen through saved defaults or stale recommendations', async t => {
+  const root = await temporary(t), store = new Store(root); t.after(() => store.close())
+  store.setPreferences({ enabledProviders: ['hongguo', 'removed'], defaultSource: 'removed' })
+  const catalog = new Catalog(store), service = new Service(store, catalog)
+  t.after(() => catalog.sources.dispose())
+  const scope = service.panel(service.open({ threadId: 'A' }).panel)
+  assert.equal(scope.source, 'hongguo')
+  assert.equal((await service.call(scope, 'get_preferences', {})).defaultSource, 'hongguo')
+  assert.equal((await service.call(scope, 'set_preferences', { volume: 0.42 })).defaultSource, 'hongguo')
+  scope.source = 'removed'; scope.selection = { seriesId: 'hh-1' }; scope.waiting = { selected: { id: 'hh-1' } }
+  assert.deepEqual((await service.call(scope, 'get_providers', {})).items.map(row => row.id), ['hongguo'])
+  assert.equal(scope.source, 'hongguo'); assert.equal(scope.selection, undefined); assert.equal(scope.waiting.selected, null)
+  await assert.rejects(service.call(scope, 'set_source', { source: 'removed' }))
+  store.db.prepare('INSERT INTO turn_picks VALUES(?,?,?,?,?)').run('A', 'old', JSON.stringify([{ id: 'hh-1', title: 'Removed' }]), null, 1)
+  assert.deepEqual((await service.waitingPicks('A', 'old', true, () => true)).items, [])
+  assert.throws(() => parseId('hh-1'))
+})
 test('IDs preserve legacy Hongguo paths and isolate arbitrary plugin IDs on all platforms', () => {
   assert.equal(qualify('hongguo', '123'), 'hg-123')
-  assert.equal(qualify('hghub', '117_3', 'episode'), 'hh-117_3')
   const id = qualify('local', 'a/b:中文', 'episode')
   assert.deepEqual(parseId(id, 'episode'), { source: 'local', id: 'a/b:中文' })
   assert.ok(!/[/:\\]/.test(id))
   assert.throws(() => parseId(id))
   assert.throws(() => parseId('p.hongguo.s.MQ'))
   assert.throws(() => qualify('local', 'x'.repeat(100), 'episode'))
-  assert.equal(matchesSeries('hh-117', 'hh-118_1'), false)
-  assert.equal(matchesSeries('hg-117', 'hh-117_1'), false)
+  assert.equal(matchesSeries('hg-117', qualify('local', '117', 'episode')), false)
 })
-for (const name of ['hongguo', 'hghub']) test(name + ' implements browsing, search and bound pagination', async t => {
-  const provider = name === 'hongguo' ? new HongguoSource('/unused') : new HghubSource()
-  const calls = []
-  if (name === 'hongguo') t.mock.method(provider, 'sdkCall', async (method, arg, options) => {
-    calls.push([method, arg, options])
+test('Hongguo implements browsing, search and bound pagination', async t => {
+  const provider = new HongguoSource('/unused')
+  t.mock.method(provider, 'sdkCall', async (method, arg, options) => {
     if (method === 'getSeries') return { id: arg, title: 'show', episode_count: 2 }
     if (method === 'listEpisodes') return { items: [{ id: options.cursor ? '12' : '11', number: 1 }], has_more: !options.cursor, cursor: 'next' }
     const page = (typeof arg === 'object' ? arg : options)?.cursor
     return { items: [{ id: page ? '2' : '1', title: 'show', episode_count: 2 }], has_more: !page, cursor: 'next' }
   })
-  else t.mock.method(provider, 'sdk', async () => ({ base: 'https://huangguoai.com', setBase(value) { this.base = value },
-    async feed({ page }) { calls.push(['feed', page]); return { items: [{ id: page, title: 'show', episodes: 2 }], pages: 2 } },
-    async search(query, { page }) { calls.push(['search', page]); return { items: [{ id: page, title: query }], pages: 2 } },
-    async getVideo(id) { calls.push(['detail', id]); return { id, title: 'show', episodeList: [1, 2].map(number => ({ number, playable: true })) } },
-  }))
   const first = await provider.listSeries({ query: 'a', pageSize: 1 })
   const second = await provider.listSeries({ query: 'a', cursor: first.cursor, pageSize: 1 })
   assert.equal(first.items[0].id, '1'); assert.equal(second.items[0].id, '2'); assert.equal(second.cursor, null)
   await assert.rejects(provider.listSeries({ query: 'b', cursor: first.cursor }))
-  assert.throws(() => decodeCursor(first.cursor, name === 'hongguo' ? 'hghub' : 'hongguo', 'list', 'a'))
+  assert.throws(() => decodeCursor(first.cursor, 'local', 'list', 'a'))
   const ep = await provider.listEpisodes('1', { pageSize: 1 })
   const next = await provider.listEpisodes('1', { cursor: ep.cursor, pageSize: 1 })
   assert.equal(next.items.length, 1)
   await assert.rejects(provider.listEpisodes('2', { cursor: ep.cursor, pageSize: 1 }))
-  if (name === 'hghub') assert.equal(calls.filter(c => c[0] === 'detail').length, 1)
-})
-test('Hghub does not load global profiles, rotates failed lines once and does not fan out 429', async t => {
-  const provider = new HghubSource(), seen = []
-  t.mock.method(globalThis, 'fetch', async (url, options) => {
-    assert.equal(options.headers.authorization, undefined)
-    seen.push(url.hostname)
-    return url.hostname === 'huangguoai.com' ? new Response('unavailable', { status: 503 })
-      : new Response(JSON.stringify({ status: 1, data: { items: [{ id: 1, title: 'fixture' }], pagination: { pages: 1 } } }))
-  })
-  const page = await provider.listSeries({ pageSize: 1 })
-  assert.equal(page.items.length, 1)
-  assert.deepEqual([...new Set(seen)], ['huangguoai.com', 'huangguoai.ai'])
-  assert.equal((await provider.sdk()).isLoggedIn, false)
-  seen.length = 0
-  t.mock.method(globalThis, 'fetch', async url => { seen.push(url.hostname); return new Response('{}', { status: 429 }) })
-  await assert.rejects(provider.listSeries(), e => e.code === 'RATE_LIMITED')
-  assert.equal(seen.length, 1)
 })
 test('network policies validate every redirect, preserve ranges and bound unknown-length bodies', async t => {
   let requests = 0
@@ -230,8 +218,8 @@ test('network policies validate every redirect, preserve ranges and bound unknow
 })
 test('source changes preserve another panel, its history and fixed per-turn recommendations', async t => {
   const root = await temporary(t), store = new Store(root); t.after(() => store.close())
-  store.setPreferences({ enabledProviders: ['hongguo', 'hghub'] })
-  const providers = new ProviderRegistry(root, { builtins: ['hongguo', 'hghub'].map(id => ({
+  store.setPreferences({ enabledProviders: ['hongguo', 'demo'] })
+  const providers = new ProviderRegistry(root, { builtins: ['hongguo', 'demo'].map(id => ({
     manifest: { apiVersion: 1, id, name: id, version: '1.0.0' }, createProvider: () => adapter(id),
   })) })
   t.after(() => providers.dispose())
@@ -240,15 +228,15 @@ test('source changes preserve another panel, its history and fixed per-turn reco
   const a = service.panel(service.open({ threadId: 'A' }).panel), b = service.panel(service.open({ threadId: 'B' }).panel)
   const progress = { title: 'fixture', label: '1', positionMs: 500, durationMs: 1000 }
   store.save({ ...progress, seriesId: 'hg-1', episodeId: 'hg-1' })
-  store.save({ ...progress, seriesId: 'hh-1', episodeId: 'hh-1_1' })
-  await service.call(a, 'set_source', { source: 'hghub' })
+  store.save({ ...progress, seriesId: 'p.demo.s.MQ', episodeId: 'p.demo.e.MQ' })
+  await service.call(a, 'set_source', { source: 'demo' })
   assert.equal(b.source, 'hongguo')
-  assert.equal(service.panel(service.open({ threadId: 'C' }).panel).source, 'hghub')
-  assert.equal((await service.call(a, 'get_history', {})).items[0].seriesId, 'hh-1')
+  assert.equal(service.panel(service.open({ threadId: 'C' }).panel).source, 'demo')
+  assert.equal((await service.call(a, 'get_history', {})).items[0].seriesId, 'p.demo.s.MQ')
   assert.equal((await service.call(b, 'get_history', {})).items[0].seriesId, 'hg-1')
   assert.equal(store.recommendationSource('A', 'turn', 'hongguo'), 'hongguo')
-  assert.equal(store.recommendationSource('A', 'turn', 'hghub'), 'hongguo')
-  await assert.rejects(service.call(a, 'save_progress', { ...progress, seriesId: 'hg-1', episodeId: 'hh-1_1' }))
+  assert.equal(store.recommendationSource('A', 'turn', 'demo'), 'hongguo')
+  await assert.rejects(service.call(a, 'save_progress', { ...progress, seriesId: 'hg-1', episodeId: 'p.demo.e.MQ' }))
   await assert.rejects(service.call(a, 'set_source', { source: 'not-installed' }))
 })
 test('a late episode response cannot restore grants after switching providers', async t => {
@@ -258,7 +246,7 @@ test('a late episode response cannot restore grants after switching providers', 
   const scope = service.panel(service.open({ threadId: 'A' }).panel)
   const loading = service.call(scope, 'get_episodes', { seriesId: 'hg-1' })
   const rejected = assert.rejects(loading, /选源已变更/)
-  await service.call(scope, 'set_source', { source: 'hghub' })
+  await service.call(scope, 'set_source', { source: 'demo' })
   pending.resolve({ items: [{ id: 'hg-1', playable: true }] })
   await rejected
   assert.equal(scope.allowed?.size || 0, 0)
@@ -282,9 +270,9 @@ test('a version-one database keeps legacy Hongguo progress, preferences and reco
     assert.equal(store.preferences().autoPlayOnStart, false)
     assert.equal(store.preferences().volume, 0.43)
     assert.deepEqual(store.waitingFeed(), [{ id: 'hg-2', title: 'Existing recommendation' }])
-    store.saveWaitingFeed([{ id: 'hh-1', title: 'Other source' }], Date.now(), 'hghub')
+    store.saveWaitingFeed([{ id: 'p.demo.s.MQ', title: 'Other source' }], Date.now(), 'demo')
     assert.equal(store.waitingFeed(false, 'hongguo')[0].id, 'hg-2')
-    assert.equal(store.waitingFeed(false, 'hghub')[0].id, 'hh-1')
+    assert.equal(store.waitingFeed(false, 'demo')[0].id, 'p.demo.s.MQ')
     assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 2)
   } finally { store.close() }
   const reopened = new Store(root)

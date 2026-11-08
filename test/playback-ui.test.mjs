@@ -76,7 +76,7 @@ function setup(t) {
   const api = {
     browser: false, connect: async () => {}, hostLocale: () => 'zh',
     call: (name, args = {}) => name === 'get_providers' && !service.catalog.sources
-      ? Promise.resolve({ items: store.preferences().enabledProviders.map(id => ({ id, name: id === 'hongguo' ? '红果' : id === 'hghub' ? '黄果' : id, available: true, enabled: true, configurable: true })) })
+      ? Promise.resolve({ items: store.preferences().enabledProviders.map(id => ({ id, name: id === 'hongguo' ? '红果' : id === 'demo' ? '示例片源' : id, available: true, enabled: true, configurable: true })) })
       : service.call(panel, name, args),
   }
   const exports = {}, context = vm.createContext({
@@ -95,8 +95,8 @@ function setup(t) {
   vm.runInContext(code, context)
   const ui = context.module.exports.fixture
   ui.selected()
-  ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'hghub', name: '黄果', available: true }])
-  store.setPreferences({ enabledProviders: ['hongguo', 'hghub'] })
+  ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'demo', name: '示例片源', available: true }])
+  store.setPreferences({ enabledProviders: ['hongguo', 'demo'] })
   let at = Date.now()
   return {
     store, peer, service, panel, video, document, window, ui, elements,
@@ -127,14 +127,14 @@ test('hovering or clicking the source mark opens a menu; only choosing a provide
   assert.equal(menu.hidden, false)
   assert.equal(f.ui.sourceState().source, 'hongguo')
   menu.children[1].onclick(); await flush()
-  assert.equal(f.ui.sourceState().source, 'hghub')
-  assert.equal(control.dataset.source, 'hghub')
+  assert.equal(f.ui.sourceState().source, 'demo')
+  assert.equal(control.dataset.source, 'demo')
   assert.equal(control.getAttribute('aria-label'), '切换视频源')
-  assert.equal(f.elements.get('sourceName').textContent, '黄果短剧')
+  assert.equal(f.elements.get('sourceName').textContent, '示例片源')
   assert.equal(f.elements.get('sourceMenu').hidden, true)
   assert.equal(control.disabled, false)
   control.onclick(); await flush()
-  assert.equal(f.ui.sourceState().source, 'hghub')
+  assert.equal(f.ui.sourceState().source, 'demo')
   menu.children[0].onclick(); await flush()
   assert.equal(f.ui.sourceState().source, 'hongguo')
 })
@@ -166,9 +166,9 @@ test('keyboard opening focuses the current provider and Escape returns to the so
 })
 test('additional providers use a checked menu and select through the existing source service', async t => {
   const f = setup(t)
-  f.store.setPreferences({ enabledProviders: ['hongguo', 'hghub', 'local'] })
+  f.store.setPreferences({ enabledProviders: ['hongguo', 'demo', 'local'] })
   f.service.catalog = { list: async () => ({ items: [] }) }
-  f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'hghub', name: '黄果', available: true },
+  f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'demo', name: '示例片源', available: true },
     { id: 'local', name: 'Local provider', available: true }])
   const control = f.elements.get('source'), menu = f.elements.get('sourceMenu')
   control.onclick()
@@ -184,7 +184,7 @@ test('additional providers use a checked menu and select through the existing so
 })
 test('a single available provider disables switching instead of opening an empty menu', t => {
   const f = setup(t)
-  f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'hghub', name: '黄果', available: false }])
+  f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'demo', name: '示例片源', available: false }])
   const control = f.elements.get('source')
   assert.equal(control.disabled, true)
   control.onpointerenter({ pointerType: 'mouse' })
@@ -192,11 +192,11 @@ test('a single available provider disables switching instead of opening an empty
   assert.equal(f.elements.get('sourceMenu').hidden, true)
   assert.equal(f.ui.sourceState().source, 'hongguo')
 })
-test('the settings form enables Huangguo explicitly, then disabling it returns to Hongguo', async t => {
+test('the settings form enables local provider explicitly, then disabling it returns to Hongguo', async t => {
   const f = setup(t)
   f.store.setPreferences({ enabledProviders: ['hongguo'] })
-  const sources = new ProviderRegistry(f.store.root, { builtins: ['hongguo', 'hghub'].map(id => ({
-    manifest: { apiVersion: 1, id, name: id === 'hongguo' ? '红果' : '黄果', version: '1.0.0' },
+  const sources = new ProviderRegistry(f.store.root, { builtins: ['hongguo', 'demo'].map(id => ({
+    manifest: { apiVersion: 1, id, name: id === 'hongguo' ? '红果' : '示例片源', version: '1.0.0' },
     createProvider: () => ({ id, async listSeries() { return { items: [], cursor: null } },
       async getSeries() {}, async listEpisodes() { return { items: [], cursor: null } }, async getCover() {}, async resolvePlayback() {} }),
   })) })
@@ -209,34 +209,34 @@ test('the settings form enables Huangguo explicitly, then disabling it returns t
   assert.equal(f.elements.get('source').disabled, true)
   rows[1].children[1].checked = true
   f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
-  assert.equal(sources.get('hghub').id, 'hghub')
+  assert.equal(sources.get('demo').id, 'demo')
   assert.equal(f.elements.get('source').disabled, false)
-  await f.ui.changeSource('hghub')
+  await f.ui.changeSource('demo')
   await f.elements.get('prefs').onclick()
   rows = f.elements.get('providerSettings').children
   rows[1].children[1].checked = false
   f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
-  assert.throws(() => sources.get('hghub'))
+  assert.throws(() => sources.get('demo'))
   assert.equal(f.ui.sourceState().source, 'hongguo')
   assert.equal(f.elements.get('source').disabled, true)
 })
 
 test('switching providers saves progress, stops playback and discards the old catalog response', async t => {
   const f = setup(t), old = Promise.withResolvers()
-  f.service.catalog = { list: async options => options.source === 'hghub'
-    ? { items: [{ id: 'hh-1', title: 'Yellow' }] } : old.promise }
+  f.service.catalog = { list: async options => options.source === 'demo'
+    ? { items: [{ id: 'p.demo.s.MQ', title: 'Demo' }] } : old.promise }
   const initial = f.ui.list()
   await flush()
-  await f.ui.changeSource('hghub')
-  assert.equal(f.ui.sourceState().source, 'hghub')
-  assert.deepEqual([...f.ui.sourceState().cards], ['hh-1'])
+  await f.ui.changeSource('demo')
+  assert.equal(f.ui.sourceState().source, 'demo')
+  assert.deepEqual([...f.ui.sourceState().cards], ['p.demo.s.MQ'])
   assert.equal(f.ui.episodeId(), undefined)
   assert.equal(f.video.paused, true)
   assert.equal(f.store.history('hg-1', 'hg-11')[0].positionMs, 12000)
   old.resolve({ items: [{ id: 'hg-1', title: 'Late red' }] })
   await initial; await flush()
-  assert.deepEqual([...f.ui.sourceState().cards], ['hh-1'])
-  assert.equal(f.panel.source, 'hghub')
+  assert.deepEqual([...f.ui.sourceState().cards], ['p.demo.s.MQ'])
+  assert.equal(f.panel.source, 'demo')
 })
 test('global default changes do not switch an existing player and stale history cannot cross sources', async t => {
   const f = setup(t), delayed = Promise.withResolvers(), call = f.service.call.bind(f.service)
@@ -247,7 +247,7 @@ test('global default changes do not switch an existing player and stale history 
   }
   f.service.catalog = { list: async () => ({ items: [] }) }
   const history = f.ui.history(); await flush()
-  await f.ui.changeSource('hghub')
+  await f.ui.changeSource('demo')
   deferRed = false
   delayed.resolve({ items: [{ seriesId: 'hg-1', episodeId: 'hg-11', title: 'late', label: '1', positionMs: 1, durationMs: 10 }] })
   await history
@@ -255,7 +255,7 @@ test('global default changes do not switch an existing player and stale history 
   const other = f.service.panel(f.service.open({ threadId: 'C' }).panel)
   await f.service.call(other, 'set_source', { source: 'hongguo' })
   await f.poll()
-  assert.equal(f.ui.sourceState().source, 'hghub')
+  assert.equal(f.ui.sourceState().source, 'demo')
   assert.equal(f.store.preferences().defaultSource, 'hongguo')
 })
 

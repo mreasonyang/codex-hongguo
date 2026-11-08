@@ -13,7 +13,7 @@
 
 Watch Hongguo short dramas in the right-hand panel of Codex Desktop, with browsing, search, resume and autoplay next. By default, a new task resumes the selected episode; finishing or interrupting the task pauses playback and saves your position. You can turn off either behavior independently in Settings. The plugin supports local-executor Codex Desktop conversations.
 
-Only Hongguo is enabled by default. Enable Huangguo under Settings → Providers and save, then hover over the play mark at the top left to open the source popover. Select a provider inside it to switch sources. Keyboard and touch users can also activate the mark to open the popover. Recommendations, search, history and cache identities are separate for each source; switching saves your position and stops playback. Explicitly installed local sources can use the [Provider plugin API](docs/providers.md) (Chinese).
+Hongguo is the built-in source. Explicitly installed local sources can use the [Provider plugin API](docs/providers.md) (Chinese). Enable a plugin under Settings → Providers and save, then hover over the play mark at the top left to choose an enabled source. Select a provider inside the popover to switch. Recommendations, search, history and cache identities are separate for each source; switching saves your position and stops playback.
 
 This is an independent, unofficial plugin with original icon artwork. The red fruit echoes the name Hongguo ("red fruit"), while the leaf and play button form the plugin's own mark.
 

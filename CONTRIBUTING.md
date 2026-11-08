@@ -49,9 +49,9 @@ node scripts/verify-install.mjs --playback
 | `src/hooks/write.mjs` | 读取回合事件，写入允许的状态字段；符合条件时提示模型调用一次可选推荐工具。 |
 | `src/server/store.mjs` | SQLite 进度、回合、设置、推荐轮换和播放器可见性记录。 |
 | `src/server/service.mjs` | 会话/回合绑定、面板能力、推荐领取、分集授权和应用工具调用。 |
-| `src/server/index.mjs` | 注册 MCP 工具及 `ui://hongguo/v23/player`、`ui://hongguo/v23/waiting` 两个 UI 资源，兼容旧 URI。 |
+| `src/server/index.mjs` | 注册 MCP 工具及 `ui://hongguo/v24/player`、`ui://hongguo/v24/waiting` 两个 UI 资源，兼容旧 URI。 |
 | `src/server/catalog.mjs` | 统一片库、推荐、搜索、分集、封面与缓存编排。 |
-| `src/server/sources/`、`providers/` | 适配契约、限定 ID、红果/黄果驱动与内置/本地 Provider 注册、发现和生命周期；接口见 [Provider 插件](docs/providers.md)。 |
+| `src/server/sources/`、`providers/` | 适配契约、限定 ID、红果驱动与内置/本地 Provider 注册、发现和生命周期；接口见 [Provider 插件](docs/providers.md)。 |
 | `src/server/media.mjs`、`adaptive.mjs` | 整集获取、授权媒体解密/重封装、HLS/DASH 输入和主媒体缓存。 |
 | `src/server/panel-media.mjs`、`mp4-duration.mjs` | 面板 H.264/AAC 准备、硬件转码及软件回退、渐进 fMP4 分片、完整时长及分块读取。 |
 | `src/server/browser.mjs` | 一次性本机分屏配对、会话与媒体访问控制。 |
@@ -95,7 +95,7 @@ npm run version:patch
 | `HONGGUO_RUNTIME_DIR` | 指定播放组件缓存根目录，插件使用其下的 `codex-hongguo/` 专属命名空间。 |
 | `HONGGUO_CODEX` | 安装、更新和卸载：指定 Codex CLI。 |
 | `HONGGUO_PROFILE_PATH` | Catalog：指定匿名 SDK 设备档案位置。 |
-| `HONGGUO_PROVIDERS_DIR` | 可选：显式指定本地 Provider 插件父目录，启动时读取；不设置时只加载内置红果、黄果。 |
+| `HONGGUO_PROVIDERS_DIR` | 可选：显式指定本地 Provider 插件父目录，启动时发现；不设置时只加载内置红果。 |
 
 覆盖项必须在实际启动服务、Hook 或 Setup 的进程环境中可见。只在运行 npx 的终端里设置，不代表桌面宿主或其子进程继承了这些值；安装器不会把它们写进发布包。
 

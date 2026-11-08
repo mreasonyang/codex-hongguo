@@ -1,7 +1,7 @@
 import test from 'node:test'
 import { get } from 'node:http'
 import assert from 'node:assert/strict'
-import { copyFileSync, existsSync, mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
@@ -261,10 +261,17 @@ test('loopback pairing, origin, Host, cookie, fixed-turn scope, replay and conti
 })
 test('compiled MCP persists the provider startup configuration across process restarts', async t => {
   const { dir } = setup(t)
+  const directory = join(dir, 'plugins'), local = join(directory, 'demo')
+  mkdirSync(local, { recursive: true })
+  writeFileSync(join(local, 'provider.json'), JSON.stringify({ apiVersion: 1, id: 'demo', name: 'Demo', version: '1.0.0', entry: 'index.mjs' }))
+  writeFileSync(join(local, 'index.mjs'), `export function createProvider({id}) { return { id,
+    async listSeries() { return {items:[],cursor:null} }, async getSeries() {},
+    async listEpisodes() { return {items:[],cursor:null} }, async getCover() {}, async resolvePlayback() { return {candidates:[]} },
+  } }`)
   async function start() {
     const client = new Client({ name: 'provider-config-test', version: '1' })
     await client.connect(new StdioClientTransport({ command: process.execPath,
-      args: ['--no-warnings', join(projectRoot, 'dist/server/index.mjs')], env: env(dir), stderr: 'ignore' }))
+      args: ['--no-warnings', join(projectRoot, 'dist/server/index.mjs')], env: { ...env(dir), HONGGUO_PROVIDERS_DIR: directory }, stderr: 'ignore' }))
     t.after(() => client.close())
     const opened = await client.callTool({ name: 'open_drama_panel', arguments: {} })
     return { client, async call(name, args = {}) {
@@ -275,11 +282,11 @@ test('compiled MCP persists the provider startup configuration across process re
   }
   const first = await start()
   assert.deepEqual((await first.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo'])
-  await first.call('set_preferences', { enabledProviders: ['hongguo', 'hghub'] })
+  await first.call('set_preferences', { enabledProviders: ['hongguo', 'demo'] })
   await first.client.close()
   const second = await start()
-  assert.deepEqual((await second.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'hghub'])
-  await second.call('set_source', { source: 'hghub' })
+  assert.deepEqual((await second.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'demo'])
+  await second.call('set_source', { source: 'demo' })
   await second.call('set_preferences', { enabledProviders: ['hongguo'] })
   await second.client.close()
   const third = await start()
@@ -314,7 +321,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   })
   assert.equal(data.isError, true)
   const resources = (await client.listResources()).resources
-  const playerUri = 'ui://hongguo/v23/player', waitingUri = 'ui://hongguo/v23/waiting'
+  const playerUri = 'ui://hongguo/v24/player', waitingUri = 'ui://hongguo/v24/waiting'
   assert.equal(tools.find(t => t.name === 'show_waiting_picks')._meta.ui.resourceUri, waitingUri)
   assert.equal(tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri, playerUri)
   assert.deepEqual(resources.map(r => r.uri).sort(), [playerUri, waitingUri])
@@ -328,7 +335,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
     'ui://hongguo/v16/player', 'ui://hongguo/v16/waiting', 'ui://hongguo/v17/player', 'ui://hongguo/v17/waiting',
     'ui://hongguo/v18/player', 'ui://hongguo/v18/waiting', 'ui://hongguo/v19/player', 'ui://hongguo/v19/waiting',
     'ui://hongguo/v20/player', 'ui://hongguo/v20/waiting', 'ui://hongguo/v21/player', 'ui://hongguo/v21/waiting',
-    'ui://hongguo/v22/player', 'ui://hongguo/v22/waiting']) {
+    'ui://hongguo/v22/player', 'ui://hongguo/v22/waiting', 'ui://hongguo/v23/player', 'ui://hongguo/v23/waiting']) {
     const read = (await client.readResource({ uri })).contents[0]
     assert.equal(read.uri, uri)
     assert.deepEqual(read._meta.ui.csp, policy)

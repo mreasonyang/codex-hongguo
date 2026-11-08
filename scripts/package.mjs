@@ -51,7 +51,6 @@ for (const name of ['README.md', 'README.en.md']) {
 const notices = join(npmRoot, 'licenses')
 await mkdir(notices)
 await cp('third_party/ffmpeg', join(notices, 'ffmpeg'), { recursive: true })
-await cp('third_party/hghub', join(notices, 'hghub'), { recursive: true })
 await cp('src/runtime/ffmpeg-artifacts.json', join(notices, 'ffmpeg/ffmpeg-artifacts.json'))
 const lock = JSON.parse(await readFile('package-lock.json', 'utf8'))
 for (const [path, dependency] of Object.entries(lock.packages)) {

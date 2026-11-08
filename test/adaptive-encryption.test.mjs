@@ -91,7 +91,7 @@ test('MediaCache refreshes an expired authorization once and retains both source
   const bytes = await readFile(new URL('fixtures/avc-aac.mp4', import.meta.url))
   let resolves = 0, attempts = 0
   const cache = new MediaCache(store, async id => {
-    assert.ok(id === 'hg-1' || id === 'hh-1_1'); resolves++
+    assert.ok(id === 'hg-1' || id === 'p.demo.e.MQ'); resolves++
     return { candidates: [{ kind: 'file', url: 'https://fixture.invalid/video' }], fetchMedia: async () => {
       attempts++
       if (attempts === 1) { const e = new PlayerError('expired', 503); e.code = 'MEDIA_EXPIRED'; throw e }
@@ -100,14 +100,14 @@ test('MediaCache refreshes an expired authorization once and retains both source
   })
   assert.equal((await settled(cache, 'hg-1')).status, 'ready')
   assert.equal(resolves, 2)
-  assert.equal((await settled(cache, 'hh-1_1')).status, 'ready')
-  assert.notEqual(cache.path('hg-1'), cache.path('hh-1_1'))
+  assert.equal((await settled(cache, 'p.demo.e.MQ')).status, 'ready')
+  assert.notEqual(cache.path('hg-1'), cache.path('p.demo.e.MQ'))
   assert.equal(resolves, 3)
   assert.equal(cache.prepare('hg-1').status, 'ready')
   const denied = new MediaCache(store, async () => ({ candidates: [{ kind: 'file', url: 'https://fixture.invalid/x' }],
     fetchMedia: async () => { const e = new PlayerError('expired'); e.code = 'MEDIA_EXPIRED'; throw e } }))
   let deniedCount = 0
   const originalResolve = denied.resolve; denied.resolve = async (...args) => { deniedCount++; return originalResolve(...args) }
-  assert.equal((await settled(denied, 'hh-2_1')).status, 'error')
+  assert.equal((await settled(denied, 'p.demo.e.Mg')).status, 'error')
   assert.equal(deniedCount, 2)
 })

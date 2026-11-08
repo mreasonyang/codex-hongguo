@@ -1,8 +1,8 @@
 // The catalog supplies show names and episode titles. Translate player chrome only.
 const en: Record<string, string> = {
-  视频源: 'Video source', 红果: 'Hongguo', 黄果: 'Huangguo',
-  切换视频源: 'Switch video source', 切换至红果: 'Switch to Hongguo', 切换至黄果: 'Switch to Huangguo',
-  红果短剧: 'Hongguo', 黄果短剧: 'Huangguo',
+  视频源: 'Video source', 红果: 'Hongguo',
+  切换视频源: 'Switch video source',
+  红果短剧: 'Hongguo',
   '片源 Provider': 'Providers', '默认只启用红果，其他片源需手动开启': 'Only Hongguo is enabled by default. Enable other providers here.',
   '始终启用': 'Always enabled', '启动失败': 'Failed to start',
   '片源暂时没有返回推荐剧目': 'The source returned no recommendations.',

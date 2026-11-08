@@ -1,5 +1,7 @@
 # Provider 插件与双片源实施验收
 
+> 历史快照：黄果驱动、vendored SDK 与专用验证脚本已移除。本目录保留先前记录，不能代表当前支持范围，也不作为当前复现步骤；当前契约见 [Provider 插件](../../providers.md)。
+
 日期：2026-11-08（Asia/Shanghai）。分支：`feat/video-source-adapters`。版本：0.0.34，尚未进入版本发布流程。
 
 接口与安装方式见 [Provider 插件](../../providers.md)。本轮在原适配层方案上，按用户确认增加“内置 + 显式本地目录”的 Provider 发现、加载与生命周期。

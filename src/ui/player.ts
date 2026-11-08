@@ -59,7 +59,7 @@ let activeQuery = '',
   loaded = false
 let activeSource: SourceId = 'hongguo', sourceGeneration = 0, switchingSource = false
 let sourceUpdate = Promise.resolve()
-const sourceOf = (id: string): SourceId => id.startsWith('p.') ? id.split('.')[1] : id.startsWith('hh-') ? 'hghub' : 'hongguo'
+const sourceOf = (id: string): SourceId => id.startsWith('p.') ? id.split('.')[1] : 'hongguo'
 type Provider = { id: string; name: string; available: boolean; enabled?: boolean; configurable?: boolean; code?: string }
 let providers: Provider[] = [{ id: 'hongguo', name: '红果', available: true }]
 let providerOptions: Provider[] = []
@@ -98,7 +98,7 @@ function syncSourceButton() {
   control.dataset.source = activeSource
   control.dataset.busy = String(switchingSource)
   const name = providers.find(provider => provider.id === activeSource)?.name || activeSource
-  el('sourceName').textContent = activeSource === 'hongguo' ? tr('红果短剧') : activeSource === 'hghub' ? tr('黄果短剧') : name
+  el('sourceName').textContent = activeSource === 'hongguo' ? tr('红果短剧') : name
   const label = tr('切换视频源')
   control.setAttribute('aria-label', providers.length < 2 ? tr(name) : label)
   control.disabled = switchingSource || providers.length < 2

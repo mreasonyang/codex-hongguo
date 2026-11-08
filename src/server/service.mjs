@@ -126,7 +126,12 @@ export class Service {
   async waitingPicks(sessionId, turnId, inView, eligible, preferred) {
     if (!eligible()) return { items: [] }
     const pinned = this.store.turnPicks(sessionId, turnId)
-    const enabled = pick => !this.catalog.sources?.fallback || this.catalog.sources.fallback(parseId(pick.id).source) === parseId(pick.id).source
+    const enabled = pick => {
+      try {
+        const source = parseId(pick.id).source
+        return !this.catalog.sources?.fallback || this.catalog.sources.fallback(source) === source
+      } catch { return false }
+    }
     if (pinned.length) return { items: pinned.filter(enabled) }
     const source = this.store.recommendationSource(sessionId, turnId, preferred)
     if (this.catalog.sources?.fallback && this.catalog.sources.fallback(source) !== source) return { items: [] }
@@ -145,8 +150,9 @@ export class Service {
   }
   resetSource(scope, source) {
     scope.source = source
-    if (scope.selection && parseId(scope.selection.seriesId).source !== source) scope.selection = undefined
-    if (scope.waiting?.selected && parseId(scope.waiting.selected.id).source !== source) scope.waiting.selected = null
+    const belongs = id => { try { return parseId(id).source === source } catch { return false } }
+    if (scope.selection && !belongs(scope.selection.seriesId)) scope.selection = undefined
+    if (scope.waiting?.selected && !belongs(scope.waiting.selected.id)) scope.waiting.selected = null
     scope.sourceRevision = (scope.sourceRevision || 0) + 1
     scope.allowed?.clear(); scope.grants?.clear()
     this.catalog.panelMedia?.unpin(scope.playing, scope)
@@ -159,6 +165,10 @@ export class Service {
       const source = this.catalog.sources.fallback(panel.source)
       if (source !== panel.source) this.resetSource(panel, source)
     }
+  }
+  preferences() {
+    const settings = this.store.preferences()
+    return { ...settings, defaultSource: this.catalog.defaultSource?.() ?? settings.defaultSource }
   }
   async call(scope, name, args, browser = false) {
     const a = schemas[name]?.strict().safeParse(args)
@@ -246,7 +256,7 @@ export class Service {
           if (p.turnId || (scope.waiting && !scope.waiting.taken)) throw new PlayerError('请先打开播放器', 403)
           return {
             ...this.store.state(scope.sessionId, browser ? scope.fixedTurn : undefined),
-            preferences: this.store.preferences(),
+            preferences: this.preferences(),
             source: scope.source,
           }
         }
@@ -336,7 +346,7 @@ export class Service {
         return result
       }
       case 'get_preferences':
-        return this.store.preferences()
+        return this.preferences()
       case 'get_providers':
         await this.catalog.sources?.ready
         return { items: this.catalog.sources?.list() ?? [
@@ -352,7 +362,7 @@ export class Service {
           this.catalog.feed = null
           this.catalog.refresh = null
         }
-        return settings
+        return this.preferences()
       }
       case 'get_health':
         if (!this.catalog.ffmpeg) void this.catalog.prepareMediaRuntime?.().catch(() => {})

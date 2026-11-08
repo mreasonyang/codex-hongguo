@@ -2,7 +2,6 @@ import { lstat, readdir, readFile, realpath } from 'node:fs/promises'
 import { resolve, join, sep, isAbsolute } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { HongguoSource } from '../sources/hongguo.mjs'
-import { HghubSource } from '../sources/hghub.mjs'
 import { sourceId, parseId } from '../sources/ids.mjs'
 import { sourceCall } from '../sources/contracts.mjs'
 import { boundedResponse, responseBytes, mediaFetcher } from '../sources/network.mjs'
@@ -11,7 +10,6 @@ import { PlayerError } from '../errors.mjs'
 const methods = ['listSeries', 'getSeries', 'listEpisodes', 'getCover', 'resolvePlayback']
 export const builtins = [
   { manifest: { apiVersion: 1, id: 'hongguo', name: '红果', version: '1.0.0' }, createProvider: ctx => new HongguoSource(ctx.root) },
-  { manifest: { apiVersion: 1, id: 'hghub', name: '黄果', version: '1.0.0' }, createProvider: ctx => new HghubSource({ signal: ctx.signal }) },
 ]
 function validate(manifest) {
   if (!manifest || manifest.apiVersion !== 1 || sourceId(manifest.id) !== manifest.id ||

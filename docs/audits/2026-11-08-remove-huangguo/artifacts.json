@@ -1,0 +1,11 @@
+{
+  "checkedAt": "2026-11-08T04:15:18.212Z",
+  "runtimeSourceAndPackageTextFilesChecked": 68,
+  "removedProviderMatches": 0,
+  "tarEntries": 145,
+  "zipEntries": 154,
+  "archiveContainsRemovedProvider": false,
+  "compiledServerSha256": "40f1225b806f104d67b77b8ea8fd39da8d67ef92f32ecd7bf200e3a2137e22d6",
+  "npmPackageSha256": "4895ee2ff600242739dedfcf0dda42cf6cd9c0e407d84e9f5e0a1b6ec3b1ccea",
+  "offlineZipSha256": "03b81bded28e0c66b56a017b19b8688d5c222b2393b59b9021e6dfaa06141d30"
+}
