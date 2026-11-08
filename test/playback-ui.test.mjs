@@ -51,7 +51,7 @@ const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code
 const decoyCode = transformSync(readFileSync(new URL('../src/ui/hover-decoy.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code
 const flush = async () => { for (let i = 0; i < 50; i++) await Promise.resolve() }
 
-function setup(t, allowFrames = false) {
+function setup(t) {
   const root = mkdtempSync(join(tmpdir(), 'hongguo-playback-ui-'))
   const store = new Store(root), peer = new Store(root)
   t.after(() => { store.close(); peer.close(); rmSync(root, { recursive: true, force: true }) })
@@ -66,7 +66,7 @@ function setup(t, allowFrames = false) {
   })
   const window = Object.assign(new EventTarget(), { innerWidth: 900, innerHeight: 700, setInterval: () => 1, clearInterval() {}, scrollTo() {} })
   const api = {
-    browser: false, connect: async () => {}, hostLocale: () => 'zh', canEmbedDecoy: () => allowFrames,
+    browser: false, connect: async () => {}, hostLocale: () => 'zh',
     call: (name, args = {}) => service.call(panel, name, args),
   }
   const exports = {}, context = vm.createContext({
@@ -131,14 +131,10 @@ test('global playback switches default for older settings, synchronize across ch
   await assert.rejects(f.settings({ autoPlayOnStart: 'yes' }), /参数无效/)
   await assert.rejects(f.settings({ defaultMuted: 'yes' }), /参数无效/)
   assert.equal(f.peer.preferences().hoverDecoyEnabled, false)
-  assert.equal(f.peer.preferences().decoyUrl, '')
-  await f.settings({ hoverDecoyEnabled: true, decoyUrl: ' https://example.org/notes ' })
-  assert.equal(f.peer.preferences().decoyUrl, 'https://example.org/notes')
+  await f.settings({ hoverDecoyEnabled: true })
   const decoySettings = new Store(f.store.root)
   try { assert.equal(decoySettings.preferences().hoverDecoyEnabled, true) }
   finally { decoySettings.close() }
-  for (const decoyUrl of ['javascript:alert(1)', 'data:text/html,hello', 'file:///tmp/notes', 'https://name:pass@example.org', 'invalid', 'x'.repeat(2049)])
-    await assert.rejects(f.settings({ decoyUrl }), /参数无效/)
   for (const volume of [0, -1, 1.01, NaN, Infinity]) await assert.rejects(f.settings({ volume }), /参数无效/)
 })
 
@@ -153,14 +149,12 @@ test('playback and default-mute settings load and save through the player form',
   f.elements.get('autoPlayOnStart').checked = false
   f.elements.get('defaultMuted').checked = false
   f.elements.get('hoverDecoyEnabled').checked = true
-  f.elements.get('decoyUrl').value = 'https://example.org/notes'
   f.elements.get('settings').onsubmit({ preventDefault() {} })
   await flush()
   assert.equal(f.peer.preferences().autoPauseOnFinish, false)
   assert.equal(f.peer.preferences().autoPlayOnStart, false)
   assert.equal(f.peer.preferences().defaultMuted, false)
   assert.equal(f.peer.preferences().hoverDecoyEnabled, true)
-  assert.equal(f.peer.preferences().decoyUrl, 'https://example.org/notes')
   assert.equal(f.elements.get('settings').hidden, true)
 })
 
@@ -169,36 +163,6 @@ function movePointer(f, x = 40, y = 40) {
   Object.assign(event, { clientX: x, clientY: y, pointerType: 'mouse' })
   f.document.dispatchEvent(event)
 }
-test('saving new cover destinations replaces only the cover frame and immediately preserves active playback', async t => {
-  const f = setup(t, true)
-  f.service.coverFrame = (_scope, url) => url ? 'https://local-display.test/' + (url.includes('second') ? 'second' : 'first') : undefined
-  movePointer(f); f.event('one'); await f.poll(); await f.ui.start()
-  const plays = f.video.plays
-  const saveUrl = async url => {
-    await f.elements.get('prefs').onclick()
-    f.elements.get('hoverDecoyEnabled').checked = true
-    f.elements.get('decoyUrl').value = url
-    f.elements.get('settings').onsubmit({ preventDefault() {} })
-    await flush()
-  }
-  await saveUrl('https://first.example.org/work')
-  const host = f.elements.get('decoyWebsite'), first = host.children[0]
-  assert.equal(first.src, 'https://local-display.test/first')
-  assert.equal(f.video.paused, false)
-  await saveUrl('https://second.example.net/notes')
-  const second = host.children[0]
-  assert.equal(second === first, false)
-  assert.equal(second.src, 'https://local-display.test/second')
-  assert.equal(f.video.plays, plays)
-  assert.equal(f.video.currentTime, 12)
-  assert.equal(f.video.paused, false)
-  await saveUrl('https://second.example.net/notes')
-  assert.equal(host.children[0] === second, true, 'unrelated saves retain the existing frame')
-  await saveUrl('')
-  assert.equal(host.children.length, 0)
-  assert.equal(f.elements.get('decoyNotes').hidden, false)
-  assert.equal(f.video.paused, false)
-})
 async function enterPanel(t, f) { movePointer(f); t.mock.timers.tick(150); await flush() }
 async function hoveringPlayer(t, playing = true) {
   t.mock.timers.enable({ apis: ['setTimeout'] })

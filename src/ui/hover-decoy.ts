@@ -1,14 +1,13 @@
-type Settings = { hoverDecoyEnabled: boolean; decoyUrl: string; decoyFrameUrl?: string }
-type Options = { changed: (covered: boolean) => void; canEmbed: (url: string) => boolean }
+type Settings = { hoverDecoyEnabled: boolean }
+type Options = { changed: (covered: boolean) => void }
 
 /** Panel-local hover state. Conceal synchronously; only revealing is debounced. */
-export function createHoverDecoy({ changed, canEmbed }: Options) {
+export function createHoverDecoy({ changed }: Options) {
   const root = document.documentElement
   const content = document.getElementById('playerContent')!
   const layer = document.getElementById('decoy')!
-  const frameHost = document.getElementById('decoyWebsite')!
   let enabled = root.dataset.hoverDecoy === 'on', inside = false, covered = enabled, configured = false
-  let timer: ReturnType<typeof setTimeout> | undefined, url = '', framedUrl = '', unavailable = false
+  let timer: ReturnType<typeof setTimeout> | undefined
   const paint = () => {
     root.dataset.hoverDecoy = enabled ? 'on' : 'off'
     root.dataset.decoyCovered = covered ? 'true' : 'false'
@@ -53,32 +52,12 @@ export function createHoverDecoy({ changed, canEmbed }: Options) {
   return {
     get covered() { return covered },
     get enabled() { return enabled },
-    get unavailable() { return unavailable },
     configure(settings: Settings) {
       const nextEnabled = !!settings.hoverDecoyEnabled
       if (nextEnabled !== enabled) {
         enabled = nextEnabled
         setCovered(enabled && (!inside || document.hidden))
       }
-      url = settings.decoyUrl || ''
-      const frameUrl = settings.decoyFrameUrl || ''
-      const nextFrame = enabled && url && frameUrl && canEmbed(frameUrl) ? frameUrl : ''
-      unavailable = !!(enabled && url && !nextFrame)
-      if (nextFrame !== framedUrl) {
-        framedUrl = nextFrame
-        frameHost.replaceChildren()
-        if (nextFrame) {
-          const frame = document.createElement('iframe')
-          frame.title = root.lang?.startsWith('en') ? 'Cover page' : '替身网页'
-          frame.src = nextFrame
-          frame.tabIndex = -1
-          frame.referrerPolicy = 'no-referrer'
-          frame.setAttribute('sandbox', 'allow-scripts allow-same-origin')
-          frame.setAttribute('allow', "autoplay 'none'; camera 'none'; microphone 'none'; geolocation 'none'")
-          frameHost.append(frame)
-        }
-      }
-      document.getElementById('decoyNotes')!.hidden = !!nextFrame
       configured = true
       root.dataset.decoyReady = 'true'
       paint()
@@ -94,7 +73,6 @@ export function createHoverDecoy({ changed, canEmbed }: Options) {
       document.removeEventListener('mouseleave', conceal)
       window.removeEventListener('blur', conceal)
       document.removeEventListener('visibilitychange', visibility)
-      frameHost.replaceChildren()
     },
   }
 }

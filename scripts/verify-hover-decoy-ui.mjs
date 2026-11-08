@@ -48,21 +48,12 @@ const website = createServer((req, res) => {
     res.end('<!doctype html><html lang="zh-CN"><title>嵌套面板回归</title><style>html,body{margin:0;height:100%;font:15px system-ui;background:#e8ebef}aside{position:fixed;inset:0 60% 0 0;padding:24px;box-sizing:border-box}iframe{position:fixed;left:40%;top:0;width:60%;height:100%;border:0}</style><aside id="chat"><h1>模拟聊天区</h1><p>移动到此处验证面板移出事件</p></aside><iframe id="player" title="播放面板" sandbox="allow-scripts allow-same-origin" src="' + browser.origin + '/embedded"></iframe></html>')
     return
   }
-  if (req.url === '/denied') res.setHeader('X-Frame-Options', 'DENY')
-  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-  res.end('<!doctype html><html lang="zh-CN"><title>项目工作台</title><body style="margin:40px;background:#f4f6f8;color:#26313c;font:16px system-ui"><h1>项目工作台</h1><p>自定义替身网页 · 本机测试</p><hr><p>迭代计划</p><p>接口评审</p><p>测试记录</p></body></html>')
-})
-const secondWebsite = createServer((_req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-  res.end('<!doctype html><html lang="zh-CN"><title>工作记录</title><body style="margin:40px;background:#f7f4ed;color:#34312d;font:16px system-ui"><h1>工作记录</h1><p>第二个网站 · 保存后直接生效</p></body></html>')
+  res.writeHead(404).end()
 })
 await new Promise(resolve => website.listen(0, '127.0.0.1', resolve))
-await new Promise(resolve => secondWebsite.listen(0, '127.0.0.1', resolve))
 await browser.listen()
 console.log('Player UI: ' + browser.origin + '/')
-console.log('Test cover website: http://127.0.0.1:' + website.address().port + '/')
-console.log('Second test website: http://127.0.0.1:' + secondWebsite.address().port + '/')
 console.log('Nested panel host: http://127.0.0.1:' + website.address().port + '/host')
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
-  browser.close(); website.close(); secondWebsite.close(); store.close(); rmSync(root, { recursive: true, force: true }); process.exit()
+  browser.close(); website.close(); store.close(); rmSync(root, { recursive: true, force: true }); process.exit()
 })

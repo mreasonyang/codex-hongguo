@@ -16,7 +16,7 @@ const root = join(tmp, '本地 市场'),
   profile = join(tmp, '独立配置')
 const npmMarket = join(tmp, 'npm 市场')
 const version = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version
-const playerUri = 'ui://hongguo/v21/player', waitingUri = 'ui://hongguo/v21/waiting'
+const playerUri = 'ui://hongguo/v22/player', waitingUri = 'ui://hongguo/v22/waiting'
 const commands = Object.fromEntries(['npm', 'codex', 'openssl'].map(name => [name, findExecutable(name)]))
 const env = {
   HOME: tmp,
@@ -250,9 +250,8 @@ try {
   assert.deepEqual(event('Interrupt', 'installation-interrupt'), {})
   assert.equal((await hostCall('get_run_state', { panel: card._meta.panel, observeSession: true }))._meta?.data?.state, 'interrupted')
   const waiting = await rpc('mcpServer/resource/read', { threadId: thread.thread.id, server: server.name, uri: waitingUri })
-  assert.deepEqual(waiting.contents[0]._meta.ui.csp.connectDomains, [])
+  assert.deepEqual(waiting.contents[0]._meta.ui.csp, { connectDomains: [], resourceDomains: ['blob:'] })
   assert.deepEqual(waiting.contents[0]._meta.ui.csp.resourceDomains, ['blob:'])
-  assert.match(waiting.contents[0]._meta.ui.csp.frameDomains[0], /^http:\/\/127\.0\.0\.1:\d+$/)
   assert.equal(waiting.contents?.[0]?._meta?.['openai/ui']?.preferredDisplayMode, 'inline')
   assert.equal(waiting.contents[0]._meta['openai/widgetShowCodexWidgetInline'], true)
   console.log('安装副本通过真实宿主协议匹配会话、展示候选、单次领取播放及停止事件检查，返回剧目数', picks.length)
@@ -322,9 +321,8 @@ try {
     server: server.name,
     uri: playerUri,
   })
-  assert.deepEqual(resource.contents[0]._meta.ui.csp.connectDomains, [])
+  assert.deepEqual(resource.contents[0]._meta.ui.csp, { connectDomains: [], resourceDomains: ['blob:'] })
   assert.deepEqual(resource.contents[0]._meta.ui.csp.resourceDomains, ['blob:'])
-  assert.match(resource.contents[0]._meta.ui.csp.frameDomains[0], /^http:\/\/127\.0\.0\.1:\d+$/)
   assert.ok(resource.contents?.[0]?.text?.includes('id="fullscreen"'))
   assert.doesNotMatch(resource.contents[0].text, /id="(?:setupGuide|setupOpen|health|healthInfo|volume)"/,
     '播放器不应包含欢迎／自检页、入口或音量滑杆')

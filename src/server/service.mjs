@@ -3,7 +3,6 @@ import { z } from 'zod'
 import { callerId } from './store.mjs'
 import { PlayerError } from './errors.mjs'
 import { manualHooks } from './setup.mjs'
-import { normalizeDecoyUrl } from './decoy.mjs'
 
 export const secret = () => randomBytes(24).toString('base64url')
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/)
@@ -67,12 +66,6 @@ export const schemas = {
     autoPlayOnStart: z.boolean().optional(),
     defaultMuted: z.boolean().optional(),
     hoverDecoyEnabled: z.boolean().optional(),
-    decoyUrl: z.string().max(2048).transform((value, ctx) => {
-      try { return normalizeDecoyUrl(value) } catch {
-        ctx.addIssue({ code: 'custom', message: '替身网址无效' })
-        return z.NEVER
-      }
-    }).optional(),
     volume: z.number().positive().max(1).optional(),
   }),
   read_panel_chunk: z.object({
@@ -93,11 +86,6 @@ export class Service {
     this.store = store
     this.catalog = catalog
     this.panels = new Map()
-  }
-  preferences(scope) {
-    const settings = this.store.preferences()
-    const decoyFrameUrl = this.coverFrame?.(scope, settings.hoverDecoyEnabled ? settings.decoyUrl : '')
-    return decoyFrameUrl ? { ...settings, decoyFrameUrl } : settings
   }
   open(meta) {
     const key = secret(),
@@ -230,7 +218,7 @@ export class Service {
           if (p.turnId || (scope.waiting && !scope.waiting.taken)) throw new PlayerError('请先打开播放器', 403)
           return {
             ...this.store.state(scope.sessionId, browser ? scope.fixedTurn : undefined),
-            preferences: this.preferences(scope),
+            preferences: this.store.preferences(),
           }
         }
         const fixed = scope.waiting?.turnId ?? (browser ? scope.fixedTurn : null)
@@ -307,7 +295,7 @@ export class Service {
         return result
       }
       case 'get_preferences':
-        return this.preferences(scope)
+        return this.store.preferences()
       case 'set_preferences': {
         if (!this.store.persistent) throw new PlayerError('本机设置目录不可写', 503)
         const previous = this.store.preferences()
@@ -316,7 +304,7 @@ export class Service {
           this.catalog.feed = null
           this.catalog.refresh = null
         }
-        return this.preferences(scope)
+        return settings
       }
       case 'get_health':
         if (!this.catalog.ffmpeg) void this.catalog.prepareMediaRuntime?.().catch(() => {})

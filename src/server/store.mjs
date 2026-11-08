@@ -56,7 +56,8 @@ export class Store {
         position_ms INTEGER NOT NULL, duration_ms INTEGER NOT NULL, updated_at INTEGER NOT NULL,
         PRIMARY KEY(series_id,episode_id));
       CREATE TABLE IF NOT EXISTS watch_restart (
-        series_id TEXT NOT NULL, episode_id TEXT NOT NULL, PRIMARY KEY(series_id,episode_id));`)
+        series_id TEXT NOT NULL, episode_id TEXT NOT NULL, PRIMARY KEY(series_id,episode_id));
+      CREATE TABLE IF NOT EXISTS player_preferences(id INTEGER PRIMARY KEY, body TEXT NOT NULL);`)
     // Remove only the two local demonstration shows shipped in 0.0.1 and 0.0.2.
     if (this.db.prepare('PRAGMA user_version').get().user_version === 0) {
       this.db.exec(`BEGIN IMMEDIATE;
@@ -64,13 +65,20 @@ export class Store {
         PRAGMA user_version=1;
         COMMIT;`)
     }
+    // Retire experimental custom cover settings without changing other preferences or history.
+    if (this.db.prepare('PRAGMA user_version').get().user_version < 2) {
+      this.db.exec(`BEGIN IMMEDIATE;
+        UPDATE player_preferences SET body=json_remove(body, '$.decoyUrl', '$.decoyFrameUrl')
+          WHERE json_type(body, '$.decoyUrl') IS NOT NULL OR json_type(body, '$.decoyFrameUrl') IS NOT NULL;
+        PRAGMA user_version=2;
+        COMMIT;`)
+    }
   }
   preferences() {
-    this.db.exec('CREATE TABLE IF NOT EXISTS player_preferences(id INTEGER PRIMARY KEY, body TEXT NOT NULL)')
     const row = this.db.prepare('SELECT body FROM player_preferences WHERE id=1').get()
     const defaults = {
       autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
-      defaultMuted: true, volume: 0.7, hoverDecoyEnabled: false, decoyUrl: '',
+      defaultMuted: true, volume: 0.7, hoverDecoyEnabled: false,
       searchTerms: ['总裁', '重生', '逆袭'],
     }
     return row ? { ...defaults, ...JSON.parse(row.body) } : defaults

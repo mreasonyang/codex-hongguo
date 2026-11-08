@@ -3,7 +3,7 @@ import { coverArt, fill, icon, setCover, setIcon } from './ui-kit'
 import { panelStream } from './panel-stream'
 import { mediaErrorMessage, waitForMetadata } from './media-startup'
 import { finishedTurn, startedTurn } from './playback-turn'
-import { browser, call, connect, hostLocale, canEmbedDecoy, type Context, type State, type Preferences } from './api'
+import { browser, call, connect, hostLocale, type Context, type State, type Preferences } from './api'
 import { pickLabel, showWaitingPicks, waitingCard, type WaitingSelection } from './waiting'
 import { createHoverDecoy } from './hover-decoy'
 
@@ -69,7 +69,7 @@ let lastSave = 0,
 
 let prefs: Preferences = {
   autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
-  defaultMuted: true, volume: 0.7, hoverDecoyEnabled: false, decoyUrl: '',
+  defaultMuted: true, volume: 0.7, hoverDecoyEnabled: false,
   searchTerms: ['总裁', '重生', '逆袭'],
 }
 let playback: 'idle' | 'playing' | 'finished' = 'idle'
@@ -96,10 +96,9 @@ let volumeTimer: ReturnType<typeof setTimeout> | undefined, volumeSaved = Promis
 type HoverResume = { action: number; selection: number; episodeId: string; turn?: string; automatic: boolean }
 let hoverResume: HoverResume | undefined, activeStart: { turn?: string; automatic: boolean } | undefined
 let turnStateAvailable = false
-const decoy = createHoverDecoy({ canEmbed: canEmbedDecoy, changed: decoyChanged })
+const decoy = createHoverDecoy({ changed: decoyChanged })
 function configureDecoy() {
   decoy.configure(prefs)
-  text('decoyStatus', decoy.unavailable ? '替身网页暂时无法加载，已使用内置页面' : '')
 }
 function decoyChanged(covered: boolean) {
   if (covered) {
@@ -1127,7 +1126,6 @@ el('prefs').onclick = async () => {
     el<HTMLInputElement>('autoPlayOnStart').checked = prefs.autoPlayOnStart
     el<HTMLInputElement>('defaultMuted').checked = prefs.defaultMuted
     el<HTMLInputElement>('hoverDecoyEnabled').checked = prefs.hoverDecoyEnabled
-    el<HTMLInputElement>('decoyUrl').value = prefs.decoyUrl
     el<HTMLInputElement>('terms').value = prefs.searchTerms.join('，')
   } catch (error) { notice(explain(error)) }
 }
@@ -1144,7 +1142,6 @@ el('settings').onsubmit = (e) => {
     autoPlayOnStart: el<HTMLInputElement>('autoPlayOnStart').checked,
     defaultMuted: el<HTMLInputElement>('defaultMuted').checked,
     hoverDecoyEnabled: el<HTMLInputElement>('hoverDecoyEnabled').checked,
-    decoyUrl: el<HTMLInputElement>('decoyUrl').value.trim(),
     searchTerms,
   })
     .then(async (updated) => {
@@ -1152,7 +1149,7 @@ el('settings').onsubmit = (e) => {
       syncDefaultMute(updated)
       prefs = updated
       configureDecoy()
-      notice(decoy.unavailable ? '替身网页暂时无法加载，已使用内置页面' : '设置已保存')
+      notice('设置已保存')
       autoNext.checked = prefs.autoplayNext
       el('settings').hidden = true
       el('prefs').setAttribute('aria-expanded', 'false')

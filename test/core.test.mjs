@@ -287,13 +287,11 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   })
   assert.equal(data.isError, true)
   const resources = (await client.listResources()).resources
-  const playerUri = 'ui://hongguo/v21/player', waitingUri = 'ui://hongguo/v21/waiting'
-  assert.ok(tools.find(t => t.name === 'show_waiting_picks')._meta.ui.resourceUri.startsWith(waitingUri + '/off-'))
-  assert.ok(tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri.startsWith(playerUri + '/off-'))
+  const playerUri = 'ui://hongguo/v22/player', waitingUri = 'ui://hongguo/v22/waiting'
+  assert.equal(tools.find(t => t.name === 'show_waiting_picks')._meta.ui.resourceUri, waitingUri)
+  assert.equal(tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri, playerUri)
   assert.deepEqual(resources.map(r => r.uri).sort(), [playerUri, waitingUri])
-  const localOrigin = resources[0]._meta.ui.csp.frameDomains[0]
-  assert.match(localOrigin, /^http:\/\/127\.0\.0\.1:\d+$/)
-  const policy = { connectDomains: [], resourceDomains: ['blob:'], frameDomains: [localOrigin] }
+  const policy = { connectDomains: [], resourceDomains: ['blob:'] }
   for (const resource of resources) assert.deepEqual(resource._meta.ui.csp, policy)
   for (const uri of [playerUri, waitingUri, 'ui://hongguo/player', 'ui://hongguo/waiting',
     'ui://hongguo/v2/player', 'ui://hongguo/v2/waiting', 'ui://hongguo/v3/player', 'ui://hongguo/v3/waiting',
@@ -317,22 +315,10 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   assert.equal(ui.contents[0].mimeType, 'text/html;profile=mcp-app')
   assert.doesNotMatch(ui.contents[0].text, /自制样片|id="local"|video:\/\/hongguo\//)
   const preferences = patch => client.callTool({ name: 'set_preferences', arguments: { panel: r._meta.panel, ...patch } })
-  await preferences({ hoverDecoyEnabled: true, decoyUrl: 'https://example.org/notes?view=work' })
-  const withWebsite = (await client.listTools()).tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri
-  assert.match(withWebsite, /^ui:\/\/hongguo\/v21\/player\/on-[a-f0-9]{32}$/)
-  const website = (await client.readResource({ uri: withWebsite })).contents[0]
-  assert.deepEqual(website._meta.ui.csp.frameDomains, [localOrigin])
-  assert.ok(website.text.includes('data-hover-decoy="on" data-decoy-origin="' + localOrigin + '"'))
-  assert.doesNotMatch(website.text, /notes\?view=work/)
-  await preferences({ decoyUrl: 'https://notes.example.net/' })
-  const withOtherWebsite = (await client.listTools()).tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri
-  assert.equal(withOtherWebsite, withWebsite, 'saving another target must not invalidate the player sandbox')
-  assert.deepEqual((await client.readResource({ uri: withOtherWebsite })).contents[0]._meta.ui.csp.frameDomains, [localOrigin])
-  assert.deepEqual((await client.readResource({ uri: withWebsite })).contents[0]._meta.ui.csp.frameDomains, [localOrigin], 'cached resource URIs keep their original policy')
-  await preferences({ decoyUrl: '' })
-  const builtin = (await client.listTools()).tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri
-  assert.equal(builtin, withWebsite)
-  assert.deepEqual((await client.readResource({ uri: builtin })).contents[0]._meta.ui.csp.frameDomains, [localOrigin])
+  await preferences({ hoverDecoyEnabled: true })
+  assert.equal((await client.listTools()).tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri, playerUri)
+  assert.deepEqual((await client.readResource({ uri: playerUri })).contents[0]._meta.ui.csp, policy)
+  assert.doesNotMatch(ui.contents[0].text, /<iframe|decoyUrl|decoyFrameUrl|decoyWebsite|canEmbedDecoy|data-decoy-origin/)
   await assert.rejects(client.readResource({ uri: 'video://hongguo/tide' }))
   for (const [name, input] of [
     ['get_episodes', { seriesId: 'tide' }],

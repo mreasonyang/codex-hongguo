@@ -149,12 +149,6 @@
           <input type="checkbox" id="hoverDecoyEnabled" class="switch" />
         </label>
         <p class="settingsHint">移出红果面板显示替身并暂停，移回后继续；手动暂停保持不变</p>
-        <label class="field">
-          <span>替身网页</span>
-          <input id="decoyUrl" type="url" maxlength="2048" placeholder="留空使用内置工作笔记" autocomplete="off" />
-        </label>
-        <p class="settingsHint">保存后立即应用。部分网站禁止嵌入，清空网址可恢复默认替身。</p>
-        <p id="decoyStatus" class="settingsHint" role="status"></p>
         <label class="switchRow">
           <span>当前回合进行时显示推荐</span>
           <input type="checkbox" id="autoPrompt" class="switch" />
@@ -332,7 +326,7 @@
       </section>
     </main>
     <section id="decoy" aria-label="工作笔记" aria-hidden="true">
-      <div id="decoyNotes" class="decoyNotes">
+      <div class="decoyNotes">
         <p class="decoyEyebrow">工作空间</p>
         <h1>工作笔记</h1>
         <p class="decoyIntro">计划、记录与待办事项</p>
@@ -341,7 +335,6 @@
         <h2>记录</h2>
         <div class="decoyLines" aria-hidden="true"></div>
       </div>
-      <div id="decoyWebsite"></div>
     </section>
     </div>
     <script nonce="__NONCE__">
