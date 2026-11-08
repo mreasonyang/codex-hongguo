@@ -2,7 +2,7 @@
   "name": "@kyun.si/codex-hongguo",
   "version": "0.0.34",
   "private": true,
-  "license": "GPL-3.0-only",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "engines": {
     "node": ">=22.16"

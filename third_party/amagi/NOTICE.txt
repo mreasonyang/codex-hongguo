@@ -4,8 +4,9 @@ Project: https://github.com/ikenxuan/amagi
 The exact upstream revision, source location and checksum are in source.json.
 The preferred upstream source is included as dist/licenses/amagi-6.6.0-source.tar.gz.
 
-The combined codex-hongguo distribution is conveyed under GPL-3.0-only (COPYING).
-Original codex-hongguo code remains available under its MIT license (LICENSE).
+codex-hongguo is licensed under AGPL-3.0-only (LICENSE). This SDK retains
+GPL-3.0-only (COPYING). Section 13 of both licenses permits this combination;
+the AGPLv3 network-interaction requirements apply to the combination.
 Other dependencies retain their own notices and licenses in licenses/.
 The matching codex-hongguo source and build scripts are supplied in
 licenses/codex-hongguo-source.zip. Extract it, install Node.js and Go, run

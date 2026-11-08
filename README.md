@@ -135,6 +135,11 @@ npx "@kyun.si/codex-hongguo@latest" uninstall
 | 回合联动与连播 | 任务开始自动播放、任务结束自动暂停均默认开启，详见「全局播放设置」。连播默认开启，当前集播完自动播放下一集；关闭后也会记住。 |
 | 外观与语言 | 选剧页与播放器跟随 Codex 浅色/深色外观及中英文界面；窄侧栏在画面下方显示选集栏，宽面板将选集栏置于画面右侧。 |
 
+## 许可证与致谢
+
+- **项目许可证**：采用 [AGPL-3.0-only](LICENSE)。amagi 保留 [GPL-3.0-only](COPYING)，其他依赖保留各自许可；发行包附对应项目源码、固定修订的 amagi 源码和第三方声明。历史 MIT 授权继续有效，详见 [NOTICE](NOTICE)。短剧剧目与媒体内容的版权归原权利人所有。
+- **上游与参考资料**：项目灵感来自 [frostming/dsh-hongguo](https://github.com/frostming/dsh-hongguo)，红果片库与播放解析使用 [openhongguo](https://github.com/beilunyang/openhongguo)，宿主扩展接口依据 [OpenAI 插件扩展](https://developers.openai.com/plugins/build/extensions)、[插件打包](https://developers.openai.com/plugins/build/plugins) 和 [Codex Hooks](https://learn.chatgpt.com/docs/hooks)。
+
 <!-- development -->
 
 ## 贡献与开发
@@ -142,8 +147,3 @@ npx "@kyun.si/codex-hongguo@latest" uninstall
 开发与测试说明见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 npm 包结构、升级与发布流程见 [npm 分发说明](docs/npm-distribution.md)。
-
-## 许可证与致谢
-
-- **项目许可证**：原有项目代码保留 [MIT 许可证](LICENSE)。包含 GPL SDK amagi 的组合发行包按 [GPL-3.0-only](COPYING) 分发，附项目对应源码 ZIP、固定修订的 SDK 原始源码及第三方许可。短剧剧目与媒体内容的版权归原权利人所有。
-- **上游与参考资料**：项目灵感来自 [frostming/dsh-hongguo](https://github.com/frostming/dsh-hongguo)，红果片库与播放解析使用 [openhongguo](https://github.com/beilunyang/openhongguo)，宿主扩展接口依据 [OpenAI 插件扩展](https://developers.openai.com/plugins/build/extensions)、[插件打包](https://developers.openai.com/plugins/build/plugins) 和 [Codex Hooks](https://learn.chatgpt.com/docs/hooks)。

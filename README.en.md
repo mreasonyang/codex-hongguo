@@ -136,6 +136,11 @@ Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn s
 | Turn linkage & autoplay | Task-start autoplay and task-end automatic pausing both default to on; see Global playback settings above. Autoplay next is enabled by default and remembers changes. |
 | Appearance & locale | Adapts to narrow sidebars (episodes below video) and wide panels (episodes beside video), following Codex light/dark themes and Chinese/English UI locales. |
 
+## License & Credits
+
+- **Project license**: [AGPL-3.0-only](LICENSE). amagi retains [GPL-3.0-only](COPYING), and other dependencies retain their own licenses. Distribution packages include matching project source, the pinned amagi source, and third-party notices. Earlier MIT grants remain valid; see [NOTICE](NOTICE). Copyrights for drama series, covers and media streams belong to their respective rightsholders.
+- **Upstream & specifications**: Inspired by [frostming/dsh-hongguo](https://github.com/frostming/dsh-hongguo), with Hongguo catalog and playback resolution powered by [openhongguo](https://github.com/beilunyang/openhongguo). Host integration follows [OpenAI Plugin Extensions](https://developers.openai.com/plugins/build/extensions), [Plugin Packaging](https://developers.openai.com/plugins/build/plugins), and [Codex Hooks](https://learn.chatgpt.com/docs/hooks).
+
 <!-- development -->
 
 ## Contributing
@@ -143,8 +148,3 @@ Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn s
 Development and testing instructions are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 See [npm distribution, upgrades and publishing](docs/npm-distribution.md) for package structure and release maintenance.
-
-## License & Credits
-
-- **Project license**: Original project code retains the [MIT License](LICENSE). The combined distribution including the GPL SDK amagi is conveyed under [GPL-3.0-only](COPYING), with matching project source, the pinned upstream SDK source, and dependency notices. Bundled third-party dependency notices are under `licenses/` in the plugin root. Copyrights for drama series, covers and media streams belong to their respective rightsholders.
-- **Upstream & specifications**: Inspired by [frostming/dsh-hongguo](https://github.com/frostming/dsh-hongguo), with Hongguo catalog and playback resolution powered by [openhongguo](https://github.com/beilunyang/openhongguo). Host integration follows [OpenAI Plugin Extensions](https://developers.openai.com/plugins/build/extensions), [Plugin Packaging](https://developers.openai.com/plugins/build/plugins), and [Codex Hooks](https://learn.chatgpt.com/docs/hooks).

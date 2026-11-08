@@ -1,6 +1,6 @@
 # Managed FFmpeg playback component
 
-The plugin's original code is MIT licensed. FFmpeg is a separate executable,
+The plugin's project code is AGPL-3.0-only licensed. FFmpeg is a separate executable,
 automatically downloaded from the original binary distributors into the user's
 private cache. The npm package does not contain the FFmpeg executable.
 

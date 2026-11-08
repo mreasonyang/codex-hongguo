@@ -12,7 +12,7 @@
 
 只有完整、非 DRM 的普通 MP4 或 AVC/AAC 双轨可以播放。试看即使返回成功状态也明确拒绝。双轨通过 Provider 白名单传输下载、备用 CDN 有限重试、FFmpeg 本地合流后复用浏览器 MP4 和 Codex 面板 HLS；首次播放需先准备整集，单集原始媒体总预算仍为 256 MiB，两小时以上及预算不合适的流会拒绝。自动下一集、缓存预加载和回合暂停沿用宿主逻辑。
 
-包含 amagi 的组合发行包按 GPL-3.0-only 分发，完整文本见根目录 `COPYING`，原有项目代码的 MIT 许可见 `LICENSE`。发行包附带该项目的对应源码 ZIP、固定上游修订的 amagi 原始 TypeScript 源码和校验值；详见包内 `licenses/amagi/NOTICE.txt`。本地源码采用的 npm 依赖和 SDK 版本由锁文件固定，不维护 SDK fork。
+项目采用 AGPL-3.0-only，完整文本见根目录 `LICENSE`。amagi 保留 GPL-3.0-only（`COPYING`）；两种许可证的第 13 条允许组合使用，AGPLv3 的网络交互义务适用于组合程序。历史 MIT 版本的授权继续有效，说明见根目录 `NOTICE`。发行包附带该项目的对应源码 ZIP、固定上游修订的 amagi 原始 TypeScript 源码和校验值；详见包内 `licenses/amagi/NOTICE.txt`。本地源码采用的 npm 依赖和 SDK 版本由锁文件固定，不维护 SDK fork。
 
 ## 启用配置
 
