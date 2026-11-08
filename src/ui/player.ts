@@ -7,6 +7,7 @@ import { browser, call, connect, hostLocale, type Context, type State, type Pref
 import { pickLabel, showWaitingPicks, waitingCard, type WaitingSelection } from './waiting'
 import { createHoverDecoy } from './hover-decoy'
 import { createCoverPage } from './cover-page'
+import { createSettings } from './settings'
 
 type Series = {
   id: string
@@ -93,12 +94,31 @@ let waitingPlaybackId: number | undefined
 let pendingRecommendationTurn: string | undefined
 let openingPreferencesLoaded = false, openingPreferencesLoading: Promise<void> | undefined
 let preferencesGeneration = 0, lastVolume = 0.7, lastDefaultMuted = true, pendingVolume: number | undefined
+let preferencesRevision = 0
 let volumeTimer: ReturnType<typeof setTimeout> | undefined, volumeSaved = Promise.resolve()
 type HoverResume = { action: number; selection: number; episodeId: string; turn?: string; automatic: boolean }
 let hoverResume: HoverResume | undefined, activeStart: { turn?: string; automatic: boolean } | undefined
 let turnStateAvailable = false
 const decoy = createHoverDecoy({ changed: decoyChanged })
 const coverPage = createCoverPage(el('decoy'))
+const settings = createSettings({
+  read: () => prefs,
+  save: patch => call<Preferences>('set_preferences', patch, 4000),
+  edited: () => { ++preferencesRevision },
+  applied: updated => {
+    ++preferencesRevision
+    const termsChanged = JSON.stringify(prefs.searchTerms) !== JSON.stringify(updated.searchTerms)
+    syncDefaultMute(updated)
+    prefs = updated
+    configureDecoy()
+    autoNext.checked = prefs.autoplayNext
+    if (!autoNext.checked) cancelNextPreload()
+    renderPicks()
+    if (termsChanged && !series) void list().catch(error => notice(explain(error)))
+  },
+  changeCover: () => { coverPage.change(); notice('已更换，移出面板可查看') },
+  translate: tr,
+})
 function configureDecoy() {
   decoy.configure(prefs)
 }
@@ -751,12 +771,13 @@ function poll() {
 }
 async function readTurnState() {
   try {
+    const revision = preferencesRevision
     const state = await call<State>('get_run_state', {
       observeSession: true, playerInstance: document.hidden ? undefined : instance,
     }, 1800)
     if (!pageActive) return
     turnStateAvailable = true
-    if (state.preferences) {
+    if (state.preferences && revision === preferencesRevision) {
       const promptChanged = prefs.autoPrompt !== state.preferences.autoPrompt
       syncDefaultMute(state.preferences)
       prefs = state.preferences
@@ -1115,54 +1136,14 @@ el('copy').onclick = async () => {
     notice('链接已选中，请复制并在 Codex 内置浏览器打开')
   }
 }
-el('settingsCancel').onclick = () => el('prefs').click()
-el('changeCover').onclick = () => {
-  coverPage.change()
-  text('coverChanged', '已更换，移出面板可查看')
-}
 el('prefs').onclick = async () => {
   if (!playerReady) return
+  if (!el('settings').hidden) { await settings.finish(); return }
   try {
     await openingPreferences()
     if (!playerReady) return
-    el('settings').hidden = !el('settings').hidden
-    el('prefs').setAttribute('aria-expanded', String(!el('settings').hidden))
-    el<HTMLInputElement>('autoPrompt').checked = prefs.autoPrompt
-    el<HTMLInputElement>('autoPauseOnFinish').checked = prefs.autoPauseOnFinish
-    el<HTMLInputElement>('autoPlayOnStart').checked = prefs.autoPlayOnStart
-    el<HTMLInputElement>('defaultMuted').checked = prefs.defaultMuted
-    el<HTMLInputElement>('hoverDecoyEnabled').checked = prefs.hoverDecoyEnabled
-    el<HTMLInputElement>('terms').value = prefs.searchTerms.join('，')
+    settings.open()
   } catch (error) { notice(explain(error)) }
-}
-el('settings').onsubmit = (e) => {
-  e.preventDefault()
-  const generation = preferencesGeneration
-  const searchTerms = el<HTMLInputElement>('terms')
-    .value.split(/[,，]/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-  void call<typeof prefs>('set_preferences', {
-    autoPrompt: el<HTMLInputElement>('autoPrompt').checked,
-    autoPauseOnFinish: el<HTMLInputElement>('autoPauseOnFinish').checked,
-    autoPlayOnStart: el<HTMLInputElement>('autoPlayOnStart').checked,
-    defaultMuted: el<HTMLInputElement>('defaultMuted').checked,
-    hoverDecoyEnabled: el<HTMLInputElement>('hoverDecoyEnabled').checked,
-    searchTerms,
-  })
-    .then(async (updated) => {
-      if (generation !== preferencesGeneration || !playerReady) return
-      syncDefaultMute(updated)
-      prefs = updated
-      configureDecoy()
-      notice('设置已保存')
-      autoNext.checked = prefs.autoplayNext
-      el('settings').hidden = true
-      el('prefs').setAttribute('aria-expanded', 'false')
-      renderPicks()
-      if (!series) await list()
-    })
-    .catch((err) => notice(explain(err)))
 }
 el('choose').onclick = async () => {
   try {
@@ -1276,6 +1257,7 @@ function closePlayer() {
   const stopped = suspend()
   playerReady = false
   ++preferencesGeneration
+  settings.reset()
   openingPreferencesLoaded = false
   openingPreferencesLoading = undefined
   el<HTMLButtonElement>('mute').disabled = true

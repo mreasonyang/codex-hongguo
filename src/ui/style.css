@@ -188,7 +188,8 @@ html[data-surface='waiting'] #playerRoot { display: none; }
 .coverSettings { display: flex; align-items: center; gap: 12px; }
 .coverSettings .settingsHint { flex: 1; margin: 4px 0; }
 .coverSettings button { flex-shrink: 0; }
-#coverChanged:empty { display: none; }
+#settingsStatus:empty { display: none; }
+#settingsStatus[data-state='error'] { color: var(--danger); }
 @media (max-width: 800px) { .coverContents { display: none; } .coverArticleGrid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 680px) {
   .coverPage { padding-inline: 20px; }

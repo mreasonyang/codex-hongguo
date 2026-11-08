@@ -70,7 +70,7 @@ Default installation and updates do not require Git. The command checks Node, np
 
 ### Global playback settings
 
-Open **Settings** at the top right of the player, make your changes, and click **Save settings**.
+Open **Settings** at the top right of the player. Switches save automatically; recommendation keywords save on Enter or when leaving the field. **Close** waits for saving to finish. If saving fails, the panel stays open with a retry message.
 
 | Setting | Default | Behavior |
 | --- | --- | --- |
@@ -79,7 +79,7 @@ Open **Settings** at the top right of the player, make your changes, and click *
 | Mute by default | On | Set the initial mute state for new players. Changes immediately update the current player and sync to other open players. |
 | Show player on hover | Off | Leaving the player panel shows a cover page and pauses playback. Returning resumes from that position; manual pauses are preserved. |
 
-Hover mode follows the player panel boundary: moving to the chat, another panel, or another window conceals the show title, artwork and controls. The loaded video is retained, and task-end automatic pausing still applies while covered. The cover is generated offline from built-in project tasks, technical notes, test reports and meeting notes, with varied layouts and content. Each mounted panel keeps the same page until closed. Use “Change page” in Settings to replace it immediately without saving settings. Covers follow the interface language and theme. Codex manages native tab titles and suggestion cards already present in the chat; covering the panel does not replace those.
+Hover mode follows the player panel boundary: moving to the chat, another panel, or another window conceals the show title, artwork and controls. The loaded video is retained, and task-end automatic pausing still applies while covered. The cover is generated offline from built-in project tasks, technical notes, test reports and meeting notes, with varied layouts and content. Each mounted panel keeps the same page until closed. “Change page” in Settings finishes pending saves, replaces the current cover, and closes Settings. Covers follow the interface language and theme. Codex manages native tab titles and suggestion cards already present in the chat; covering the panel does not replace those.
 
 Settings are independent, saved across restarts, and shared by all chats. Task playback switches and default mute sync to open players. The speaker button changes only the current player, leaving the default unchanged; repeated snapshots preserve that manual choice until the default changes. New players restore the remembered volume. Autoplay requires an open player with an episode selected; it does not choose a show or reopen a closed player. Manual pausing lasts for the current task; the autoplay switch determines whether the next task resumes playback. Updates preserve saved choices.
 

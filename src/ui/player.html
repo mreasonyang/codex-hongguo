@@ -130,6 +130,7 @@
 
       <form id="settings" class="sheet" hidden>
         <p class="settingsHint">以下设置对所有聊天生效</p>
+        <p class="settingsHint">修改后自动保存</p>
         <label class="switchRow">
           <span>任务结束自动暂停</span>
           <input type="checkbox" id="autoPauseOnFinish" class="switch" />
@@ -153,7 +154,6 @@
           <p class="settingsHint">每次打开随机生成替身，本次打开保持不变</p>
           <button type="button" id="changeCover" class="btn ghost">换一页</button>
         </div>
-        <p id="coverChanged" class="settingsHint" role="status"></p>
         <label class="switchRow">
           <span>当前回合进行时显示推荐</span>
           <input type="checkbox" id="autoPrompt" class="switch" />
@@ -162,9 +162,10 @@
           <span>推荐补充关键词</span>
           <input id="terms" maxlength="185" placeholder="用逗号分隔" />
         </label>
+        <p class="settingsHint">按 Enter 或离开输入框时保存</p>
+        <p id="settingsStatus" class="settingsHint" role="status" aria-live="polite"></p>
         <div class="sheetActions">
-          <button type="button" id="settingsCancel" class="btn ghost">取消</button>
-          <button type="submit" class="btn primary">保存设置</button>
+          <button type="button" id="settingsClose" class="btn primary">关闭</button>
         </div>
       </form>
 

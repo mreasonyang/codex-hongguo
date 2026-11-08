@@ -9,6 +9,7 @@ import { transformSync } from 'esbuild'
 import { Store } from '../src/server/store.mjs'
 import { Service } from '../src/server/service.mjs'
 import { createCoverPage } from '../src/ui/cover-page.ts'
+import { createSettings } from '../src/ui/settings.ts'
 
 class Element extends EventTarget {
   hidden = true; checked = false; value = '1'; dataset = {}; children = []; textContent = ''
@@ -78,6 +79,7 @@ function setup(t) {
     require(name) {
       if (name === './api') return api
       if (name === './cover-page') return { createCoverPage }
+      if (name === './settings') return { createSettings: options => createSettings(options, document) }
       if (name === './hover-decoy') {
         const exports = {}, decoyContext = vm.createContext({ module: { exports }, exports, document, window, setTimeout, clearTimeout })
         vm.runInContext(decoyCode, decoyContext)
@@ -142,23 +144,24 @@ test('global playback switches default for older settings, synchronize across ch
   for (const volume of [0, -1, 1.01, NaN, Infinity]) await assert.rejects(f.settings({ volume }), /参数无效/)
 })
 
-test('playback and default-mute settings load and save through the player form', async t => {
+test('player switches save immediately and Close is the only form completion action', async t => {
   const f = setup(t)
   f.event('one'); await f.poll()
   await f.elements.get('prefs').onclick()
   assert.equal(f.elements.get('autoPauseOnFinish').checked, true)
   assert.equal(f.elements.get('autoPlayOnStart').checked, true)
   assert.equal(f.elements.get('defaultMuted').checked, true)
-  f.elements.get('autoPauseOnFinish').checked = false
-  f.elements.get('autoPlayOnStart').checked = false
-  f.elements.get('defaultMuted').checked = false
-  f.elements.get('hoverDecoyEnabled').checked = true
-  f.elements.get('settings').onsubmit({ preventDefault() {} })
+  for (const key of ['autoPauseOnFinish', 'autoPlayOnStart', 'defaultMuted', 'hoverDecoyEnabled']) {
+    f.elements.get(key).checked = key === 'hoverDecoyEnabled'
+    f.elements.get(key).onchange()
+  }
   await flush()
   assert.equal(f.peer.preferences().autoPauseOnFinish, false)
   assert.equal(f.peer.preferences().autoPlayOnStart, false)
   assert.equal(f.peer.preferences().defaultMuted, false)
   assert.equal(f.peer.preferences().hoverDecoyEnabled, true)
+  assert.equal(f.elements.get('settings').hidden, false)
+  f.elements.get('settingsClose').onclick(); await flush()
   assert.equal(f.elements.get('settings').hidden, true)
 })
 
@@ -183,21 +186,23 @@ test('one cover survives hover, preference polling and saves; changing it leaves
   const plays = f.video.plays, position = f.video.currentTime
   f.ui.decoy.conceal(); await enterPanel(t, f); await f.poll()
   await f.elements.get('prefs').onclick()
-  f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
+  await f.poll()
   f.ui.coverPage.initialize('zh-CN')
   assert.equal(host.children[0], page)
   const settings = JSON.stringify(f.peer.preferences())
   const playsAfterHover = f.video.plays
   assert.equal(playsAfterHover, plays + 1)
-  f.elements.get('changeCover').onclick()
+  f.elements.get('changeCover').onclick(); await flush()
   assert.notEqual(host.children[0], page)
   assert.notEqual(host.children[0].dataset.template, page.dataset.template)
   assert.equal(f.video.paused, false)
   assert.equal(f.video.plays, playsAfterHover)
   assert.equal(f.video.currentTime, position)
   assert.equal(JSON.stringify(f.peer.preferences()), settings)
+  assert.equal(f.elements.get('settings').hidden, true)
   await f.ui.pause()
-  f.elements.get('changeCover').onclick()
+  await f.elements.get('prefs').onclick()
+  f.elements.get('changeCover').onclick(); await flush()
   assert.equal(f.video.paused, true)
   assert.equal(f.video.plays, playsAfterHover)
 })
@@ -516,13 +521,12 @@ test('saving a changed default mute immediately updates sound without restarting
   assert.equal(f.video.muted, true)
   await f.elements.get('prefs').onclick()
   f.elements.get('defaultMuted').checked = false
-  f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
+  f.elements.get('defaultMuted').onchange(); await flush()
   assert.equal(f.video.muted, false)
   assert.equal(f.video.plays, 1)
   f.elements.get('mute').onclick(); f.video.onvolumechange()
-  await f.elements.get('prefs').onclick()
   f.elements.get('autoPrompt').checked = false
-  f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
+  f.elements.get('autoPrompt').onchange(); await flush()
   assert.equal(f.video.muted, true, 'saving unrelated settings must preserve manual mute')
   assert.equal(f.peer.preferences().defaultMuted, false)
 })
@@ -541,12 +545,33 @@ test('a settings response arriving after polling cannot undo a newer manual soun
   }
   await f.elements.get('prefs').onclick()
   f.elements.get('defaultMuted').checked = false
-  f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
+  f.elements.get('defaultMuted').onchange(); await flush()
   await f.poll()
   assert.equal(f.video.muted, false)
   f.elements.get('mute').onclick(); f.video.onvolumechange()
   release(); await flush()
   assert.equal(f.video.muted, true)
+})
+
+test('a poll snapshot taken before an autosave cannot restore the previous default mute', async t => {
+  const f = setup(t)
+  f.event('one'); await f.poll(); await f.ui.start()
+  await f.elements.get('prefs').onclick()
+  const original = f.service.call.bind(f.service)
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  f.service.call = async (scope, name, args) => {
+    const result = await original(scope, name, args)
+    if (name === 'get_run_state') await gate
+    return result
+  }
+  const polling = f.poll()
+  await flush()
+  f.elements.get('defaultMuted').checked = false
+  f.elements.get('defaultMuted').onchange(); await flush()
+  assert.equal(f.video.muted, false)
+  release(); await polling
+  assert.equal(f.video.muted, false)
 })
 
 test('disabling default mute keeps recommendations audible and never silently mutes after a host rejection', async t => {

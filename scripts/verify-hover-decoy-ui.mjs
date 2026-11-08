@@ -23,6 +23,12 @@ const catalog = {
   cache: { path: id => id === 'hg-101' ? media : undefined, hold() {} },
 }
 const service = new Service(store, catalog), browser = new BrowserServer(service)
+let rejectSettings = false
+const call = service.call.bind(service)
+service.call = (...args) => {
+  if (args[1] === 'set_preferences' && rejectSettings) return Promise.reject(Error('Synthetic save failure'))
+  return call(...args)
+}
 const request = browser.request.bind(browser)
 browser.request = async (req, res) => {
   const embedded = browser.sessions.get(/^\/p\/([a-f0-9]{24})\//.exec(req.url)?.[1])?.testEmbedded
@@ -43,6 +49,16 @@ browser.request = async (req, res) => {
     Location: page, 'Cache-Control': 'no-store' }).end()
 }
 const website = createServer((req, res) => {
+  // Local-only test controls. Never included in the packaged player.
+  if (req.method === 'POST' && ['/fail-settings', '/restore-settings'].includes(req.url)) {
+    rejectSettings = req.url === '/fail-settings'
+    res.writeHead(204).end(); return
+  }
+  if (req.url === '/settings-test') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+    res.end('<!doctype html><html lang="zh-CN"><title>设置故障测试</title><button id="fail" onclick="fetch(\'/fail-settings\',{method:\'POST\'}).then(()=>document.getElementById(\'status\').textContent=\'保存失败已启用\')">模拟保存失败</button><button id="restore" onclick="fetch(\'/restore-settings\',{method:\'POST\'}).then(()=>document.getElementById(\'status\').textContent=\'保存已恢复\')">恢复保存</button><p id="status"></p></html>')
+    return
+  }
   if (req.url === '/host') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
     res.end('<!doctype html><html lang="zh-CN"><title>嵌套面板回归</title><style>html,body{margin:0;height:100%;font:15px system-ui;background:#e8ebef}aside{position:fixed;inset:0 60% 0 0;padding:24px;box-sizing:border-box}iframe{position:fixed;left:40%;top:0;width:60%;height:100%;border:0}</style><aside id="chat"><h1>模拟聊天区</h1><p>移动到此处验证面板移出事件</p></aside><iframe id="player" title="播放面板" sandbox="allow-scripts allow-same-origin" src="' + browser.origin + '/embedded"></iframe></html>')
@@ -54,6 +70,7 @@ await new Promise(resolve => website.listen(0, '127.0.0.1', resolve))
 await browser.listen()
 console.log('Player UI: ' + browser.origin + '/')
 console.log('Nested panel host: http://127.0.0.1:' + website.address().port + '/host')
+console.log('Settings test controls: http://127.0.0.1:' + website.address().port + '/settings-test')
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
   browser.close(); website.close(); store.close(); rmSync(root, { recursive: true, force: true }); process.exit()
 })
