@@ -1,0 +1,17 @@
+{
+  "npmTest": {
+    "tests": 319,
+    "suites": 0,
+    "pass": 312,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 7,
+    "todo": 0
+  },
+  "pythonArchiveValidation": {
+    "tests": 5,
+    "result": "PASS"
+  },
+  "uiIntegrationTests": 73,
+  "browserCheck": "browser-check.json"
+}

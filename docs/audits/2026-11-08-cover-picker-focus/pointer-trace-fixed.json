@@ -1,0 +1,220 @@
+{
+  "candidate": "0.0.35-beta.10",
+  "uiSha256": "3c0662531bf4e90ce632c4ee4e7b4e39af37a828b600540c88894ccfb01bea02",
+  "summary": {
+    "events": 20,
+    "unexpectedCover": false,
+    "settingsClosed": false,
+    "insideNullOutEvents": 0,
+    "blurEvents": 0,
+    "styles": [
+      "random",
+      "tasks",
+      "document",
+      "report",
+      "minutes"
+    ]
+  },
+  "trace": [
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "random",
+      "at": 15491.300000071526,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "random",
+      "at": 16374.800000071526,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "random",
+      "at": 17495.200000047684,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "tasks",
+      "at": 18596.200000047684,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "tasks",
+      "at": 19606.5,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "document",
+      "at": 20645.800000071526,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "document",
+      "at": 21652.800000071526,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "report",
+      "at": 22693,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "report",
+      "at": 23796.300000071526,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 24923.399999976158,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "minutes",
+      "at": 26025.800000071526,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "random",
+      "at": 26840.399999976158,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "random",
+      "at": 27923.700000047684,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "tasks",
+      "at": 28988.399999976158,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "tasks",
+      "at": 30055.5,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "document",
+      "at": 31109,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "document",
+      "at": 32192.399999976158,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "report",
+      "at": 32960.10000002384,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": true,
+      "style": "report",
+      "at": 34005.800000071526,
+      "width": 584,
+      "height": 707
+    },
+    {
+      "type": "click",
+      "covered": false,
+      "settingsOpen": true,
+      "menuOpen": false,
+      "style": "minutes",
+      "at": 35076,
+      "width": 584,
+      "height": 707
+    }
+  ]
+}

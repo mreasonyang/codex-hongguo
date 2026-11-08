@@ -321,7 +321,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   })
   assert.equal(data.isError, true)
   const resources = (await client.listResources()).resources
-  const playerUri = 'ui://hongguo/v26/player', waitingUri = 'ui://hongguo/v26/waiting'
+  const playerUri = 'ui://hongguo/v31/player', waitingUri = 'ui://hongguo/v31/waiting'
   assert.equal(tools.find(t => t.name === 'show_waiting_picks')._meta.ui.resourceUri, waitingUri)
   assert.equal(tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri, playerUri)
   assert.deepEqual(resources.map(r => r.uri).sort(), [playerUri, waitingUri])
@@ -333,9 +333,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
     'ui://hongguo/v6/player', 'ui://hongguo/v6/waiting', 'ui://hongguo/v7/waiting',
     'ui://hongguo/v8/player', 'ui://hongguo/v9/waiting', 'ui://hongguo/v11/player', 'ui://hongguo/v12/waiting',
     'ui://hongguo/v16/player', 'ui://hongguo/v16/waiting', 'ui://hongguo/v17/player', 'ui://hongguo/v17/waiting',
-    'ui://hongguo/v18/player', 'ui://hongguo/v18/waiting', 'ui://hongguo/v19/player', 'ui://hongguo/v19/waiting',
-    'ui://hongguo/v20/player', 'ui://hongguo/v20/waiting', 'ui://hongguo/v21/player', 'ui://hongguo/v21/waiting',
-    'ui://hongguo/v22/player', 'ui://hongguo/v22/waiting', 'ui://hongguo/v23/player', 'ui://hongguo/v23/waiting']) {
+    ...Array.from({ length: 13 }, (_, i) => [`ui://hongguo/v${i + 18}/player`, `ui://hongguo/v${i + 18}/waiting`]).flat()]) {
     const read = (await client.readResource({ uri })).contents[0]
     assert.equal(read.uri, uri)
     assert.deepEqual(read._meta.ui.csp, policy)
@@ -350,6 +348,11 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   const ui = await client.readResource({ uri: playerUri })
   assert.equal(ui.contents[0].mimeType, 'text/html;profile=mcp-app')
   assert.doesNotMatch(ui.contents[0].text, /自制样片|id="local"|video:\/\/hongguo\//)
+  const preferences = patch => client.callTool({ name: 'set_preferences', arguments: { panel: r._meta.panel, ...patch } })
+  await preferences({ hoverDecoyEnabled: true })
+  assert.equal((await client.listTools()).tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri, playerUri)
+  assert.deepEqual((await client.readResource({ uri: playerUri })).contents[0]._meta.ui.csp, policy)
+  assert.doesNotMatch(ui.contents[0].text, /<iframe|decoyUrl|decoyFrameUrl|decoyWebsite|canEmbedDecoy|data-decoy-origin/)
   await assert.rejects(client.readResource({ uri: 'video://hongguo/tide' }))
   for (const [name, input] of [
     ['get_episodes', { seriesId: 'tide' }],

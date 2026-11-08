@@ -6,6 +6,9 @@ import { finishedTurn, startedTurn } from './playback-turn'
 import { ProviderAccount } from './provider-account'
 import { browser, call, connect, hostLocale, type Context, type State, type Preferences, type SourceId } from './api'
 import { pickLabel, showWaitingPicks, waitingCard, type WaitingSelection } from './waiting'
+import { createHoverDecoy } from './hover-decoy'
+import { createCoverPage } from './cover-page'
+import { createSettings } from './settings'
 
 type Series = {
   id: string
@@ -65,6 +68,7 @@ type Provider = { id: string; name: string; available: boolean; enabled?: boolea
 let providers: Provider[] = [{ id: 'hongguo', name: '红果', available: true }]
 let providerOptions: Provider[] = []
 const providerInputs = new Map<string, HTMLInputElement>()
+const providerHints = new Map<string, HTMLElement>()
 let sourceMenuTimer: ReturnType<typeof setTimeout> | undefined
 let authRevision: string | undefined
 const account = new ProviderAccount(async () => {
@@ -73,27 +77,52 @@ const account = new ProviderAccount(async () => {
     await home()
   }
 })
+let providerRefresh = 0, providerSettingsKey = ''
 async function refreshProviders() {
-  providerOptions = (await call<{ items: Provider[] }>('get_providers')).items
+  const ticket = ++providerRefresh, generation = preferencesGeneration
+  const items = (await call<{ items: Provider[] }>('get_providers')).items
+  if (ticket !== providerRefresh || generation !== preferencesGeneration) return
+  providerOptions = items
   providers = providerOptions.filter(provider => provider.available)
   closeSourceMenu()
   syncSourceButton()
+  settings.sync()
   if (!providers.some(provider => provider.id === activeSource) && providers.length) await changeSource(providers[0].id)
 }
-function renderProviderSettings() {
-  providerInputs.clear()
-  el('providerSettings').replaceChildren(...providerOptions.filter(provider => provider.configurable).map(provider => {
-    const row = document.createElement('label'), label = document.createElement('span'), input = document.createElement('input')
-    row.className = 'switchRow'; label.textContent = tr(provider.name)
-    if (provider.id === 'hongguo' || (provider.enabled && !provider.available)) {
+function renderProviderSettings(desired: Preferences, disabled: boolean) {
+  const options = providerOptions.filter(provider => provider.configurable)
+  const key = JSON.stringify(options.map(({ id, name }) => ({ id, name })))
+  // Polls must not replace a focused control or cancel an in-progress QR login.
+  if (key !== providerSettingsKey) {
+    providerSettingsKey = key
+    providerInputs.clear(); providerHints.clear()
+    el('providerSettings').replaceChildren(...options.map(provider => {
+      const row = document.createElement('label'), label = document.createElement('span'), input = document.createElement('input')
+      row.className = 'switchRow'; label.textContent = tr(provider.name)
       const hint = document.createElement('small')
-      hint.textContent = tr(provider.id === 'hongguo' ? '始终启用' : '启动失败'); label.append(hint)
-    }
-    input.type = 'checkbox'; input.className = 'switch'; input.checked = !!provider.enabled
-    input.disabled = provider.id === 'hongguo'
-    providerInputs.set(provider.id, input)
-    row.append(label, input); return row
-  }))
+      providerHints.set(provider.id, hint); label.append(hint)
+      input.type = 'checkbox'; input.className = 'switch'
+      input.onchange = () => {
+        const enabled = new Set(settings.values().enabledProviders)
+        if (input.checked) enabled.add(provider.id)
+        else enabled.delete(provider.id)
+        enabled.add('hongguo')
+        void settings.update({ enabledProviders: [...enabled] })
+      }
+      providerInputs.set(provider.id, input)
+      row.append(label, input); return row
+    }))
+  }
+  for (const [id, input] of providerInputs) {
+    input.checked = desired.enabledProviders.includes(id)
+    input.disabled = disabled || id === 'hongguo'
+    const provider = options.find(provider => provider.id === id)!, hint = providerHints.get(id)!
+    hint.hidden = id !== 'hongguo' && !(provider.enabled && !provider.available)
+    hint.textContent = tr(id === 'hongguo' ? '始终启用' : '启动失败')
+  }
+  const source = options.find(provider => desired.enabledProviders.includes(provider.id) && provider.available && provider.authentication)?.id
+  if (!source) account.hide()
+  else if (account.source !== source) void account.show(source)
 }
 function closeSourceMenu(focus = false) {
   clearTimeout(sourceMenuTimer)
@@ -157,7 +186,7 @@ let lastSave = 0,
 
 let prefs: Preferences = {
   autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
-  defaultMuted: true, volume: 0.7,
+  defaultMuted: true, volume: 0.7, hoverDecoyEnabled: false, coverStyle: 'random',
   searchTerms: ['总裁', '重生', '逆袭'], defaultSource: 'hongguo', enabledProviders: ['hongguo'],
 }
 let playback: 'idle' | 'playing' | 'finished' = 'idle'
@@ -180,7 +209,61 @@ let waitingPlaybackId: number | undefined
 let pendingRecommendationTurn: string | undefined
 let openingPreferencesLoaded = false, openingPreferencesLoading: Promise<void> | undefined
 let preferencesGeneration = 0, lastVolume = 0.7, lastDefaultMuted = true, pendingVolume: number | undefined
+let preferencesRevision = 0
 let volumeTimer: ReturnType<typeof setTimeout> | undefined, volumeSaved = Promise.resolve()
+type HoverResume = { action: number; selection: number; episodeId: string; turn?: string; automatic: boolean }
+let hoverResume: HoverResume | undefined, activeStart: { turn?: string; automatic: boolean } | undefined
+let turnStateAvailable = false
+const decoy = createHoverDecoy({ changed: decoyChanged })
+const coverPage = createCoverPage(el('decoy'))
+const settings = createSettings({
+  read: () => prefs,
+  save: async patch => {
+    if (patch.enabledProviders && !patch.enabledProviders.includes(activeSource)) await pause()
+    return call<Preferences>('set_preferences', patch, 4000)
+  },
+  syncExtra: renderProviderSettings,
+  closed: () => account.hide(),
+  edited: () => { ++preferencesRevision },
+  applied: updated => {
+    ++preferencesRevision
+    const providersChanged = JSON.stringify(prefs.enabledProviders) !== JSON.stringify(updated.enabledProviders)
+    const termsChanged = JSON.stringify(prefs.searchTerms) !== JSON.stringify(updated.searchTerms)
+    syncDefaultMute(updated)
+    prefs = updated
+    configureDecoy()
+    autoNext.checked = prefs.autoplayNext
+    if (!autoNext.checked) cancelNextPreload()
+    renderPicks()
+    if (providersChanged) void refreshProviders().catch(error => notice(explain(error)))
+    if (termsChanged && !series) void list().catch(error => notice(explain(error)))
+  },
+  translate: tr,
+})
+function configureDecoy() {
+  coverPage.configure(prefs.coverStyle)
+  settings.sync()
+  decoy.configure(prefs)
+}
+function decoyChanged(covered: boolean) {
+  if (covered) {
+    const resume = !!episode && (!video.paused || preparing || playback === 'playing')
+    const pending = preparing ? activeStart : undefined
+    void pause('', true, true)
+    if (resume) hoverResume = { action, selection, episodeId: episode!.id,
+      turn: pending?.turn, automatic: pending?.automatic ?? false }
+  } else {
+    const intent = hoverResume
+    hoverResume = undefined
+    if (!intent) return
+    const valid = () => !decoy.covered && pageActive && intent.action === action &&
+      intent.selection === selection && intent.episodeId === episode?.id
+    // Consume a terminal task transition before resuming a retained player.
+    void poll().then(() => {
+      if (valid() && turnStateAvailable) return start(intent.turn, intent.automatic)
+    })
+  }
+}
 function flushVolume() {
   clearTimeout(volumeTimer)
   volumeTimer = undefined
@@ -199,6 +282,7 @@ function openingPreferences() {
   const work = flushVolume().then(() => call<Preferences>('get_preferences')).then(settings => {
     if (generation !== preferencesGeneration || !playerReady) return
     prefs = settings
+    configureDecoy()
     lastVolume = Number.isFinite(prefs.volume) && prefs.volume > 0 && prefs.volume <= 1 ? prefs.volume : 0.7
     video.volume = lastVolume
     video.muted = lastDefaultMuted = prefs.defaultMuted ?? true
@@ -258,7 +342,8 @@ function save(reset = false) {
     .catch(() => notice('观看进度暂未写入，请检查本机服务'))
   return saved
 }
-function pause(reason = '', preserveRecommendation = false) {
+function pause(reason = '', preserveRecommendation = false, preserveHover = false) {
+  if (!preserveHover) hoverResume = undefined
   if (!preserveRecommendation) pendingRecommendationTurn = undefined
   if (reason === '已手动暂停') confirmWaitingPlayback()
   action++
@@ -828,17 +913,20 @@ function poll() {
 }
 async function readTurnState() {
   try {
+    const revision = preferencesRevision
     const state = await call<State>('get_run_state', {
       observeSession: true, playerInstance: document.hidden ? undefined : instance,
     }, 1800)
     if (!pageActive) return
+    turnStateAvailable = true
     if (state.authRevision && authRevision && state.authRevision !== authRevision) await home()
     authRevision = state.authRevision
-    if (state.preferences) {
+    if (state.preferences && revision === preferencesRevision) {
       const promptChanged = prefs.autoPrompt !== state.preferences.autoPrompt
       const providersChanged = JSON.stringify(prefs.enabledProviders) !== JSON.stringify(state.preferences.enabledProviders)
       syncDefaultMute(state.preferences)
       prefs = state.preferences
+      configureDecoy()
       autoNext.checked = prefs.autoplayNext
       if (!autoNext.checked) cancelNextPreload()
       if (promptChanged) renderPicks()
@@ -855,6 +943,7 @@ async function readTurnState() {
         video.paused && !preparing) void start(state.turnId!, true)
   } catch {
     if (!pageActive) return
+    turnStateAvailable = false
     el('lamp').classList.remove('on')
     text('state', '本机状态不可达')
   }
@@ -882,6 +971,12 @@ function playlistDuration(manifest: string) {
 }
 async function start(recommendationTurn?: string, automatic = false) {
   if (!episode?.playable || !series || !pageActive) return
+  activeStart = { turn: recommendationTurn, automatic }
+  if (decoy.covered) {
+    hoverResume = { action: ++action, selection, episodeId: episode.id, turn: recommendationTurn, automatic }
+    return
+  }
+  hoverResume = undefined
   pendingRecommendationTurn = automatic ? undefined : recommendationTurn
   const n = ++action,
     ep = episode,
@@ -978,6 +1073,7 @@ async function start(recommendationTurn?: string, automatic = false) {
     video.playbackRate = parseFloat(el<HTMLSelectElement>('speed').value)
     try {
       await video.play()
+      if (decoy.covered || !pageActive) { video.pause(); return }
     } catch (error) {
       if (n !== action || !pageActive) return
       if (!(error instanceof DOMException && ['AbortError', 'NotAllowedError'].includes(error.name)) ||
@@ -1041,8 +1137,8 @@ video.onpause = () => {
   if (document.hidden || !document.hasFocus() || backgroundPlayback?.action === action)
     rememberBackgroundPlayback()
 }
-video.onplay = syncButtons
-video.onplaying = confirmWaitingPlayback
+video.onplay = () => { if (decoy.covered) video.pause(); syncButtons() }
+video.onplaying = () => { if (decoy.covered) video.pause(); else confirmWaitingPlayback() }
 video.onerror = () => {
   if (loaded) {
     void pause(mediaErrorMessage(video.error?.code))
@@ -1091,7 +1187,7 @@ async function fullscreen() {
     return
   }
   try {
-    await stage.requestFullscreen()
+    await el('playerRoot').requestFullscreen()
   } catch {
     stage.classList.add('expanded')
     syncFullscreen()
@@ -1252,63 +1348,15 @@ el('copy').onclick = async () => {
     notice('链接已选中，请复制并在 Codex 内置浏览器打开')
   }
 }
-el('settingsCancel').onclick = () => el('prefs').click()
 el('prefs').onclick = async () => {
   if (!playerReady) return
-  if (!el('settings').hidden) {
-    account.hide()
-    el('settings').hidden = true
-    el('prefs').setAttribute('aria-expanded', 'false')
-    return
-  }
+  if (!el('settings').hidden) { await settings.finish(); return }
   try {
     await openingPreferences()
     await refreshProviders()
     if (!playerReady) return
-    el('settings').hidden = !el('settings').hidden
-    el('prefs').setAttribute('aria-expanded', String(!el('settings').hidden))
-    el<HTMLInputElement>('autoPrompt').checked = prefs.autoPrompt
-    el<HTMLInputElement>('autoPauseOnFinish').checked = prefs.autoPauseOnFinish
-    el<HTMLInputElement>('autoPlayOnStart').checked = prefs.autoPlayOnStart
-    el<HTMLInputElement>('defaultMuted').checked = prefs.defaultMuted
-    el<HTMLInputElement>('terms').value = prefs.searchTerms.join('，')
-    renderProviderSettings()
-    if (el('settings').hidden) account.hide()
-    else void account.show(providerOptions.find(provider => provider.enabled && provider.available && provider.authentication)?.id)
+    settings.open()
   } catch (error) { notice(explain(error)) }
-}
-el('settings').onsubmit = (e) => {
-  e.preventDefault()
-  const generation = preferencesGeneration
-  const searchTerms = el<HTMLInputElement>('terms')
-    .value.split(/[,，]/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-  const enabledProviders = providerInputs.size ? [...providerInputs].filter(([, input]) => input.checked).map(([id]) => id) : prefs.enabledProviders
-  void (async () => {
-    if (!enabledProviders.includes(activeSource)) await pause()
-    return call<typeof prefs>('set_preferences', {
-      autoPrompt: el<HTMLInputElement>('autoPrompt').checked,
-      autoPauseOnFinish: el<HTMLInputElement>('autoPauseOnFinish').checked,
-      autoPlayOnStart: el<HTMLInputElement>('autoPlayOnStart').checked,
-      defaultMuted: el<HTMLInputElement>('defaultMuted').checked,
-      searchTerms,
-      enabledProviders,
-    })
-  })()
-    .then(async (updated) => {
-      if (generation !== preferencesGeneration || !playerReady) return
-      syncDefaultMute(updated)
-      prefs = updated
-      await refreshProviders()
-      autoNext.checked = prefs.autoplayNext
-      el('settings').hidden = true
-      account.hide()
-      el('prefs').setAttribute('aria-expanded', 'false')
-      renderPicks()
-      if (!series) await list()
-    })
-    .catch((err) => notice(explain(err)))
 }
 el('choose').onclick = async () => {
   try {
@@ -1340,18 +1388,19 @@ async function suspend() {
   await Promise.all([pause('已暂停，点击播放继续', true), presence(false), flushVolume()])
 }
 function retryInterruptedPlayback(intent: InterruptedPlayback) {
-  if (intent.action !== action || !pageActive || !loaded || playback !== 'playing' ||
+  if (decoy.covered || intent.action !== action || !pageActive || !loaded || playback !== 'playing' ||
       !video.paused || video.ended || video.error) return
   const position = video.currentTime
   // If the host refuses to play, wait for focus to return instead of looping at the same frame.
   if (intent.lastPosition !== undefined && Math.abs(position - intent.lastPosition) < 0.25) return
   intent.lastPosition = position
   void video.play().then(() => {
+    if (decoy.covered || !pageActive) { video.pause(); return }
     if (intent.action === action && !video.paused) notice('正在播放')
   }).catch(() => {})
 }
 function rememberBackgroundPlayback() {
-  if (!pageActive || playback !== 'playing') return
+  if (decoy.covered || !pageActive || playback !== 'playing') return
   if (backgroundPlayback?.action !== action) backgroundPlayback = { action }
   retryInterruptedPlayback(backgroundPlayback)
 }
@@ -1429,6 +1478,7 @@ function closePlayer() {
   const stopped = suspend()
   playerReady = false
   ++preferencesGeneration
+  settings.reset()
   openingPreferencesLoaded = false
   openingPreferencesLoading = undefined
   el<HTMLButtonElement>('mute').disabled = true
@@ -1447,8 +1497,10 @@ const waiting = isWaiting ? waitingCard(
   selected => { void initPlayer(selected).catch(e => notice(explain(e))) }, closePlayer,
 ) : null
 void connect(ctx => {
-  initLocale(hostLocale())
+  const locale = hostLocale()
+  initLocale(locale)
+  coverPage.initialize(locale)
   context = ctx
   if (waiting) { if (ctx.waitingTurn) waiting.connected() }
   else void initPlayer().catch(e => notice(explain(e)))
-}, async () => { waiting?.dispose(); await closePlayer() }, () => waiting?.modeChanged()).catch(e => notice(explain(e)))
+}, async () => { waiting?.dispose(); await closePlayer(); decoy.dispose() }, () => waiting?.modeChanged()).catch(e => notice(explain(e)))

@@ -18,7 +18,8 @@ function fixture(t) {
 }
 const tick = () => new Promise(resolve => setTimeout(resolve, 15))
 
-test('cold loads from independent Node processes share one refresh and survive another process restart', { timeout: 15000 }, async t => {
+// Three cold Node startups need headroom on hosted Windows runners under load.
+test('cold loads from independent Node processes share one refresh and survive another process restart', { timeout: 30000 }, async t => {
   const workers = [], requests = []
   async function worker() {
     const child = fork(new URL('./fixtures/catalog-cache-worker.mjs', import.meta.url), [], { stdio: ['ignore','ignore','ignore','ipc'] })

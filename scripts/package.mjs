@@ -13,7 +13,7 @@ await writeFile(join(release, 'marketplace/.agents/plugins/marketplace.json'), J
 await rm(npmRoot, { recursive: true, force: true })
 await rm(offline, { recursive: true, force: true })
 await mkdir(npmRoot, { recursive: true })
-for (const file of ['.codex-plugin/plugin.json', '.mcp.json', 'hooks/hooks.json', 'assets', 'bin', 'skills', 'dist', 'LICENSE', 'COPYING', 'NOTICE', 'docs/images']) {
+for (const file of ['.codex-plugin/plugin.json', '.mcp.json', 'hooks/hooks.json', 'assets', 'bin', 'skills', 'dist', 'LICENSE', 'COPYING', 'NOTICE']) {
   await mkdir(dirname(join(npmRoot, file)), { recursive: true })
   await cp(file, join(npmRoot, file), { recursive: true })
 }
@@ -31,10 +31,11 @@ await writeFile(join(npmRoot, 'package.json'), JSON.stringify({
   repository: { type: 'git', url: 'git+https://github.com/mreasonyang/codex-hongguo.git' },
   homepage: 'https://github.com/mreasonyang/codex-hongguo#readme',
   bin: { 'codex-hongguo': './bin/codex-hongguo.mjs' },
-  files: ['.codex-plugin/', '.mcp.json', 'hooks/', 'skills/', 'assets/', 'bin/', 'dist/', 'licenses/', 'LICENSE', 'COPYING', 'NOTICE', 'README.md', 'README.en.md', 'docs/images/', 'docs/providers.md'],
+  files: ['.codex-plugin/', '.mcp.json', 'hooks/', 'skills/', 'assets/', 'bin/', 'dist/', 'licenses/', 'LICENSE', 'COPYING', 'NOTICE', 'README.md', 'README.en.md', 'docs/providers.md'],
   publishConfig: { access: 'public', registry: 'https://registry.npmjs.org' },
 }, null, 2) + '\n')
 const guides = {}
+const screenshotRoot = `https://raw.githubusercontent.com/mreasonyang/codex-hongguo/v${pkg.version}/docs/images/`
 for (const name of ['README.md', 'README.en.md']) {
   const [guide, development] = (await readFile(name, 'utf8')).split('<!-- development -->')
   if (!development) throw Error(name + ' 缺少消费者指南与开发说明的分界')
@@ -45,6 +46,7 @@ for (const name of ['README.md', 'README.en.md']) {
     .replace('The public npm package and GitHub Releases installers have not been published.', 'GitHub Releases installers have not been published.')
     .replaceAll('(docs/npm-distribution.md)', '(https://github.com/mreasonyang/codex-hongguo/blob/main/docs/npm-distribution.md)')
     .replaceAll('(docs/windows-support.md)', '(https://github.com/mreasonyang/codex-hongguo/blob/main/docs/windows-support.md)')
+    .replaceAll('(docs/images/', '(' + screenshotRoot)
     .trimEnd() + '\n'
   await writeFile(join(npmRoot, name), guides[name])
 }
@@ -65,7 +67,7 @@ async function sourceTree(path) {
     else if (entry.isFile()) sourceEntries[file.replaceAll('\\', '/')] = new Uint8Array(await readFile(file))
   }
 }
-for (const directory of ['src', 'scripts', 'test', 'assets', 'bin', 'skills', 'hooks', '.codex-plugin', 'third_party', 'launcher', 'docs/images']) await sourceTree(directory)
+for (const directory of ['src', 'scripts', 'test', 'assets', 'bin', 'skills', 'hooks', '.codex-plugin', 'third_party', 'launcher']) await sourceTree(directory)
 for (const file of ['package.json', 'package-lock.json', 'tsconfig.json', '.mcp.json', 'plugin.json', 'LICENSE', 'COPYING', 'NOTICE', 'README.md', 'README.en.md', 'docs/providers.md'])
   sourceEntries[file] = new Uint8Array(await readFile(file))
 await writeFile(join(notices, 'codex-hongguo-source.zip'), zipSync(sourceEntries, { level: 6 }))
@@ -90,8 +92,6 @@ for (const [name, guide] of Object.entries(guides)) await writeFile(join(offline
 await cp('LICENSE', join(offline, 'LICENSE'))
 await cp('COPYING', join(offline, 'COPYING'))
 await cp('NOTICE', join(offline, 'NOTICE'))
-await mkdir(join(offline, 'docs'), { recursive: true })
-await cp('docs/images', join(offline, 'docs/images'), { recursive: true })
 await cp('assets', join(offline, 'assets'), { recursive: true })
 const entries = {}
 async function collect(dir, base) {

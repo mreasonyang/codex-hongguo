@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { realpathSync } from 'node:fs'
 import { dataRoot } from '../server/paths.mjs'
 import { marketplace, packageVersion } from '../runtime/distribution.mjs'
+import { isVersion } from '../runtime/version.mjs'
 
 export const managedMarketplaceRoot = resolve(dataRoot(), 'managed-marketplace')
 // Keep the index outside npm's disposable exec cache. A new CLI version gets a
@@ -17,9 +18,8 @@ export function marketplaceSource(registration) {
 
 export function isManagedMarketplace(source, managedRoot = managedMarketplaceRoot) {
   if (typeof source !== 'string') return false
-  const version = /^\d{1,3}\.\d{1,3}\.\d{1,3}$/
-  if (version.test(relative(managedRoot, resolve(source)))) return true
-  try { return version.test(relative(realpathSync.native(managedRoot), realpathSync.native(source))) } catch { return false }
+  if (isVersion(relative(managedRoot, resolve(source)))) return true
+  try { return isVersion(relative(realpathSync.native(managedRoot), realpathSync.native(source))) } catch { return false }
 }
 
 export async function prepareLocalMarketplace() {

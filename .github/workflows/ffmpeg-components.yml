@@ -1,0 +1,96 @@
+name: FFmpeg components
+on:
+  push:
+    tags: ['ffmpeg-*']
+permissions:
+  contents: read
+concurrency:
+  group: ffmpeg-components
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux-x64, linux-arm64, win32-x64, win32-arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test archive validation
+        run: python -m unittest discover -s test -p 'repack_ffmpeg_test.py'
+      - name: Verify upstream and repackage unchanged binary
+        run: python scripts/repack-ffmpeg.py build --platform ${{ matrix.platform }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: component-${{ matrix.platform }}
+          if-no-files-found: error
+          path: release/ffmpeg-components/
+  native:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+          - os: windows-latest
+            platform: win32-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: component-${{ matrix.platform }}
+          path: release/ffmpeg-components/
+      - name: Check real decoding, encoding and covers
+        run: python scripts/repack-ffmpeg.py native --platform ${{ matrix.platform }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.platform }}
+          if-no-files-found: error
+          path: release/ffmpeg-components/*-native.json
+  publish:
+    needs: [build, native]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: component-*
+          merge-multiple: true
+          path: release/ffmpeg-components/
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          merge-multiple: true
+          path: release/ffmpeg-components/
+      - name: Verify all receipts and prepare source access
+        run: python scripts/repack-ffmpeg.py collect
+      - name: Publish independent component prerelease
+        run: python scripts/repack-ffmpeg.py publish
+        env:
+          COMPONENT_TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: component-qualification
+          path: |
+            release/ffmpeg-components/components.json
+            release/ffmpeg-components/qualification.json
+            release/ffmpeg-components/sources-index.json

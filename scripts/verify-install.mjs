@@ -10,13 +10,15 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { Store } from '../src/server/store.mjs'
 import { marketplace, npmPackageName } from './distribution.mjs'
+import { releaseChannel } from '../src/runtime/version.mjs'
 
 const tmp = await realpath(await mkdtemp(join(tmpdir(), '红果 安装 ')))
 const root = join(tmp, '本地 市场'),
   profile = join(tmp, '独立配置')
 const npmMarket = join(tmp, 'npm 市场')
 const version = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version
-const playerUri = 'ui://hongguo/v26/player', waitingUri = 'ui://hongguo/v26/waiting'
+const channel = releaseChannel(version)
+const playerUri = 'ui://hongguo/v31/player', waitingUri = 'ui://hongguo/v31/waiting'
 const commands = Object.fromEntries(['npm', 'codex', 'openssl'].map(name => [name, findExecutable(name)]))
 const env = {
   HOME: tmp,
@@ -40,7 +42,8 @@ function run(bin, args) {
   const r = spawnSync(commands[bin] || bin, args, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: bin === 'npm' ? 420000 : 120000, windowsHide: true })
   // Never relay host logs. Only a fixed category crosses the diagnostic boundary.
   const diagnostic = (r.stderr || '') + '\n' + (r.stdout || '')
-  const reason = /红果后台仍在运行/.test(diagnostic) ? 'plugin_running'
+  const reason = /播放组件自动准备失败/.test(diagnostic) ? 'media_prepare_failed'
+    : /红果后台仍在运行/.test(diagnostic) ? 'plugin_running'
     : /无法确认红果后台是否已退出/.test(diagnostic) ? 'process_check_failed'
     : /无法删除红果插件缓存/.test(diagnostic) ? 'cache_in_use'
     : /红果插件卸载失败/.test(diagnostic) ? 'plugin_remove_failed'
@@ -98,15 +101,15 @@ try {
   await assert.rejects(access(env.HONGGUO_FORBIDDEN_FFMPEG), '不应调用系统 FFmpeg')
   const seeded = new Store(defaultData)
   seeded.save({ seriesId: 'hg-987654321', episodeId: 'hg-987654322', title: '安装验收进度', label: '2', positionMs: 12345, durationMs: 60000 })
-  seeded.setPreferences({ autoPrompt: true, searchTerms: ['总裁', '重生', '逆袭'], defaultMuted: false, volume: 0.43 })
+  seeded.setPreferences({ autoPrompt: true, searchTerms: ['总裁', '重生', '逆袭'], defaultMuted: false, volume: 0.43, coverStyle: 'document' })
   seeded.setSetupDismissed(true)
   seeded.close()
-  run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
+  run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + channel, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
   if (process.platform === 'win32') {
     // Exercise the same quoted scoped package used in the installation instructions,
     // with both Windows PowerShell 5.1 and PowerShell 7. No platform bypass is allowed.
     const quote = value => "'" + value.replaceAll("'", "''") + "'"
-    const args = ['--yes', '--registry', origin, npmPackageName + '@latest', 'setup', '--marketplace', npmMarket]
+    const args = ['--yes', '--registry', origin, npmPackageName + '@' + channel, 'setup', '--marketplace', npmMarket]
     const script = "$ErrorActionPreference = 'Stop'; npx.cmd " + args.map(quote).join(' ') + '; exit $LASTEXITCODE'
     for (const shell of ['powershell', 'pwsh']) {
       const result = spawnSync(findExecutable(shell), ['-NoProfile', '-NonInteractive', '-Command', script], {
@@ -169,6 +172,14 @@ try {
   await access(join(installedRoot, 'bin/run-node-arm64.exe'))
   await access(join(installedRoot, 'dist/vendor/openhongguo/dist/openhongguo.wasm'))
   await assert.rejects(access(join(installedRoot, 'node_modules')))
+  await assert.rejects(access(join(installedRoot, 'docs/images')), { code: 'ENOENT' }, 'README 截图不得随插件安装')
+  const screenshotRoot = `https://raw.githubusercontent.com/mreasonyang/codex-hongguo/v${version}/docs/images/`
+  for (const guide of ['README.md', 'README.en.md']) {
+    const contents = await readFile(join(installedRoot, guide), 'utf8')
+    const images = [...contents.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)].map(match => match[1])
+    assert.equal(images.length, 2, '中英文安装指南必须保留两张界面截图')
+    assert.ok(images.every(url => url.startsWith(screenshotRoot)), '安装指南截图必须引用对应版本的远程图片')
+  }
   const checked = spawnSync(process.execPath, [join(installedRoot, 'dist/setup/check.mjs')], {
     cwd: root, env, encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'ignore'],
   })
@@ -251,6 +262,7 @@ try {
   assert.equal((await hostCall('get_run_state', { panel: card._meta.panel, observeSession: true }))._meta?.data?.state, 'interrupted')
   const waiting = await rpc('mcpServer/resource/read', { threadId: thread.thread.id, server: server.name, uri: waitingUri })
   assert.deepEqual(waiting.contents[0]._meta.ui.csp, { connectDomains: [], resourceDomains: ['blob:'] })
+  assert.deepEqual(waiting.contents[0]._meta.ui.csp.resourceDomains, ['blob:'])
   assert.equal(waiting.contents?.[0]?._meta?.['openai/ui']?.preferredDisplayMode, 'inline')
   assert.equal(waiting.contents[0]._meta['openai/widgetShowCodexWidgetInline'], true)
   console.log('安装副本通过真实宿主协议匹配会话、展示候选、单次领取播放及停止事件检查，返回剧目数', picks.length)
@@ -261,6 +273,9 @@ try {
   const preferences = (await hostCall('get_preferences', { panel: opened._meta.panel }))._meta?.data
   assert.equal(preferences?.defaultMuted, false, '重复安装后默认静音设置丢失')
   assert.equal(preferences?.volume, 0.43, '重复安装后音量记忆丢失')
+  assert.equal(preferences?.coverStyle, 'document', '重复安装后替身样式丢失')
+  const coverSettings = await hostCall('set_preferences', { panel: opened._meta.panel, coverStyle: 'minutes' })
+  assert.equal(coverSettings._meta?.data?.coverStyle, 'minutes', '安装副本无法保存替身样式')
   const firstSetup = await hostCall('get_setup_status', { panel: opened._meta.panel })
   assert.equal(firstSetup._meta?.data?.dismissed, true, '重复安装后引导设置丢失')
   assert.equal(firstSetup._meta.data.hooks.status, 'manual_check')
@@ -321,6 +336,7 @@ try {
     uri: playerUri,
   })
   assert.deepEqual(resource.contents[0]._meta.ui.csp, { connectDomains: [], resourceDomains: ['blob:'] })
+  assert.deepEqual(resource.contents[0]._meta.ui.csp.resourceDomains, ['blob:'])
   assert.ok(resource.contents?.[0]?.text?.includes('id="fullscreen"'))
   assert.doesNotMatch(resource.contents[0].text, /id="(?:setupGuide|setupOpen|health|healthInfo|volume)"/,
     '播放器不应包含欢迎／自检页、入口或音量滑杆')

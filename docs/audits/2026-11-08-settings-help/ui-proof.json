@@ -1,0 +1,79 @@
+{
+  "version": "0.0.35-beta.11",
+  "uiSha256": "a0eabc2be29609b29666ceb64f944f9193e2ca6a0252372805f2db2a1991988b",
+  "browser": "Codex in-app browser",
+  "fiveClickChecks": [
+    {
+      "covered": "false",
+      "id": "autoPlayOnStart",
+      "settingsOpen": true,
+      "visible": true
+    },
+    {
+      "covered": "false",
+      "id": "defaultMuted",
+      "settingsOpen": true,
+      "visible": true
+    },
+    {
+      "covered": "false",
+      "id": "hoverDecoyEnabled",
+      "settingsOpen": true,
+      "visible": true
+    },
+    {
+      "covered": "false",
+      "id": "coverStyle",
+      "settingsOpen": true,
+      "visible": true
+    },
+    {
+      "covered": "false",
+      "id": "terms",
+      "settingsOpen": true,
+      "visible": true
+    }
+  ],
+  "tooltip": {
+    "bottom": 219.84375,
+    "covered": "false",
+    "enabled": true,
+    "left": 48,
+    "right": 348,
+    "settingsOpen": true,
+    "text": "When the pointer leaves the Hongguo panel, show a decoy page and pause playback. Playback resumes when the pointer returns, unless it was paused manually.",
+    "top": 121.0625,
+    "visible": true
+  },
+  "pointerCanEnterTooltip": true,
+  "escape": {
+    "open": true,
+    "tipClosed": true
+  },
+  "styleMenuAfterHelp": "true",
+  "selectionAfterHelp": {
+    "open": true,
+    "value": "report"
+  },
+  "exitAfterHelp": {
+    "covered": "true",
+    "settingsClosed": true,
+    "template": "report"
+  },
+  "narrow": {
+    "bottom": 252.375,
+    "left": 12,
+    "panelHeight": 340,
+    "panelWidth": 300,
+    "right": 288,
+    "top": 134.3984375,
+    "visible": true
+  },
+  "keyboardScroll": {
+    "active": "termsHelp",
+    "scrollY": 211,
+    "settingsOpen": true,
+    "visible": true
+  },
+  "checkedAt": "2026-11-08T13:42:16.877Z"
+}

@@ -1,0 +1,19 @@
+{
+  "main": "0a57f75b4806a6ddab8ea256c0991e05a559e9a3",
+  "unchangedCriticalFiles": [
+    "src/ui/hover-decoy.ts",
+    "src/ui/cover-page.ts",
+    "src/ui/cover-style-picker.ts",
+    "src/ui/settings-help.ts",
+    "src/runtime/ffmpeg-runtime.mjs",
+    "src/runtime/ffmpeg-artifacts.json",
+    "src/cli/main.mjs",
+    "src/runtime/version.mjs",
+    "scripts/version.mjs",
+    "scripts/release-artifacts.mjs",
+    "scripts/publish.mjs",
+    ".github/workflows/publish.yml",
+    ".github/workflows/ffmpeg-components.yml",
+    "scripts/repack-ffmpeg.py"
+  ]
+}

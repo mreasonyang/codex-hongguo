@@ -75,6 +75,8 @@ export const schemas = {
     autoPauseOnFinish: z.boolean().optional(),
     autoPlayOnStart: z.boolean().optional(),
     defaultMuted: z.boolean().optional(),
+    hoverDecoyEnabled: z.boolean().optional(),
+    coverStyle: z.enum(['random', 'tasks', 'document', 'report', 'minutes']).optional(),
     volume: z.number().positive().max(1).optional(),
     enabledProviders: z.array(source).min(1).max(32).refine(ids => ids.includes('hongguo')).optional(),
   }),

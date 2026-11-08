@@ -1,6 +1,6 @@
 {
   "name": "@kyun.si/codex-hongguo",
-  "version": "0.0.34",
+  "version": "0.0.35",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -9,6 +9,7 @@
   },
   "scripts": {
     "version:patch": "npm version patch --no-git-tag-version",
+    "version:beta": "node scripts/version.mjs --beta",
     "preversion": "node scripts/version.mjs --next",
     "version": "node scripts/version.mjs --sync",
     "prebuild": "node scripts/version.mjs",

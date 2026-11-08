@@ -273,7 +273,7 @@ test('a version-one database keeps legacy Hongguo progress, preferences and reco
     store.saveWaitingFeed([{ id: 'p.demo.s.MQ', title: 'Other source' }], Date.now(), 'demo')
     assert.equal(store.waitingFeed(false, 'hongguo')[0].id, 'hg-2')
     assert.equal(store.waitingFeed(false, 'demo')[0].id, 'p.demo.s.MQ')
-    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 2)
+    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 3)
   } finally { store.close() }
   const reopened = new Store(root)
   try { assert.equal(reopened.history()[0].positionMs, 12345) } finally { reopened.close() }
@@ -288,4 +288,36 @@ test('provider request timeout and cancellation reject without exposing provider
   const cancellation = assert.rejects(aborted, /请求已取消/)
   controller.abort(); await cancellation
   await assert.rejects(sourceCall(() => { throw Error('private endpoint diagnostic') }), error => !error.message.includes('private'))
+})
+
+for (const branch of ['main', 'provider']) test(`version-two ${branch} database receives both migrations without losing saved state`, async t => {
+  const root = await temporary(t)
+  let store = new Store(root)
+  const feed = [{ id: 'hg-3', title: 'Legacy recommendation' }]
+  store.saveWaitingFeed(feed)
+  store.save({ seriesId: 'hg-3', episodeId: 'hg-31', title: 'Legacy', label: '1', positionMs: 13000, durationMs: 60000 })
+  store.setPreferences({ volume: 0.43, hoverDecoyEnabled: true, coverStyle: 'minutes', enabledProviders: ['hongguo', 'demo'], defaultSource: 'demo' })
+  store.saveWaitingFeed([{ id: 'p.demo.s.MQ', title: 'Plugin recommendation' }], Date.now(), 'demo')
+  const history = store.history()
+  if (branch === 'main') {
+    const { enabledProviders, defaultSource, ...legacy } = store.preferences()
+    store.db.prepare('UPDATE player_preferences SET body=? WHERE id=1').run(JSON.stringify(legacy))
+    store.db.exec('DROP TABLE source_recommendation_feed; DROP TABLE recommendation_source;')
+  }
+  const preferences = store.preferences()
+  if (branch === 'provider') store.db.prepare('UPDATE player_preferences SET body=? WHERE id=1').run(JSON.stringify({ ...preferences, decoyUrl: 'https://example.org/obsolete', decoyFrameUrl: 'https://example.org/frame' }))
+  store.db.exec('PRAGMA user_version=2')
+  store.close()
+  for (let i = 0; i < 2; i++) {
+    store = new Store(root)
+    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 3)
+    assert.deepEqual(store.preferences(), preferences)
+    assert.deepEqual(store.history(), history)
+    assert.deepEqual(store.waitingFeed(), feed)
+    assert.deepEqual(JSON.parse(store.db.prepare("SELECT items FROM source_recommendation_feed WHERE source='hongguo'").get().items), feed)
+    if (branch === 'provider') assert.equal(store.waitingFeed(false, 'demo')[0].id, 'p.demo.s.MQ')
+    else assert.deepEqual(store.waitingFeed(false, 'demo'), [])
+    assert.equal('decoyUrl' in JSON.parse(store.db.prepare('SELECT body FROM player_preferences').get().body), false)
+    store.close()
+  }
 })

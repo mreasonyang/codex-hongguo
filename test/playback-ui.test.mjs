@@ -10,6 +10,8 @@ import { Store } from '../src/server/store.mjs'
 import { Service } from '../src/server/service.mjs'
 import { Catalog } from '../src/server/catalog.mjs'
 import { ProviderRegistry } from '../src/server/providers/registry.mjs'
+import { createCoverPage } from '../src/ui/cover-page.ts'
+import { createSettings } from '../src/ui/settings.ts'
 
 class Element extends EventTarget {
   hidden = true; checked = false; value = '1'; dataset = {}; children = []; textContent = ''
@@ -43,7 +45,11 @@ export const fixture = {
   poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer, changeSource, list, history, refreshProviders,
   sourceState() { return { source: activeSource, cards: cards.map(row => row.id), watched: watched.map(row => row.seriesId) } },
   setProviders(items) { providers = items.filter(item => item.available); syncSourceButton() },
+  decoy, coverPage, settings,
+  providerInput(id) { return providerInputs.get(id) },
+  unload() { loaded = false },
   selected() {
+    coverPage.initialize('zh-CN');
     context = { identified: true }; pageActive = playerReady = loaded = true;
     series = { id: 'hg-1', title: 'Test' };
     episode = { id: 'hg-11', label: '1', number: 1, codec: 'h264', playable: true };
@@ -55,6 +61,8 @@ export const fixture = {
   episodeId() { return episode?.id },
 };`
 const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code
+const accountCode = transformSync(readFileSync(new URL('../src/ui/provider-account.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code
+const decoyCode = transformSync(readFileSync(new URL('../src/ui/hover-decoy.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code
 const flush = async () => { for (let i = 0; i < 50; i++) await Promise.resolve() }
 
 function setup(t) {
@@ -66,13 +74,15 @@ function setup(t) {
   const otherPanel = other.panel(other.open({ threadId: 'B' }).panel)
   const video = new Video(), elements = new Map()
   const document = Object.assign(new EventTarget(), {
-    hidden: false, documentElement: { dataset: {} }, hasFocus: () => true,
-    getElementById(id) { if (!elements.has(id)) { const e = new Element(); e.focus = () => { document.activeElement = e }; elements.set(id, e) } return elements.get(id) },
-    querySelector: () => video, querySelectorAll: () => [], createElement: () => {
-      const e = new Element(); e.focus = () => { document.activeElement = e }; return e
+    hidden: false, documentElement: new Element(), hasFocus: () => true,
+    getElementById(id) { if (!elements.has(id)) elements.set(id, this.createElement()); return elements.get(id) },
+    querySelector: () => video, querySelectorAll: () => [],
+    createElement: () => {
+      const e = Object.assign(new Element(), { ownerDocument: document })
+      e.focus = () => { document.activeElement = e }; return e
     },
   })
-  const window = Object.assign(new EventTarget(), { setInterval: () => 1, clearInterval() {}, scrollTo() {} })
+  const window = Object.assign(new EventTarget(), { innerWidth: 900, innerHeight: 700, setInterval: () => 1, clearInterval() {}, scrollTo() {} })
   const api = {
     browser: false, connect: async () => {}, hostLocale: () => 'zh',
     call: (name, args = {}) => name === 'get_providers' && !service.catalog.sources
@@ -83,8 +93,20 @@ function setup(t) {
     module: { exports }, exports, document, window, navigator: {}, crypto: webcrypto,
     AbortController, DOMException, setTimeout, clearTimeout,
     require(name) {
-      if (name === './provider-account') return { ProviderAccount: class { hide() {} show() {} } }
+      if (name === './provider-account') {
+        const exports = {}, scope = vm.createContext({ module: { exports }, exports, document, Blob, URL, setTimeout, clearTimeout,
+          require: name => name === './api' ? api : { tr: value => value } })
+        vm.runInContext(accountCode, scope)
+        return scope.module.exports
+      }
       if (name === './api') return api
+      if (name === './cover-page') return { createCoverPage }
+      if (name === './settings') return { createSettings: options => createSettings(options, document) }
+      if (name === './hover-decoy') {
+        const exports = {}, decoyContext = vm.createContext({ module: { exports }, exports, document, window, setTimeout, clearTimeout })
+        vm.runInContext(decoyCode, decoyContext)
+        return decoyContext.module.exports
+      }
       if (name === './locale') return { tr: value => value }
       if (name === './playback-turn') return turnHelpers
       if (name === './media-startup') return mediaHelpers
@@ -95,6 +117,7 @@ function setup(t) {
   })
   vm.runInContext(code, context)
   const ui = context.module.exports.fixture
+  t.after(() => { ui.decoy.dispose(); ui.closePlayer() })
   ui.selected()
   ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'demo', name: '示例片源', available: true }])
   store.setPreferences({ enabledProviders: ['hongguo', 'demo'] })
@@ -230,14 +253,16 @@ test('the settings form enables local provider explicitly, then disabling it ret
   assert.equal(rows[1].children[1].checked, false)
   assert.equal(f.elements.get('source').disabled, true)
   rows[1].children[1].checked = true
-  f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
+  rows[1].children[1].onchange(); await flush()
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.ui.providerInput('demo'), rows[1].children[1], 'saving must retain the focused Provider switch')
   assert.equal(sources.get('demo').id, 'demo')
   assert.equal(f.elements.get('source').disabled, false)
   await f.ui.changeSource('demo')
-  await f.elements.get('prefs').onclick()
   rows = f.elements.get('providerSettings').children
   rows[1].children[1].checked = false
-  f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
+  rows[1].children[1].onchange(); await flush()
+  assert.equal(f.elements.get('settings').hidden, false)
   assert.throws(() => sources.get('demo'))
   assert.equal(f.ui.sourceState().source, 'hongguo')
   assert.equal(f.elements.get('source').disabled, true)
@@ -307,25 +332,293 @@ test('global playback switches default for older settings, synchronize across ch
   finally { explicitlyDisabled.close() }
   await assert.rejects(f.settings({ autoPlayOnStart: 'yes' }), /参数无效/)
   await assert.rejects(f.settings({ defaultMuted: 'yes' }), /参数无效/)
+  assert.equal(f.peer.preferences().hoverDecoyEnabled, false)
+  await f.settings({ hoverDecoyEnabled: true })
+  const decoySettings = new Store(f.store.root)
+  try { assert.equal(decoySettings.preferences().hoverDecoyEnabled, true) }
+  finally { decoySettings.close() }
   for (const volume of [0, -1, 1.01, NaN, Infinity]) await assert.rejects(f.settings({ volume }), /参数无效/)
 })
 
-test('playback and default-mute settings load and save through the player form', async t => {
+test('player switches save immediately and explicit Close finishes Settings', async t => {
   const f = setup(t)
   f.event('one'); await f.poll()
   await f.elements.get('prefs').onclick()
   assert.equal(f.elements.get('autoPauseOnFinish').checked, true)
   assert.equal(f.elements.get('autoPlayOnStart').checked, true)
   assert.equal(f.elements.get('defaultMuted').checked, true)
-  f.elements.get('autoPauseOnFinish').checked = false
-  f.elements.get('autoPlayOnStart').checked = false
-  f.elements.get('defaultMuted').checked = false
-  f.elements.get('settings').onsubmit({ preventDefault() {} })
+  for (const key of ['autoPauseOnFinish', 'autoPlayOnStart', 'defaultMuted', 'hoverDecoyEnabled']) {
+    f.elements.get(key).checked = key === 'hoverDecoyEnabled'
+    f.elements.get(key).onchange()
+  }
   await flush()
   assert.equal(f.peer.preferences().autoPauseOnFinish, false)
   assert.equal(f.peer.preferences().autoPlayOnStart, false)
   assert.equal(f.peer.preferences().defaultMuted, false)
+  assert.equal(f.peer.preferences().hoverDecoyEnabled, true)
+  assert.equal(f.elements.get('settings').hidden, false)
+  f.elements.get('settingsClose').onclick(); await flush()
   assert.equal(f.elements.get('settings').hidden, true)
+})
+
+function movePointer(f, x = 40, y = 40) {
+  const event = new Event('pointermove')
+  Object.assign(event, { clientX: x, clientY: y, pointerType: 'mouse' })
+  f.document.dispatchEvent(event)
+}
+function leavePanel(f) {
+  const event = new Event('pointerleave')
+  Object.assign(event, { clientX: -1, clientY: 40 })
+  f.document.documentElement.dispatchEvent(event)
+}
+async function enterPanel(t, f) { movePointer(f); t.mock.timers.tick(150); await flush() }
+async function hoveringPlayer(t, playing = true) {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const f = setup(t)
+  movePointer(f)
+  f.event('one'); await f.poll()
+  await f.settings({ hoverDecoyEnabled: true }); await f.poll()
+  if (playing) await f.ui.start()
+  return f
+}
+test('selecting a cover style keeps Settings open and preserves playback and unrelated preferences', async t => {
+  const f = await hoveringPlayer(t)
+  const host = f.elements.get('decoy'), page = host.children[0]
+  const plays = f.video.plays, position = f.video.currentTime
+  f.ui.decoy.conceal(); await enterPanel(t, f); await f.poll()
+  await f.elements.get('prefs').onclick()
+  await f.poll()
+  f.ui.coverPage.initialize('zh-CN')
+  assert.equal(host.children[0], page)
+  const settings = f.peer.preferences()
+  const playsAfterHover = f.video.plays
+  assert.equal(playsAfterHover, plays + 1)
+  const style = page.dataset.template === 'report' ? 'tasks' : 'report'
+  f.elements.get('coverStyle').onclick()
+  f.elements.get('coverStyle-' + style).onclick(); await flush()
+  assert.notEqual(host.children[0], page)
+  assert.equal(host.children[0].dataset.template, style)
+  assert.equal(f.video.paused, false)
+  assert.equal(f.video.plays, playsAfterHover)
+  assert.equal(f.video.currentTime, position)
+  assert.deepEqual(f.peer.preferences(), { ...settings, coverStyle: style })
+  assert.equal(f.elements.get('settings').hidden, false)
+  await f.ui.pause()
+  f.elements.get('coverStyle').onclick()
+  f.elements.get('coverStyle-minutes').onclick(); await flush()
+  assert.equal(f.video.paused, true)
+  assert.equal(f.video.plays, playsAfterHover)
+  assert.equal(f.elements.get('settings').hidden, false)
+  const saved = host.children[0]
+  await f.poll()
+  assert.equal(host.children[0], saved)
+})
+test('leaving the panel pauses synchronously and returning preserves the player and its position', async t => {
+  const f = await hoveringPlayer(t)
+  leavePanel(f)
+  assert.equal(f.ui.decoy.covered, true)
+  assert.equal(f.video.paused, true)
+  assert.equal(f.elements.get('playerContent').inert, true)
+  assert.equal(f.video.currentTime, 12)
+  const plays = f.video.plays
+  movePointer(f); t.mock.timers.tick(149); await flush()
+  assert.equal(f.video.plays, plays)
+  t.mock.timers.tick(1); await flush()
+  assert.equal(f.ui.decoy.covered, false)
+  assert.equal(f.video.paused, false)
+  assert.equal(f.video.plays, plays + 1)
+  assert.equal(f.video.currentTime, 12)
+  assert.equal(f.elements.get('playerContent').inert, false)
+})
+
+test('menu retargeting events inside the viewport never conceal the player or interrupt playback', async t => {
+  const f = await hoveringPlayer(t)
+  await f.elements.get('prefs').onclick()
+  f.elements.get('coverStyle').onclick()
+  for (const type of ['pointerout', 'mouseout']) {
+    const event = new Event(type)
+    Object.assign(event, { clientX: 40, clientY: 80, relatedTarget: null })
+    f.document.dispatchEvent(event)
+    assert.equal(f.ui.decoy.covered, false)
+    assert.equal(f.video.paused, false)
+    assert.equal(f.elements.get('settings').hidden, false)
+    assert.equal(f.elements.get('coverStyleOptions').hidden, false)
+  }
+  const actualExit = new Event('pointerout')
+  Object.assign(actualExit, { clientX: -1, clientY: 80, relatedTarget: null })
+  f.document.dispatchEvent(actualExit)
+  assert.equal(f.ui.decoy.covered, true)
+  assert.equal(f.video.paused, true)
+})
+
+for (const type of ['pointerleave', 'mouseleave']) test(`first ${type} after changing style and dismissing Settings conceals even with last in-panel coordinates`, async t => {
+  const f = await hoveringPlayer(t)
+  await f.elements.get('prefs').onclick()
+  f.elements.get('coverStyle').onclick()
+  f.elements.get('coverStyle-report').onclick(); await flush()
+  assert.equal(f.peer.preferences().coverStyle, 'report')
+  const click = new Event('click', { cancelable: true })
+  Object.assign(click, { composedPath: () => [f.elements.get('title')], clientX: 40, clientY: 80 })
+  f.document.dispatchEvent(click); await flush()
+  assert.equal(f.elements.get('settings').hidden, true)
+  assert.equal(f.ui.decoy.covered, false)
+  assert.equal(f.video.paused, false)
+  const exit = new Event(type)
+  Object.assign(exit, { clientX: 40, clientY: 80, relatedTarget: null })
+  ;(type === 'pointerleave' ? f.document.documentElement : f.document).dispatchEvent(exit)
+  assert.equal(f.ui.decoy.covered, true)
+  assert.equal(f.elements.get('decoy').children[0].dataset.template, 'report')
+  assert.equal(f.video.paused, true)
+  await f.poll(); t.mock.timers.tick(150); await flush()
+  assert.equal(f.ui.decoy.covered, true)
+  assert.equal(f.video.paused, true)
+  await enterPanel(t, f)
+  assert.equal(f.ui.decoy.covered, false)
+  assert.equal(f.elements.get('settings').hidden, true)
+  assert.equal(f.video.paused, false)
+})
+
+test('a cover style saved in another chat applies once and synchronizes an open Settings sheet', async t => {
+  const f = await hoveringPlayer(t)
+  await f.elements.get('prefs').onclick()
+  await f.settings({ coverStyle: 'minutes' }); await f.poll()
+  const page = f.elements.get('decoy').children[0]
+  assert.equal(page.dataset.template, 'minutes')
+  assert.equal(f.elements.get('coverStyle').dataset.value, 'minutes')
+  assert.equal(f.elements.get('settings').hidden, false)
+  await f.poll()
+  assert.equal(f.elements.get('decoy').children[0], page)
+  await f.settings({ hoverDecoyEnabled: false }); await f.poll()
+  assert.equal(f.elements.get('coverSettings').hidden, true)
+  assert.equal(f.elements.get('settings').hidden, false)
+})
+for (const cancel of ['manual', 'Stop', 'Interrupt', 'close']) test(`hover return cannot undo ${cancel}`, async t => {
+  const f = await hoveringPlayer(t)
+  f.ui.decoy.conceal()
+  const plays = f.video.plays
+  if (cancel === 'manual') await f.ui.pause('已手动暂停')
+  else if (cancel === 'close') await f.ui.closePlayer()
+  else { f.event('one', cancel); await f.poll() }
+  await enterPanel(t, f)
+  assert.equal(f.video.paused, true)
+  assert.equal(f.video.plays, plays)
+})
+test('an already manually paused player does not resume just because the pointer returns', async t => {
+  const f = await hoveringPlayer(t)
+  await f.ui.pause('已手动暂停')
+  const plays = f.video.plays
+  f.ui.decoy.conceal(); await enterPanel(t, f)
+  assert.equal(f.video.paused, true)
+  assert.equal(f.video.plays, plays)
+})
+for (const stops of [false, true]) test(`new-task playback is deferred behind the cover and rechecks ended=${stops}`, async t => {
+  const f = await hoveringPlayer(t, false)
+  f.ui.decoy.conceal()
+  f.event('two'); await f.poll()
+  assert.equal(f.video.plays, 0)
+  if (stops) { f.event('two', 'Stop'); await f.poll() }
+  await enterPanel(t, f)
+  assert.equal(f.video.paused, stops)
+  assert.equal(f.video.plays, stops ? 0 : 1)
+})
+test('pointer capture outside the viewport, blur and page hiding all conceal without focus-only reveal', async t => {
+  const f = await hoveringPlayer(t)
+  movePointer(f, -1, 20)
+  assert.equal(f.video.paused, true)
+  await enterPanel(t, f)
+  assert.equal(f.video.paused, false)
+  f.window.dispatchEvent(new Event('blur'))
+  assert.equal(f.ui.decoy.covered, true)
+  f.window.dispatchEvent(new Event('focus')); await flush()
+  assert.equal(f.video.paused, true)
+  await enterPanel(t, f)
+  f.document.hidden = true
+  f.document.dispatchEvent(new Event('visibilitychange'))
+  assert.equal(f.video.paused, true)
+  f.document.hidden = false
+  f.document.dispatchEvent(new Event('visibilitychange')); await flush()
+  assert.equal(f.ui.decoy.covered, true)
+  await enterPanel(t, f)
+  assert.equal(f.video.paused, false)
+})
+test('startup preferences finishing after conceal cannot play until a fresh hover', async t => {
+  const f = await hoveringPlayer(t, false)
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  const call = f.service.call.bind(f.service)
+  f.service.call = async (scope, name, args) => {
+    if (name === 'get_preferences') await gate
+    return call(scope, name, args)
+  }
+  // Reset opening preferences without destroying the selected, loaded video.
+  await f.ui.closePlayer(); f.ui.selected()
+  const starting = f.ui.start()
+  await flush()
+  f.ui.decoy.conceal()
+  release(); await starting; await flush()
+  assert.equal(f.video.plays, 0)
+  await enterPanel(t, f)
+  assert.equal(f.video.plays, 1)
+})
+test('media preparation finishing behind the cover cannot attach or play until the pointer returns', async t => {
+  const f = await hoveringPlayer(t, false)
+  f.ui.unload()
+  f.service.catalog = { prepare: () => ({ status: 'ready', stream: 'cover-stream', manifest: 'manifest' }), panelMedia: { pin() {}, unpin() {} } }
+  f.panel.allowed = new Set(['hg-11'])
+  let release
+  const gate = new Promise(resolve => { release = resolve }), call = f.service.call.bind(f.service)
+  f.service.call = async (scope, name, args) => {
+    if (name === 'prepare_playback') await gate
+    return call(scope, name, args)
+  }
+  const starting = f.ui.start(); await flush()
+  f.ui.decoy.conceal()
+  release(); await starting; await flush()
+  assert.equal(f.video.plays, 0)
+  assert.equal(f.video.paused, true)
+  await enterPanel(t, f)
+  assert.equal(f.video.plays, 1)
+})
+test('disabling hover mode restores a covered player and later pointer exits keep normal playback', async t => {
+  const f = await hoveringPlayer(t)
+  f.ui.decoy.conceal()
+  await f.settings({ hoverDecoyEnabled: false }); await f.poll()
+  assert.equal(f.ui.decoy.covered, false)
+  assert.equal(f.video.paused, false)
+  leavePanel(f)
+  assert.equal(f.video.paused, false)
+})
+for (const enabled of [true, false]) test(`leaving and returning preserves open Settings with hover=${enabled}`, async t => {
+  const f = await hoveringPlayer(t)
+  await f.elements.get('prefs').onclick()
+  if (!enabled) {
+    f.elements.get('hoverDecoyEnabled').checked = false
+    f.elements.get('hoverDecoyEnabled').onchange(); await flush()
+  }
+  leavePanel(f)
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.ui.decoy.covered, enabled)
+  assert.equal(f.video.paused, enabled)
+  await enterPanel(t, f)
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.ui.decoy.covered, false)
+  assert.equal(f.video.paused, false)
+  await f.elements.get('prefs').onclick()
+  assert.equal(f.elements.get('settings').hidden, true)
+})
+test('a late play promise and host media play events cannot restart a covered player', async t => {
+  const f = await hoveringPlayer(t, false)
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  const play = f.video.play.bind(f.video)
+  f.video.play = async () => { await play(); await gate }
+  const starting = f.ui.start(); await flush()
+  f.ui.decoy.conceal()
+  assert.equal(f.video.paused, true)
+  release(); await starting; await flush()
+  assert.equal(f.video.paused, true)
+  await play()
+  assert.equal(f.video.paused, true)
 })
 
 for (const autoPauseOnFinish of [false, true]) for (const autoPlayOnStart of [false, true]) {
@@ -515,13 +808,12 @@ test('saving a changed default mute immediately updates sound without restarting
   assert.equal(f.video.muted, true)
   await f.elements.get('prefs').onclick()
   f.elements.get('defaultMuted').checked = false
-  f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
+  f.elements.get('defaultMuted').onchange(); await flush()
   assert.equal(f.video.muted, false)
   assert.equal(f.video.plays, 1)
   f.elements.get('mute').onclick(); f.video.onvolumechange()
-  await f.elements.get('prefs').onclick()
   f.elements.get('autoPrompt').checked = false
-  f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
+  f.elements.get('autoPrompt').onchange(); await flush()
   assert.equal(f.video.muted, true, 'saving unrelated settings must preserve manual mute')
   assert.equal(f.peer.preferences().defaultMuted, false)
 })
@@ -540,12 +832,33 @@ test('a settings response arriving after polling cannot undo a newer manual soun
   }
   await f.elements.get('prefs').onclick()
   f.elements.get('defaultMuted').checked = false
-  f.elements.get('settings').onsubmit({ preventDefault() {} }); await flush()
+  f.elements.get('defaultMuted').onchange(); await flush()
   await f.poll()
   assert.equal(f.video.muted, false)
   f.elements.get('mute').onclick(); f.video.onvolumechange()
   release(); await flush()
   assert.equal(f.video.muted, true)
+})
+
+test('a poll snapshot taken before an autosave cannot restore the previous default mute', async t => {
+  const f = setup(t)
+  f.event('one'); await f.poll(); await f.ui.start()
+  await f.elements.get('prefs').onclick()
+  const original = f.service.call.bind(f.service)
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  f.service.call = async (scope, name, args) => {
+    const result = await original(scope, name, args)
+    if (name === 'get_run_state') await gate
+    return result
+  }
+  const polling = f.poll()
+  await flush()
+  f.elements.get('defaultMuted').checked = false
+  f.elements.get('defaultMuted').onchange(); await flush()
+  assert.equal(f.video.muted, false)
+  release(); await polling
+  assert.equal(f.video.muted, false)
 })
 
 test('disabling default mute keeps recommendations audible and never silently mutes after a host rejection', async t => {
@@ -784,4 +1097,85 @@ test('preloading and next playback share a pending episode page without switchin
   assert.equal(f.calls.length, 0)
   assert.equal(f.ui.episodeId(), 'hg-11')
   assert.equal(f.video.paused, true)
+})
+
+async function accountPlayer(t) {
+  const f = setup(t), authCalls = []
+  const auth = {
+    revision: () => 'fixture-revision',
+    status: async () => ({ status: 'signed-out' }),
+    start: async () => ({ status: 'waiting', loginId: 'fixture-login', svg: '<svg/>', expiresAt: Date.now() + 180000 }),
+    poll: async () => ({ status: 'waiting' }),
+    cancel: async () => { authCalls.push('cancel'); return { status: 'cancelled' } },
+    logout: async () => ({ status: 'signed-out' }),
+  }
+  const sources = new ProviderRegistry(f.store.root, { builtins: ['hongguo', 'demo'].map(id => ({
+    manifest: { apiVersion: 1, id, name: id, version: '1.0.0', ...(id === 'demo' ? { authentication: 'qrcode' } : {}) },
+    createProvider: () => ({ id, ...(id === 'demo' ? { auth } : {}),
+      async listSeries() { return { items: [], cursor: null } }, async getSeries() {},
+      async listEpisodes() { return { items: [], cursor: null } }, async getCover() {}, async resolvePlayback() {} }),
+  })) })
+  t.after(() => sources.dispose())
+  f.service.catalog = new Catalog(f.store, { sources })
+  await f.elements.get('prefs').onclick()
+  f.elements.get('accountLogin').onclick(); await flush()
+  assert.equal(f.elements.get('accountQrArea').hidden, false)
+  return { ...f, authCalls }
+}
+for (const dismiss of ['close', 'Escape', 'outside', 'trigger', 'player-close', 'disable']) {
+  test(`Provider QR is cancelled by ${dismiss} through main Settings lifecycle`, async t => {
+    const f = await accountPlayer(t)
+    const input = f.ui.providerInput('demo')
+    for (let i = 0; i < 3; i++) await f.poll()
+    assert.equal(f.ui.providerInput('demo'), input, 'polling preserves the focused Provider control')
+    assert.equal(f.elements.get('accountQrArea').hidden, false, 'polling does not restart a QR login')
+    if (dismiss === 'close') f.elements.get('settingsClose').onclick()
+    if (dismiss === 'trigger') await f.elements.get('prefs').onclick()
+    if (dismiss === 'player-close') await f.ui.closePlayer()
+    if (dismiss === 'disable') { input.checked = false; input.onchange() }
+    if (dismiss === 'Escape' || dismiss === 'outside') {
+      const event = new Event(dismiss === 'Escape' ? 'keydown' : 'click', { cancelable: true })
+      Object.assign(event, { key: 'Escape', composedPath: () => [] })
+      f.document.dispatchEvent(event)
+    }
+    await flush()
+    assert.equal(f.authCalls.length, 1)
+    assert.equal(f.elements.get('providerAccount').hidden, true)
+    assert.equal(f.elements.get('accountQrArea').hidden, true)
+    assert.equal(f.elements.get('accountQr').getAttribute('src'), null)
+    assert.equal(f.elements.get('settings').hidden, dismiss !== 'disable')
+  })
+}
+test('a stale poll cannot undo a pending Provider edit and Close waits for its autosave', async t => {
+  const f = await accountPlayer(t), original = f.service.call.bind(f.service)
+  let resolvePoll, resolveSave
+  f.service.call = async (scope, name, args) => {
+    if (name === 'get_run_state') {
+      const result = await original(scope, name, args)
+      await new Promise(resolve => { resolvePoll = resolve }); return result
+    }
+    if (name === 'set_preferences') await new Promise(resolve => { resolveSave = resolve })
+    return original(scope, name, args)
+  }
+  const polling = f.ui.poll(); await flush()
+  const input = f.ui.providerInput('demo'); input.checked = false; input.onchange(); await flush()
+  const closing = f.ui.settings.finish(); await flush()
+  assert.equal(input.disabled, true)
+  assert.equal(f.elements.get('settings').hidden, false)
+  resolvePoll(); await polling; await flush()
+  assert.equal(input.checked, false)
+  resolveSave(); assert.equal(await closing, true); await flush()
+  assert.deepEqual(f.peer.preferences().enabledProviders, ['hongguo'])
+  assert.equal(f.elements.get('settings').hidden, true)
+})
+test('switching Provider while covered cancels the old hover resume intent', async t => {
+  const f = await hoveringPlayer(t)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  f.ui.decoy.conceal(); await flush()
+  const played = f.video.plays
+  await f.ui.changeSource('demo')
+  await enterPanel(t, f)
+  assert.equal(f.ui.sourceState().source, 'demo')
+  assert.equal(f.video.paused, true)
+  assert.equal(f.video.plays, played)
 })
