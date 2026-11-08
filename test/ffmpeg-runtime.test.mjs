@@ -105,6 +105,92 @@ test('connection timeouts stop after three attempts without retaining raw networ
   await assert.rejects(lstat(ffmpegPath(f.options)), { code: 'ENOENT' })
 })
 
+function downloadClock(t) {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  t.mock.method(AbortSignal, 'timeout', milliseconds => {
+    const controller = new AbortController()
+    setTimeout(() => controller.abort(new DOMException('SYNTHETIC_PRIVATE_TIMEOUT_DETAIL', 'TimeoutError')), milliseconds)
+    return controller.signal
+  })
+}
+
+test('a slow download can finish beyond the former five-minute deadline', async t => {
+  const f = await fixture(t)
+  downloadClock(t)
+  let connected, release, signal
+  const started = new Promise(resolve => { connected = resolve })
+  const operation = ensureFfmpeg({ ...f.options, fetchImpl: async (_url, options) => {
+    signal = options.signal
+    return new Response(new ReadableStream({ start(controller) {
+      signal.addEventListener('abort', () => controller.error(signal.reason), { once: true })
+      release = () => { controller.enqueue(f.archive); controller.close() }
+      connected()
+    } }))
+  } })
+  await started
+  try {
+    t.mock.timers.tick(6 * 60_000)
+    assert.equal(signal.aborted, false)
+  } finally {
+    if (!signal.aborted) release()
+    await operation.catch(() => {})
+  }
+  assert.deepEqual(await readFile(await operation), f.binary)
+})
+
+test('the thirty-minute download deadline remains bounded and reports a safe timeout reason', async t => {
+  const f = await fixture(t)
+  downloadClock(t)
+  let connected, signal, downloads = 0
+  const started = new Promise(resolve => { connected = resolve })
+  const operation = ensureFfmpeg({ ...f.options, fetchImpl: async (_url, options) => {
+    downloads++; signal = options.signal
+    return new Response(new ReadableStream({ start(controller) {
+      signal.addEventListener('abort', () => controller.error(signal.reason), { once: true })
+      connected()
+    } }))
+  } })
+  const rejected = assert.rejects(operation, error => {
+    assert.equal(error.code, 'download-timeout')
+    assert.match(error.message, /30分钟/)
+    assert.doesNotMatch(error.message, /SYNTHETIC|fixture\.zip/)
+    assert.equal(error.cause, undefined)
+    return true
+  })
+  await started
+  t.mock.timers.tick(30 * 60_000 - 1)
+  assert.equal(signal.aborted, false)
+  t.mock.timers.tick(1)
+  await rejected
+  assert.equal(downloads, 1)
+  await assert.rejects(lstat(ffmpegPath(f.options)), { code: 'ENOENT' })
+  assert.deepEqual(await readdir(dirname(ffmpegPath(f.options))), [])
+})
+
+test('a long-running installer refreshes its lock so older versions cannot treat it as abandoned', async t => {
+  const f = await fixture(t)
+  t.mock.timers.enable({ apis: ['setInterval', 'Date'], now: Date.now() })
+  let connected, release
+  const started = new Promise(resolve => { connected = resolve })
+  const operation = ensureFfmpeg({ ...f.options, fetchImpl: async () => {
+    connected()
+    return new Promise(resolve => { release = () => resolve(new Response(f.archive)) })
+  } })
+  await started
+  const lock = dirname(ffmpegPath(f.options)) + '.lock'
+  try {
+    t.mock.timers.tick(11 * 60_000)
+    for (let attempt = 0; attempt < 50 && Date.now() - (await lstat(lock)).mtimeMs >= 60_000; attempt++)
+      await new Promise(resolve => setImmediate(resolve))
+    assert.ok(Date.now() - (await lstat(lock)).mtimeMs < 60_000)
+  } finally {
+    release()
+    await operation.catch(() => {})
+  }
+  assert.deepEqual(await readFile(await operation), f.binary)
+  await assert.rejects(lstat(lock), { code: 'ENOENT' })
+})
+
 test('permanent HTTP errors and integrity failures do not retry and only expose fixed diagnostic metadata', async t => {
   for (const reason of ['http', 'hash', 'probe']) await t.test(reason, async t => {
     const f = await fixture(t)

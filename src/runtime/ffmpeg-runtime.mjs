@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { mkdir, lstat, open, readFile, writeFile, rename, rm, chmod, stat, unlink, rmdir } from 'node:fs/promises'
+import { mkdir, lstat, open, readFile, writeFile, rename, rm, chmod, stat, unlink, rmdir, utimes } from 'node:fs/promises'
 import { lstatSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { posix, win32 } from 'node:path'
@@ -10,14 +10,21 @@ import xz from 'xz-decompress'
 import artifacts from './ffmpeg-artifacts.json' with { type: 'json' }
 
 const verified = new Map(), pending = new Map()
+const downloadTimeoutMs = 30 * 60_000
+const lockWaitMs = downloadTimeoutMs + 2 * 60_000
+const lockStaleMs = 10 * 60_000
+// An environment check may first wait for another installer, then download itself.
+export const ffmpegPreparationTimeoutMs = lockWaitMs + downloadTimeoutMs + 2 * 60_000
 const runtimeOwner = '@kyun.si/codex-hongguo'
-const failureCodes = new Set(['prepare', 'download', 'download-url', 'download-http', 'download-network',
+const failureCodes = new Set(['prepare', 'download', 'download-url', 'download-http', 'download-network', 'download-timeout',
   'archive-size', 'archive-hash', 'extract', 'binary-hash', 'probe', 'publish'])
 const transientNetwork = new Set(['UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT',
   'UND_ERR_SOCKET', 'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH'])
 const transientHttp = new Set([408, 429, 500, 502, 503, 504])
 const failure = (code = 'prepare', httpStatus) => Object.assign(
-  Error('播放组件自动准备失败，请检查网络和缓存目录权限后重试安装。'),
+  Error(code === 'download-timeout'
+    ? '播放组件自动准备失败：下载已超过30分钟，请检查网络后重试安装。'
+    : '播放组件自动准备失败，请检查网络和缓存目录权限后重试安装。'),
   { code, ...(Number.isInteger(httpStatus) && httpStatus >= 400 && httpStatus <= 599 ? { httpStatus } : {}) },
 )
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms))
@@ -76,7 +83,7 @@ async function ready(config) {
 }
 
 async function download(artifact, destination, fetchImpl) {
-  const signal = AbortSignal.timeout(300000)
+  const signal = AbortSignal.timeout(downloadTimeoutMs)
   for (let attempt = 0; ; attempt++) {
     try { return await downloadAttempt(artifact, destination, fetchImpl, signal) }
     catch (error) {
@@ -84,7 +91,8 @@ async function download(artifact, destination, fetchImpl) {
       const network = transientNetwork.has(error?.cause?.code || error?.code)
       const retry = network || (error?.code === 'download-http' && transientHttp.has(error.httpStatus))
       if (!retry || attempt >= 2 || signal.aborted) {
-        throw failure(network ? 'download-network' : failureCodes.has(error?.code) ? error.code : 'download', error?.httpStatus)
+        throw failure(signal.aborted ? 'download-timeout' : network ? 'download-network'
+          : failureCodes.has(error?.code) ? error.code : 'download', error?.httpStatus)
       }
       await pause((attempt + 1) * 1000)
     }
@@ -219,7 +227,7 @@ export async function removeManagedFfmpeg(options = {}) {
 }
 async function install(config) {
   const { directory, target, artifact } = config
-  const lock = directory + '.lock', deadline = Date.now() + 420000
+  const lock = directory + '.lock', deadline = Date.now() + lockWaitMs
   await mkdir(directory, { recursive: true, mode: 0o700 })
   let owned = false
   while (!owned) {
@@ -227,10 +235,18 @@ async function install(config) {
     catch (error) {
       if (error.code !== 'EEXIST' || Date.now() > deadline) throw failure()
       if (await ready(config)) return target
-      try { if (Date.now() - (await stat(lock)).mtimeMs > 600000) await rm(lock, { recursive: true, force: true }) } catch { /* Another process released the lock. */ }
+      try { if (Date.now() - (await stat(lock)).mtimeMs > lockStaleMs) await rm(lock, { recursive: true, force: true }) } catch { /* Another process released the lock. */ }
       await pause(200)
     }
   }
+  // Older plugin versions consider a ten-minute-old lock abandoned. Keep the
+  // active download's lock fresh so they cannot steal it during a slow transfer.
+  let refreshing = Promise.resolve()
+  const heartbeat = setInterval(() => {
+    const now = new Date()
+    refreshing = refreshing.then(() => utimes(lock, now, now)).catch(() => {})
+  }, 30_000)
+  heartbeat.unref?.()
   const paths = config.platform === 'win32' ? win32 : posix
   const temporary = paths.basename(target) + '.' + randomUUID(), archive = paths.join(directory, temporary + '.archive'), output = paths.join(directory, temporary + '.part')
   let stage = 'download'
@@ -250,5 +266,9 @@ async function install(config) {
     verified.set(target, signature(target))
     return target
   } catch (error) { throw failure(failureCodes.has(error?.code) && error.code !== 'prepare' ? error.code : stage, error?.httpStatus) }
-  finally { await Promise.all([rm(archive, { force: true }), rm(output, { force: true }), rm(lock, { recursive: true, force: true })]) }
+  finally {
+    clearInterval(heartbeat)
+    await refreshing
+    await Promise.all([rm(archive, { force: true }), rm(output, { force: true }), rm(lock, { recursive: true, force: true })])
+  }
 }
