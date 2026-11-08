@@ -296,8 +296,8 @@ test('compiled MCP persists the provider startup configuration across process re
 })
 test('compiled plugin exposes a model-visible waiting widget and keeps player controls app-only', async (t) => {
   let client
-  defer(t, () => client?.close())
   const { dir } = setup(t)
+  defer(t, () => client?.close())
   client = new Client({ name: 'test', version: '1' })
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -394,8 +394,8 @@ test('self-created CENC sample decrypts from stdin and decodes video and audio',
 
 test('media preparation deduplicates across database connections and protects active files', async (t) => {
   let second
-  defer(t, () => second?.close())
   const { store, dir } = setup(t)
+  defer(t, () => second?.close())
   const { MediaCache, hasFfmpeg } = await import('../src/server/media.mjs')
   if (!hasFfmpeg()) {
     t.skip('FFmpeg unavailable')
@@ -463,8 +463,8 @@ test('history has one row per drama and removes all its episodes', (t) => {
 })
 test('upgrading removes only the old sample progress and ignores late writes from an older open panel', (t) => {
   let current
-  defer(t, () => current?.close())
   const { dir, store: old } = setup(t)
+  defer(t, () => current?.close())
   old.db.exec('PRAGMA user_version=0')
   const progress = { title: '剧名', label: '1', positionMs: 57000, durationMs: 120000 }
   old.save({ ...progress, seriesId: 'hg-10', episodeId: 'hg-101' })

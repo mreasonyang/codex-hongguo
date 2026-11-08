@@ -12,8 +12,9 @@ import { Catalog } from '../src/server/catalog.mjs'
 import { Service } from '../src/server/service.mjs'
 
 async function fixture(t, { root, cookie = '' } = {}) {
+  const ownRoot = root == null
   root ??= await mkdtemp(join(tmpdir(), 'bilibili-auth-'))
-  defer(t, () => rm(root, { recursive: true, force: true }))
+  if (ownRoot) defer(t, () => rm(root, { recursive: true, force: true }))
   const controller = new AbortController(), calls = [], options = { code: 86101, now: 1000, login: true }
   const context = { dataDir: root, signal: controller.signal, mediaFetcher: headers => {
     assert.equal(Object.keys(headers).some(key => key.toLowerCase() === 'cookie'), false)

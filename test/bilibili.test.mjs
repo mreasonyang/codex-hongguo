@@ -28,8 +28,9 @@ const media = { timelength: 1440000, is_preview: 0, is_drm: false, dash: {
   audio: [{ bandwidth: 64000, codecs: 'mp4a.40.2', base_url: 'https://a.bilivideo.com/audio.m4s' }],
 } }
 async function fixture(t, { payload = media, cookie = '', root } = {}) {
+  const ownRoot = root == null
   root ??= await mkdtemp(join(tmpdir(), 'bilibili-provider-'))
-  defer(t, () => rm(root, { recursive: true, force: true }))
+  if (ownRoot) defer(t, () => rm(root, { recursive: true, force: true }))
   const controller = new AbortController(), requests = []
   const context = { dataDir: join(root, 'bilibili'), signal: controller.signal,
     async fetch(input, options) {
