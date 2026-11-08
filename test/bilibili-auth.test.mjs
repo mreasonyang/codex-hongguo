@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { defer } from './cleanup.mjs'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm, stat, readFile, mkdir, writeFile, symlink, link } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -12,7 +13,7 @@ import { Service } from '../src/server/service.mjs'
 
 async function fixture(t, { root, cookie = '' } = {}) {
   root ??= await mkdtemp(join(tmpdir(), 'bilibili-auth-'))
-  t.after(() => rm(root, { recursive: true, force: true }))
+  defer(t, () => rm(root, { recursive: true, force: true }))
   const controller = new AbortController(), calls = [], options = { code: 86101, now: 1000, login: true }
   const context = { dataDir: root, signal: controller.signal, mediaFetcher: headers => {
     assert.equal(Object.keys(headers).some(key => key.toLowerCase() === 'cookie'), false)
@@ -48,7 +49,7 @@ async function fixture(t, { root, cookie = '' } = {}) {
   } }
   const provider = new BilibiliSource(context, { cookie })
   provider.auth.now = () => options.now
-  t.after(() => provider.dispose())
+  defer(t, () => provider.dispose())
   return { root, provider, auth: provider.auth, controller, context, calls, options,
     advance() { options.now += 2200 } }
 }
@@ -168,7 +169,7 @@ test('credential storage rejects symlinks and hard links and reports failed save
 })
 test('app-only auth calls require an enabled provider, bind QR ownership and invalidate player grants on logout', async t => {
   const f=await fixture(t), store=new Store(join(f.root,'host'))
-  t.after(()=>store.close())
+  defer(t, ()=>store.close())
   const sources=new ProviderRegistry(f.root,{builtins:[builtins[0],{manifest:builtins[1].manifest,createProvider:()=>f.provider}]})
   const catalog=new Catalog(store,{sources}), service=new Service(store,catalog)
   const a=service.panel(service.open({threadId:'A'}).panel), b=service.panel(service.open({threadId:'B'}).panel)

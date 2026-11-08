@@ -1,4 +1,6 @@
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
+import { defer } from './cleanup.mjs'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm, access, readFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -27,7 +29,7 @@ const media = { timelength: 1440000, is_preview: 0, is_drm: false, dash: {
 } }
 async function fixture(t, { payload = media, cookie = '', root } = {}) {
   root ??= await mkdtemp(join(tmpdir(), 'bilibili-provider-'))
-  t.after(() => rm(root, { recursive: true, force: true }))
+  defer(t, () => rm(root, { recursive: true, force: true }))
   const controller = new AbortController(), requests = []
   const context = { dataDir: join(root, 'bilibili'), signal: controller.signal,
     async fetch(input, options) {
@@ -41,14 +43,14 @@ async function fixture(t, { payload = media, cookie = '', root } = {}) {
     mediaFetcher(headers) { return async () => { assert.equal(headers.Cookie, undefined); throw Error('not requested') } },
   }
   const provider = new BilibiliSource(context, { cookie })
-  t.after(() => provider.dispose())
+  defer(t, () => provider.dispose())
   return { root, controller, context, requests, provider }
 }
 
 test('Bilibili is discovered but does not start, load its SDK or write a profile by default', async t => {
   const root = await mkdtemp(join(tmpdir(), 'bilibili-disabled-'))
-  t.after(() => rm(root, { recursive: true, force: true }))
-  const registry = new ProviderRegistry(root); await registry.ready; t.after(() => registry.dispose())
+  defer(t, () => rm(root, { recursive: true, force: true }))
+  const registry = new ProviderRegistry(root); await registry.ready; defer(t, () => registry.dispose())
   assert.deepEqual(registry.list().filter(p => p.available).map(p => p.id), ['hongguo'])
   assert.equal(registry.list().find(p => p.id === 'bilibili').code, 'DISABLED')
   await assert.rejects(access(join(root, 'device/providers/bilibili')))
@@ -89,7 +91,7 @@ test('saved Bilibili library persists and merges across Provider processes witho
   const a = await fixture(t), b = await fixture(t, { root: a.root })
   await a.provider.listSeries({ query: 'ss2251' })
   assert.equal((await b.provider.listSeries()).items[0].id, '2251')
-  const store = new Store(join(a.root, 'host')); t.after(() => store.close())
+  const store = new Store(join(a.root, 'host')); defer(t, () => store.close())
   const registry = new ProviderRegistry(a.root, { builtins: [builtins[0], { manifest: builtins[1].manifest,
     createProvider: () => b.provider }], enabled: ['hongguo', 'bilibili'] })
   const catalog = new Catalog(store, { sources: registry }); await registry.ready
@@ -99,7 +101,7 @@ test('saved Bilibili library persists and merges across Provider processes witho
 })
 test('Bilibili uses normal selection, next-episode and isolated progress contracts', async t => {
   const { provider, root } = await fixture(t)
-  const store = new Store(join(root, 'host')); t.after(() => store.close())
+  const store = new Store(join(root, 'host')); defer(t, () => store.close())
   store.setPreferences({ enabledProviders: ['hongguo', 'bilibili'] })
   const sources = new ProviderRegistry(root, { builtins: [builtins[0], { manifest: builtins[1].manifest,
     createProvider: () => provider }], enabled: ['hongguo', 'bilibili'] }); await sources.ready
@@ -151,8 +153,8 @@ test('media locators use the Bilibili domain policy, including backup URLs', asy
 })
 test('generic dual-track preparation combines real AVC/AAC tracks and retries a failed CDN', async t => {
   await ensureFfmpeg()
-  const root = await mkdtemp(join(tmpdir(), 'bilibili-tracks-')); t.after(() => rm(root, { recursive: true, force: true }))
-  const input = new URL('./fixtures/avc-aac.mp4', import.meta.url).pathname
+  const root = await mkdtemp(join(tmpdir(), 'bilibili-tracks-')); defer(t, () => rm(root, { recursive: true, force: true }))
+  const input = fileURLToPath(new URL('./fixtures/avc-aac.mp4', import.meta.url))
   const video = join(root, 'video.mp4'), audio = join(root, 'audio.mp4'), output = join(root, 'output.mp4')
   await runFfmpeg(['-i', input, '-map', '0:v:0', '-an', '-c', 'copy', video])
   await runFfmpeg(['-i', input, '-map', '0:a:0', '-vn', '-c', 'copy', audio])

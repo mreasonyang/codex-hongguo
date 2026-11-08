@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { defer } from './cleanup.mjs'
 import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, writeFile, symlink, rm } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -15,7 +16,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 async function temporary(t) {
   const root = await mkdtemp(join(tmpdir(), 'hongguo-providers-'))
-  t.after(() => rm(root, { recursive: true, force: true }))
+  defer(t, () => rm(root, { recursive: true, force: true }))
   return root
 }
 function adapter(id) {
@@ -50,7 +51,7 @@ test('only Hongguo starts by default; enabling, stopping and restarting a provid
     created.push([id, context.signal])
     return { ...adapter(id), dispose() { disposed.push(id) } }
   }) })
-  await registry.ready; t.after(() => registry.dispose())
+  await registry.ready; defer(t, () => registry.dispose())
   assert.deepEqual(created.map(([id]) => id), ['hongguo'])
   assert.equal(registry.list().find(p => p.id === 'demo').enabled, false)
   assert.throws(() => registry.get('demo'), /片源插件不可用/)
@@ -68,7 +69,7 @@ test('discovery does not import unconfigured local providers', async t => {
   const root = await temporary(t), directory = join(root, 'plugins'); await mkdir(directory)
   await install(directory, 'unselected', {}, 'throw Error("entry must remain unloaded")')
   const registry = new ProviderRegistry(root, { directory }); await registry.ready
-  t.after(() => registry.dispose())
+  defer(t, () => registry.dispose())
   assert.equal(registry.list().find(p => p.id === 'unselected').code, 'DISABLED')
   await registry.configure(['hongguo', 'unselected'])
   assert.equal(registry.list().find(p => p.id === 'unselected').code, 'LOAD_FAILED')
@@ -77,10 +78,10 @@ test('discovery does not import unconfigured local providers', async t => {
 })
 test('provider settings persist, sync between services, reject old cached media and keep progress', async t => {
   const root = await temporary(t), store = new Store(root), peer = new Store(root)
-  t.after(() => { store.close(); peer.close() })
+  defer(t, () => { store.close(); peer.close() })
   const make = database => {
     const sources = new ProviderRegistry(root, { builtins: fixtures(), enabled: database.preferences().enabledProviders })
-    t.after(() => sources.dispose())
+    defer(t, () => sources.dispose())
     const catalog = new Catalog(database, { sources }); catalog.ffmpeg = true
     const service = new Service(database, catalog), scope = service.panel(service.open({ threadId: 'A' }).panel)
     return { sources, catalog, service, scope }
@@ -119,7 +120,7 @@ test('local providers load through the same contract, retain opaque IDs and disp
   const provider = registry.get('local')
   assert.equal(registry.list().filter(p => p.available).length, 2)
   assert.equal(registry.get('hongguo').id, 'hongguo')
-  const store = new Store(join(root, 'data')); t.after(() => store.close())
+  const store = new Store(join(root, 'data')); defer(t, () => store.close())
   store.setPreferences({ enabledProviders: ['hongguo', 'local'] })
   const catalog = new Catalog(store, { sources: registry }); catalog.ffmpeg = true
   const list = await catalog.list({ source: 'local', query: 'fixture' })
@@ -162,10 +163,10 @@ test('an unavailable local directory is isolated and a removed default falls bac
   await registry.dispose()
 })
 test('removed sources cannot reopen through saved defaults or stale recommendations', async t => {
-  const root = await temporary(t), store = new Store(root); t.after(() => store.close())
+  const root = await temporary(t), store = new Store(root); defer(t, () => store.close())
   store.setPreferences({ enabledProviders: ['hongguo', 'removed'], defaultSource: 'removed' })
   const catalog = new Catalog(store), service = new Service(store, catalog)
-  t.after(() => catalog.sources.dispose())
+  defer(t, () => catalog.sources.dispose())
   const scope = service.panel(service.open({ threadId: 'A' }).panel)
   assert.equal(scope.source, 'hongguo')
   assert.equal((await service.call(scope, 'get_preferences', {})).defaultSource, 'hongguo')
@@ -217,12 +218,12 @@ test('network policies validate every redirect, preserve ranges and bound unknow
   await assert.rejects(responseBytes(result.response.body, 2))
 })
 test('source changes preserve another panel, its history and fixed per-turn recommendations', async t => {
-  const root = await temporary(t), store = new Store(root); t.after(() => store.close())
+  const root = await temporary(t), store = new Store(root); defer(t, () => store.close())
   store.setPreferences({ enabledProviders: ['hongguo', 'demo'] })
   const providers = new ProviderRegistry(root, { builtins: ['hongguo', 'demo'].map(id => ({
     manifest: { apiVersion: 1, id, name: id, version: '1.0.0' }, createProvider: () => adapter(id),
   })) })
-  t.after(() => providers.dispose())
+  defer(t, () => providers.dispose())
   const catalog = new Catalog(store, { sources: providers }); catalog.ffmpeg = true
   const service = new Service(store, catalog)
   const a = service.panel(service.open({ threadId: 'A' }).panel), b = service.panel(service.open({ threadId: 'B' }).panel)
@@ -240,7 +241,7 @@ test('source changes preserve another panel, its history and fixed per-turn reco
   await assert.rejects(service.call(a, 'set_source', { source: 'not-installed' }))
 })
 test('a late episode response cannot restore grants after switching providers', async t => {
-  const root = await temporary(t), store = new Store(root); t.after(() => store.close())
+  const root = await temporary(t), store = new Store(root); defer(t, () => store.close())
   const pending = Promise.withResolvers()
   const service = new Service(store, { episodes: () => pending.promise })
   const scope = service.panel(service.open({ threadId: 'A' }).panel)

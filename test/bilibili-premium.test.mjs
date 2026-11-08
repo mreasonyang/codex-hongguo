@@ -1,4 +1,6 @@
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
+import { defer } from './cleanup.mjs'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm, readFile, mkdir, copyFile, access } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -50,7 +52,7 @@ async function fixture(t, { cookie = '', vip = false, delay = false } = {}) {
     },
   }
   const provider = new BilibiliSource(context, { cookie })
-  t.after(async () => { provider.dispose(); await rm(root, { recursive: true, force: true }) })
+  defer(t, async () => { provider.dispose(); await rm(root, { recursive: true, force: true }) })
   return { root, provider, calls, options, controller }
 }
 test('the real SDK performs both native membership and WBI checks through the bounded transport', async t => {
@@ -121,8 +123,8 @@ test('member quality falls back within the combined video/audio budget rather th
 test('login replaces a cached preview error, muxes the member tracks, and logout cannot reuse member media', async t => {
   await ensureFfmpeg()
   const f = await fixture(t)
-  const store = new Store(join(f.root, 'host')); t.after(() => store.close())
-  const input = new URL('./fixtures/avc-aac.mp4', import.meta.url).pathname
+  const store = new Store(join(f.root, 'host')); defer(t, () => store.close())
+  const input = fileURLToPath(new URL('./fixtures/avc-aac.mp4', import.meta.url))
   const v = join(f.root, 'video.mp4'), a = join(f.root, 'audio.mp4')
   await runFfmpeg(['-i', input, '-map', '0:v:0', '-an', '-c', 'copy', v])
   await runFfmpeg(['-i', input, '-map', '0:a:0', '-vn', '-c', 'copy', a])
@@ -155,8 +157,8 @@ test('login replaces a cached preview error, muxes the member tracks, and logout
 })
 test('the media cache migration preserves existing Hongguo files and cache hits', async t => {
   const root = await mkdtemp(join(tmpdir(), 'hongguo-cache-migration-'))
-  t.after(() => rm(root, { recursive: true, force: true }))
-  const store = new Store(root); t.after(() => store.close())
+  defer(t, () => rm(root, { recursive: true, force: true }))
+  const store = new Store(root); defer(t, () => store.close())
   store.db.exec(`CREATE TABLE media(id TEXT PRIMARY KEY,status TEXT,owner TEXT,expires INTEGER,accessed INTEGER,
     size INTEGER DEFAULT 0,codec TEXT DEFAULT '',reason TEXT DEFAULT '',hold_until INTEGER DEFAULT 0)`)
   await mkdir(join(root, 'media'))
@@ -168,8 +170,8 @@ test('the media cache migration preserves existing Hongguo files and cache hits'
 test('an account change during media preparation prevents the old result from being published', async t => {
   await ensureFfmpeg()
   const root = await mkdtemp(join(tmpdir(), 'bilibili-cache-account-race-'))
-  t.after(() => rm(root, { recursive: true, force: true }))
-  const store = new Store(root); t.after(() => store.close())
+  defer(t, () => rm(root, { recursive: true, force: true }))
+  const store = new Store(root); defer(t, () => store.close())
   let revision = 'old-account', release, started
   const gate = new Promise(resolve => { release = resolve }), downloading = new Promise(resolve => { started = resolve })
   const bytes = await readFile(new URL('./fixtures/avc-aac.mp4', import.meta.url))

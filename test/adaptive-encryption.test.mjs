@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import { randomBytes, createCipheriv } from 'node:crypto'
 import { mkdtemp, readFile, writeFile, mkdir, rm } from 'node:fs/promises'
@@ -16,7 +17,7 @@ async function fixture(t, mode) {
   const dir = await mkdtemp(join(tmpdir(), 'hongguo-aes-hls-'))
   t.after(() => rm(dir, { recursive: true, force: true }))
   const plain = join(dir, 'plain'); await mkdir(plain)
-  await runFfmpeg(['-stream_loop', '3', '-i', new URL('fixtures/avc-aac.mp4', import.meta.url).pathname,
+  await runFfmpeg(['-stream_loop', '3', '-i', fileURLToPath(new URL('fixtures/avc-aac.mp4', import.meta.url)),
     '-t', '4', '-c', 'copy', '-f', 'hls', '-hls_time', '1', '-hls_playlist_type', 'vod', 'index.m3u8'], null, false, plain)
   const parser = new Parser(); parser.push(await readFile(join(plain, 'index.m3u8'), 'utf8')); parser.end()
   const resources = new Map(), keys = [randomBytes(16), randomBytes(16)], iv = randomBytes(16)
