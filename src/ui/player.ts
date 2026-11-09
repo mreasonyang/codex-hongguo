@@ -30,8 +30,8 @@ type Progress = {
   durationMs: number
 }
 type Prepared =
-  | { status: 'preparing' | 'error'; reason?: string }
-  | ({ status: 'ready'; codec?: string; durationMs?: number } & ({ stream: string; manifest: string } | { src: string }))
+  | { status: 'preparing' | 'error'; reason?: string; phase?: string }
+  | ({ status: 'ready'; codec?: string; durationMs?: number; format?: 'dash' } & ({ stream: string; manifest: string } | { src: string }))
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 const video = document.querySelector('video')!,
   seek = el<HTMLInputElement>('seek')
@@ -995,7 +995,8 @@ async function start(recommendationTurn?: string, automatic = false) {
       let result = await call<Prepared>('prepare_playback', { episodeId: ep.id, retry: true })
       const until = Date.now() + 240000
       while (result.status === 'preparing' && n === action && Date.now() < until) {
-        notice('正在准备首批视频分段…')
+        notice(result.phase === 'source' ? '正在获取播放信息…' : result.phase === 'index'
+          ? '正在读取播放索引…' : '正在下载并准备视频…')
         await sleep(200)
         if (n !== action) return
         result = await call<Prepared>('prepare_playback', { episodeId: ep.id })
@@ -1007,7 +1008,7 @@ async function start(recommendationTurn?: string, automatic = false) {
       const progress = r.items[0]
       const pos = progress && progress.positionMs < progress.durationMs ? progress.positionMs / 1000 : 0
       // A resumed position must exist in the growing playlist before HLS attaches.
-      while ('stream' in result && result.durationMs && pos > 0 && !result.manifest.includes('#EXT-X-ENDLIST') &&
+      while ('stream' in result && result.format !== 'dash' && result.durationMs && pos > 0 && !result.manifest.includes('#EXT-X-ENDLIST') &&
           playlistDuration(result.manifest) < pos + 3 && Date.now() < until) {
         await sleep(200)
         if (n !== action) return
@@ -1015,10 +1016,10 @@ async function start(recommendationTurn?: string, automatic = false) {
         if (n !== action) return
         if (result.status !== 'ready') throw Error('分集续播位置尚未准备好，请重试')
       }
-      if ('stream' in result && result.durationMs && pos > 0 && !result.manifest.includes('#EXT-X-ENDLIST') &&
+      if ('stream' in result && result.format !== 'dash' && result.durationMs && pos > 0 && !result.manifest.includes('#EXT-X-ENDLIST') &&
           playlistDuration(result.manifest) < pos + 3) throw Error('分集续播位置准备超时，请重试')
       const media = result
-      if (browser !== ('src' in media)) throw Error('本集播放地址已失效，请重试')
+      if (browser ? !('src' in media) && media.format !== 'dash' : !('stream' in media)) throw Error('本集播放地址已失效，请重试')
       release()
       mediaDuration = Number.isFinite(media.durationMs) && media.durationMs! > 0 ? media.durationMs! / 1000 : 0
       const load = new AbortController()
@@ -1034,9 +1035,10 @@ async function start(recommendationTurn?: string, automatic = false) {
       }
       try {
         if ('stream' in media) {
+          if (media.format === 'dash') notice('正在缓冲播放位置附近的视频…')
           closeStream = panelStream(video, ep.id, media.stream, media.manifest, streamError, () => {
             if (mediaLoad === load) finishEpisode()
-          })
+          }, { format: media.format, startPosition: pos })
         } else {
           video.src = media.src
           video.load()

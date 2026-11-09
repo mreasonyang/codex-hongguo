@@ -2,12 +2,11 @@
 // account, browser Cookie, signed URL or raw child diagnostic is recorded.
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { mkdtemp, rm, writeFile, stat } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile, stat, readdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import assert from 'node:assert/strict'
 import { runFfmpeg } from '../src/server/media.mjs'
-import { mp4DurationMs } from '../src/server/mp4-duration.mjs'
 
 const root = await mkdtemp(join(tmpdir(), 'bilibili-qualification-'))
 const pluginRoot = resolve(process.env.BILIBILI_VERIFY_PACKAGE_ROOT || '.')
@@ -52,6 +51,13 @@ try {
   assert.deepEqual((await call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo'])
   await call('set_preferences', { enabledProviders: ['hongguo', 'bilibili'] })
   await call('set_source', { source: 'bilibili' })
+  stage = 'homepage-discovery'
+  report.homepageSeries = (await call('list_series')).items.length
+  assert.ok(report.homepageSeries > 3)
+  stage = 'name-search'
+  const search = await call('list_series', { query: '鬼灭之刃' })
+  report.searchResults = search.items.length
+  assert.ok(search.items.length && search.items.every(item => !/<[^>]*>/.test(item.title)))
   const series = (await call('list_series', { query: 'ss2251' })).items[0]
   const episodes = (await call('get_episodes', { seriesId: series.id })).items
   assert.equal(episodes.length, 13)
@@ -59,24 +65,37 @@ try {
   const first = episodes[0], began = Date.now()
   console.log(JSON.stringify({ check: 'Bilibili SDK catalog', result: 'PASS', regularEpisodes: episodes.length }))
   const ready = await prepared(first.id)
-  stage = 'full-episode-preparation'; assert.equal(ready.status, 'ready')
-  report.preparationSeconds = Math.round((Date.now() - began) / 1000)
-  const file = join(root, 'media', first.id + '.mp4')
-  report.mediaBytes = (await stat(file)).size
-  report.durationMs = await mp4DurationMs(file)
+  stage = 'on-demand-preparation'; assert.equal(ready.status, 'ready'); assert.equal(ready.format, 'dash')
+  report.indexReadyMs = Date.now() - began
+  report.durationMs = ready.durationMs
   assert.ok(report.durationMs > 1400000 && report.durationMs < 1500000)
+  const manifest = JSON.parse(ready.manifest)
+  const full = await stat(join(root, 'media', first.id + '.mp4')).catch(() => null)
+  assert.equal(full, null, 'the first frame must not wait for a full-episode cache')
+  let requested = 0
   for (const position of [0, 600, Math.floor(report.durationMs / 1000) - 5]) {
-    stage = 'full-episode-decode'
-    await runFfmpeg(['-ss', String(position), '-i', file, '-map', '0:v:0', '-map', '0:a:0', '-t', '0.2', '-f', 'null', '-'])
+    stage = 'MCP-on-demand-fragment-decode'
+    for (const [i, track] of manifest.tracks.entries()) {
+      const segment = track.segments.find(s => s.time <= position && s.time + s.duration > position)
+      assert.ok(segment)
+      const bytes = Buffer.concat([await asset(first.id, ready.stream, track.initialization),
+        await asset(first.id, ready.stream, segment.asset)])
+      requested += bytes.length
+      if (!position && i === 1) report.firstAVFragmentsReadyMs = Date.now() - began
+      const path = join(root, 'mcp-track-' + i + '.mp4'); await writeFile(path, bytes)
+      const decoded = await runFfmpeg(['-i', path, '-map', i ? '0:a:0' : '0:v:0', i ? '-frames:a' : '-frames:v', '1',
+        '-f', 'framehash', 'pipe:1'], null, true)
+      assert.match(decoded.toString(), /^0,\s/m)
+    }
+    if (!position) report.initialAVBytes = requested
   }
   report.decodedPositionsSeconds = [0, 600, Math.floor(report.durationMs / 1000) - 5]
-  const init = ready.manifest.match(/#EXT-X-MAP:URI="([^"]+)"/)[1]
-  const segment = ready.manifest.split('\n').find(line => line.trim() && !line.startsWith('#'))
-  const fragment = Buffer.concat([await asset(first.id, ready.stream, init), await asset(first.id, ready.stream, segment)])
-  const fragmentFile = join(root, 'mcp-fragment.mp4'); await writeFile(fragmentFile, fragment)
-  stage = 'MCP-fragment-decode'
-  await runFfmpeg(['-i', fragmentFile, '-map', '0:v:0', '-map', '0:a:0', '-t', '0.2', '-f', 'null', '-'])
-  report.mcpFragmentBytes = fragment.length
+  report.mcpFragmentBytes = requested
+  report.cachedFragmentBytes = 0
+  for (const dir of await readdir(join(root, 'dash-media'), { withFileTypes: true }))
+    if (dir.isDirectory()) for (const file of await readdir(join(root, 'dash-media', dir.name)))
+      report.cachedFragmentBytes += (await stat(join(root, 'dash-media', dir.name, file))).size
+  assert.ok(report.cachedFragmentBytes < 5 * 1024 * 1024)
   await call('save_progress', { seriesId: series.id, episodeId: first.id, title: series.title,
     label: first.label, positionMs: 30000, durationMs: report.durationMs })
   await client.close(); await start()

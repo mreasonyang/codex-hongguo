@@ -44,7 +44,7 @@ export class Catalog {
       const page = await sourceCall(() => adapter.listSeries({ cursor, pageSize: 16 }))
       return { items: this.rows(page, true, source), cursor: page.cursor }
     }
-    if (!query) return { items: await this.recommendations(preview, source), cursor: null }
+    if (!query) return { items: this.withLocalSeries(await this.recommendations(preview, source), source), cursor: null }
     const page = await sourceCall(() => this.sources.get(source).listSeries({ query, cursor, pageSize: 16 }))
     return { items: this.rows(page, true, source), cursor: page.cursor }
   }
@@ -57,7 +57,7 @@ export class Catalog {
       this.store.saveWaitingFeed(rows, Date.now(), source)
       return rows
     }
-    const terms = this.store.preferences().searchTerms
+    const terms = adapter.recommendationTerms ?? this.store.preferences().searchTerms
     const key = 'feed:' + source + ':' + createHash('sha256').update(JSON.stringify(terms)).digest('hex')
     const cached = this.store.catalogCache(key)?.value
     const titles = preview && !cached ? this.store.waitingFeed(true, source) : []
@@ -87,18 +87,22 @@ export class Catalog {
     while (this.covers.size > 160) this.covers.delete(this.covers.keys().next().value)
     return value.items
   }
+  withLocalSeries(rows, source) {
+    const local = this.sources.get(source).localSeries?.()
+    return local?.length ? [...new Map([...this.rows({ items: local.slice(0, 8) }, true, source), ...rows].map(row => [row.id, row])).values()].slice(0, 48) : rows
+  }
   async waitingRecommendations(source = this.defaultSource()) {
     this.sources.get(source)
     const cached = this.store.waitingFeed(false, source)
-    if (cached.length) return cached
+    if (cached.length) return this.withLocalSeries(cached, source)
     const previous = this.store.waitingFeed(true, source)
     const refresh = this.recommendations(false, source)
     if (previous.length) {
       void refresh.catch(() => {})
-      return previous
+      return this.withLocalSeries(previous, source)
     }
     await refresh
-    return this.store.waitingFeed(true, source)
+    return this.withLocalSeries(this.store.waitingFeed(true, source), source)
   }
   async collectFeed(onFirstPage, terms = this.store.preferences().searchTerms, source = 'hongguo') {
     const adapter = this.sources.get(source)
@@ -123,7 +127,7 @@ export class Catalog {
         break
       }
     }
-    for (const term of adapter.discovery === false ? [] : terms) {
+    for (const term of adapter.discovery === false ? [] : adapter.recommendationTerms ?? terms) {
       if (rows.size >= 24) break
       try {
         merge(await sourceCall(() => adapter.listSeries({ query: term, pageSize: 16 })))
@@ -207,9 +211,10 @@ export class Catalog {
     if (!this.sources.loaded) await this.sources.ready
     this.sources.forId(seriesId)
     const ref = parseId(seriesId)
+    const canPlay = this.ffmpeg || this.sources.get(ref.source).progressivePlayback === true
     const key = 'episodes:v2:' + JSON.stringify([seriesId, decodeCursor(cursor, ref.source, 'episodes', ref.id) ?? null])
     const page = await this.metadata.get(key, () => this.loadEpisodes(seriesId, cursor))
-    return { ...page, items: page.items.map(ep => ({ ...ep, playable: ep.playable && this.ffmpeg })) }
+    return { ...page, items: page.items.map(ep => ({ ...ep, playable: ep.playable && canPlay })) }
   }
   async loadEpisodes(seriesId, cursor) {
     if (!this.sources.loaded) await this.sources.ready
@@ -249,7 +254,13 @@ export class Catalog {
     return null
   }
   prepare(id, browser, retry, preload = false) {
-    this.sources.forId(id, 'episode')
+    const { adapter } = this.sources.forId(id, 'episode')
+    if (adapter.progressivePlayback) {
+      this.panelMedia ??= new PanelMedia(this.store.root)
+      const result = this.panelMedia.remote.prepare(id, () => this.sources.resolvePlayback(id),
+        () => this.sources.forId(id, 'episode').adapter.auth?.revision?.() ?? '', retry, preload)
+      if (result.status !== 'fallback') return result
+    }
     if (!this.ffmpeg) {
       void this.prepareMediaRuntime().catch(() => {})
       return { status: 'preparing' }

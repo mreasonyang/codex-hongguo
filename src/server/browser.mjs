@@ -113,7 +113,8 @@ export class BrowserServer {
       const id = randomBytes(12).toString('hex'),
         key = secret(),
         page = '/p/' + id + '/'
-      this.sessions.set(id, { ...item.scope, key, grants: new Set(), expires: Date.now() + 12 * 3600000 })
+      this.sessions.set(id, { ...item.scope, key, grants: new Set(), streams: new Map(), playing: undefined,
+        allowed: new Set(item.scope.allowed), expires: Date.now() + 12 * 3600000 })
       res.setHeader('Set-Cookie', 'hg=' + key + '; Path=' + page + '; HttpOnly; SameSite=Strict')
       return json({ page })
     }

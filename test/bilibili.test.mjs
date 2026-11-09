@@ -36,6 +36,7 @@ async function fixture(t, { payload = media, cookie = '', root } = {}) {
     async fetch(input, options) {
       const url = new URL(input); requests.push({ url, options })
       assert.equal(url.hostname, 'api.bilibili.com')
+      if (url.pathname.endsWith('/index/result')) return Response.json({ code: 0, data: { list: [], has_next: 0 } })
       if (url.pathname.endsWith('/nav')) return Response.json({ code: 0, data: { isLogin: true, vipStatus: 0,
         wbi_img: { img_url: 'https://i0.hdslb.com/bfs/wbi/' + 'a'.repeat(32) + '.png',
           sub_url: 'https://i0.hdslb.com/bfs/wbi/' + 'b'.repeat(32) + '.png' } } })
@@ -72,7 +73,7 @@ test('the pinned real amagi SDK lists a season and resolves ordered main episode
   assert.deepEqual(await provider.listSeries(), { items: [], cursor: null })
   const page = await provider.listSeries({ query: 'ss2251' })
   assert.equal(page.items[0].episodes, 2)
-  assert.equal(requests.length, 1)
+  assert.equal(requests.filter(r => r.url.pathname.endsWith('/season')).length, 1)
   const first = await provider.listEpisodes('2251', { pageSize: 1 })
   const second = await provider.listEpisodes('2251', { cursor: first.cursor, pageSize: 1 })
   assert.deepEqual([...first.items, ...second.items].map(e => e.id), ['2251:50188', '2251:50189'])
@@ -100,13 +101,77 @@ test('saved Bilibili library persists and merges across Provider processes witho
   assert.equal((await catalog.waitingRecommendations('bilibili'))[0].id, qualify('bilibili', '2251'))
   assert.equal(b.requests.some(r => r.url.search.includes('总裁')), false)
 })
+test('browse and signed name search work without importing a link, with source/query-bound pagination and plain titles', async t => {
+  const { provider, context, requests } = await fixture(t)
+  context.fetch = async (input, options) => {
+    const url = new URL(input); requests.push({ url, options })
+    if (url.pathname.endsWith('/nav')) return Response.json({ code: -101, data: { isLogin: false,
+      wbi_img: { img_url: 'https://i0.hdslb.com/bfs/wbi/' + 'a'.repeat(32) + '.png',
+        sub_url: 'https://i0.hdslb.com/bfs/wbi/' + 'b'.repeat(32) + '.png' } } })
+    const row = { season_id: '123', title: '<em class="keyword">番剧</em>&amp;动画', cover: 'https://i0.hdslb.com/cover.jpg' }
+    if (url.pathname.endsWith('/index/result')) return Response.json({ code: 0, data: { list: [row], has_next: 1 } })
+    assert.equal(url.pathname, '/x/web-interface/wbi/search/type')
+    assert.equal(url.searchParams.get('keyword'), '番剧')
+    assert.equal(url.searchParams.get('search_type'), 'media_bangumi')
+    assert.equal(url.searchParams.get('fnval'), null)
+    assert.match(url.searchParams.get('w_rid'), /^[0-9a-f]{32}$/)
+    assert.ok(url.searchParams.has('wts'))
+    return Response.json({ code: 0, data: { result: [row], numPages: 2 } })
+  }
+  const browse = await provider.listSeries()
+  assert.equal(browse.items[0].title, '番剧&动画')
+  const first = await provider.listSeries({ query: '番剧' })
+  assert.equal(first.items[0].id, '123')
+  await provider.listSeries({ query: '番剧', cursor: first.cursor })
+  assert.equal(requests.at(-1).url.searchParams.get('page'), '2')
+  await assert.rejects(provider.listSeries({ query: '其他番剧', cursor: first.cursor }), /不匹配/)
+  await assert.rejects(provider.listSeries({ cursor: first.cursor }), /不匹配/)
+  assert.equal(requests.some(r => r.options.headers.Cookie), false)
+})
+test('Bilibili discovery populates homepage and chat recommendations without Hongguo seed searches', async t => {
+  const { provider, root, context } = await fixture(t)
+  context.fetch = async input => {
+    const url = new URL(input)
+    assert.ok(url.pathname.endsWith('/index/result'))
+    return Response.json({ code: 0, data: { list: Array.from({ length: 16 }, (_, i) => ({
+      season_id: String(100 + i), title: '番剧' + i, cover: 'https://i0.hdslb.com/' + i + '.jpg',
+    })), has_next: 0 } })
+  }
+  const store = new Store(join(root, 'host')); defer(t, () => store.close())
+  const registry = new ProviderRegistry(root, { builtins: [{ manifest: builtins[1].manifest,
+    createProvider: () => provider }], enabled: ['bilibili'] }); await registry.ready
+  const catalog = new Catalog(store, { sources: registry })
+  const home = await catalog.list({ source: 'bilibili' })
+  assert.equal(home.items.length, 16)
+  assert.ok(home.items.every(row => row.id.startsWith('p.bilibili.')))
+  assert.deepEqual((await catalog.waitingRecommendations('bilibili')).map(row => row.id), home.items.map(row => row.id))
+  assert.deepEqual(store.waitingFeed(true, 'hongguo'), [])
+})
+test('a newly imported title is visible across processes even while homepage and waiting feeds are cached', async t => {
+  const a = await fixture(t), b = await fixture(t, { root: a.root })
+  b.context.fetch = async input => new URL(input).pathname.endsWith('/index/result')
+    ? Response.json({ code: 0, data: { list: [{ season_id: '333', title: '目录番剧' }], has_next: 0 } })
+    : Response.json({ code: 0, result: season })
+  const store = new Store(join(a.root, 'host')); defer(t, () => store.close())
+  const sources = new ProviderRegistry(a.root, { builtins: [{ manifest: builtins[1].manifest, createProvider: () => b.provider }], enabled: ['bilibili'] })
+  await sources.ready
+  const catalog = new Catalog(store, { sources })
+  assert.equal((await catalog.list({ source: 'bilibili' })).items[0].title, '目录番剧')
+  await a.provider.listSeries({ query: 'ss2251' })
+  assert.ok((await catalog.list({ source: 'bilibili' })).items.some(row => row.id === qualify('bilibili', '2251')))
+  assert.ok((await catalog.waitingRecommendations('bilibili')).some(row => row.id === qualify('bilibili', '2251')))
+  assert.equal((await catalog.waitingRecommendations('bilibili')).some(row => row.id.startsWith('hg-')), false)
+})
 test('Bilibili uses normal selection, next-episode and isolated progress contracts', async t => {
   const { provider, root } = await fixture(t)
   const store = new Store(join(root, 'host')); defer(t, () => store.close())
   store.setPreferences({ enabledProviders: ['hongguo', 'bilibili'] })
   const sources = new ProviderRegistry(root, { builtins: [builtins[0], { manifest: builtins[1].manifest,
     createProvider: () => provider }], enabled: ['hongguo', 'bilibili'] }); await sources.ready
-  const catalog = new Catalog(store, { sources }); catalog.ffmpeg = true
+  const catalog = new Catalog(store, { sources }); catalog.ffmpeg = false
+  assert.ok((await catalog.episodes({ seriesId: qualify('bilibili', '2251') })).items.every(ep => ep.playable),
+    'on-demand playback must not race FFmpeg startup after a fast cached restart')
+  catalog.ffmpeg = true
   const service = new Service(store, catalog), panel = service.panel(service.open({ threadId: 'B' }).panel)
   await service.call(panel, 'set_source', { source: 'bilibili' })
   const page = await service.call(panel, 'list_series', { query: 'ep50188' })

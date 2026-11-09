@@ -2,6 +2,12 @@
 const en: Record<string, string> = {
   视频源: 'Video source', 红果: 'Hongguo',
   哔哩哔哩: 'Bilibili', 添加番剧: 'Add series',
+  '搜索番名，也可粘贴番剧链接': 'Search series or paste a series link',
+  '暂时没有找到番剧，请换个关键词试试': 'No series found. Try another keyword.',
+  '正在获取播放信息…': 'Getting playback information…',
+  '正在读取播放索引…': 'Reading the playback index…',
+  '正在下载并准备视频…': 'Downloading and preparing video…',
+  '正在缓冲播放位置附近的视频…': 'Buffering video near the playback position…',
   'B 站账号': 'Bilibili account', 扫码登录: 'Sign in with QR code', 刷新二维码: 'Refresh QR code',
   取消登录: 'Cancel sign-in', 退出登录: 'Sign out', 已登录: 'Signed in',
   '已登录 · 大会员': 'Signed in · Premium member',

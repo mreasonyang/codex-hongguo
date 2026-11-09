@@ -13,7 +13,7 @@ export const builtins = [
   { manifest: { apiVersion: 1, id: 'hongguo', name: '红果', version: '1.0.0' }, createProvider: ctx => new HongguoSource(ctx.root) },
   { manifest: { apiVersion: 1, id: 'bilibili', name: '哔哩哔哩', version: '1.0.0',
     authentication: 'qrcode',
-    queryMode: 'link', queryHint: '粘贴番剧链接或 ss/ep 编号', emptyMessage: '粘贴 B 站番剧链接后，已添加的番剧会显示在这里',
+    queryMode: 'search', queryHint: '搜索番名，也可粘贴番剧链接', emptyMessage: '暂时没有找到番剧，请换个关键词试试',
     network: { api: ['api.bilibili.com', 'passport.bilibili.com', 'passport.biligame.com'], media: ['*.bilivideo.com', '*.bilivideo.cn', '*.bilivideo.net', '*.hdslb.com'] } },
     createProvider: ctx => new BilibiliSource(ctx, { cookie: process.env.HONGGUO_BILIBILI_COOKIE || '' }) },
 ]
@@ -63,8 +63,8 @@ export class ProviderRegistry {
     const network = manifest.network || {}
     return { apiVersion: 1, id: manifest.id, root: this.root,
       dataDir: join(this.root, 'device', 'providers', manifest.id), signal: controller.signal,
-      fetchMedia: mediaFetcher({ allows: allows(network.media) }),
-      mediaFetcher: headers => mediaFetcher({ allows: allows(network.media), headers }),
+      fetchMedia: mediaFetcher({ allows: allows(network.media), signal: controller.signal }),
+      mediaFetcher: headers => mediaFetcher({ allows: allows(network.media), headers, signal: controller.signal }),
       fetch: async (url, options = {}) => {
         const { response } = await boundedResponse(url, { ...options,
           signal: AbortSignal.any([controller.signal, ...(options.signal ? [options.signal] : [])]),

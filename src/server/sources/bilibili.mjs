@@ -36,19 +36,32 @@ function apiError(code) {
 const preview = data => [true, 1, '1'].includes(data.is_preview) ||
   data.play_check?.play_detail === 'PLAY_PREVIEW' || data.play_video_type === 'preview'
 const drm = data => [true, 1, '1'].includes(data.is_drm) || Number(data.drm_tech_type) > 0
+const plain = value => String(value || '').replace(/<[^>]*>/g, '').replace(/&amp;/g, '&')
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
 
 // amagi owns endpoint construction and response handling. The documented Axios
 // adapter keeps its requests inside the Host's bounded API transport. No browser
 // credentials, upstream errors or signed media URLs cross the public contract.
 export class BilibiliSource {
   id = 'bilibili'
-  discovery = false
+  discovery = true
+  // The public season index supplies discovery. Hongguo-specific seed keywords
+  // must not become unrelated requests when a user switches video providers.
+  recommendationTerms = []
+  progressivePlayback = true
   constructor(context, { loadSdk = () => import(pathToFileURL(join(projectRoot, 'dist/vendor/amagi/index.mjs')).href).then(m => m.sdk), cookie = '' } = {}) {
     this.context = context; this.loadSdk = loadSdk
     this.seasons = new Map(); this.pending = new Map()
+    this.pages = new Map()
     mkdirSync(context.dataDir, { recursive: true, mode: 0o700 })
     this.db = new DatabaseSync(join(context.dataDir, 'library.sqlite'))
     this.db.exec('PRAGMA busy_timeout=3000; CREATE TABLE IF NOT EXISTS library(id TEXT PRIMARY KEY, added INTEGER NOT NULL)')
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      if (!this.db.prepare('PRAGMA table_info(library)').all().some(column => column.name === 'body'))
+        this.db.exec('ALTER TABLE library ADD COLUMN body TEXT')
+      this.db.exec('COMMIT')
+    } catch (error) { this.db.exec('ROLLBACK'); this.db.close(); throw error }
     this.fetchMedia = context.mediaFetcher(headers)
     this.auth = new BilibiliAuth(context, (...args) => this.request(...args), { cookie, onChange: () => this.seasons.clear() })
   }
@@ -65,7 +78,9 @@ export class BilibiliSource {
           headers: { ...headers, ...(cookie && url.hostname === 'api.bilibili.com' ? { Cookie: cookie } : {}) } })
         if (!response.ok) throw apiError(response.status)
         const data = await response.json()
-        if (data.code !== 0) throw apiError(Number(data.code))
+        const anonymousSigningKeys = method === 'fetchBangumiSearch' && url.pathname === '/x/web-interface/nav' &&
+          data.code === -101 && data.data?.wbi_img
+        if (data.code !== 0 && !anonymousSigningKeys) throw apiError(Number(data.code))
         if (cookie && method === 'fetchBangumiStreamUrl' && data.data?.isLogin === false) throw apiError(-101)
         const responseHeaders = { 'set-cookie': response.headers.getSetCookie() }
         return { data, status: response.status, statusText: '', headers: responseHeaders, config }
@@ -81,7 +96,7 @@ export class BilibiliSource {
       // Anonymous calls retain the existing H5 request and stream preferences.
       const result = await sdk[method](options, cookie, {
         adapter, signal: combined, timeout: 10000, headers: { cookie },
-        ...(cookie ? {} : { params: { fnval: 16, qn: 32 } }),
+        ...(cookie || method !== 'fetchBangumiStreamUrl' ? {} : { params: { fnval: 16, qn: 32 } }),
       })
       if (combined?.aborted) throw new PlayerError('请求已取消', 499)
       if (!result?.success || result.data?.code !== 0) throw apiError(Number(result?.data?.code ?? result?.code))
@@ -112,23 +127,52 @@ export class BilibiliSource {
     return job
   }
   async listSeries({ query = '', cursor, pageSize = 16, signal } = {}) {
-    const offset = decodeCursor(cursor, this.id, 'list', query) ?? 0
-    if (!Number.isSafeInteger(offset) || offset < 0 || offset > 48) throw new PlayerError('分页信息无效')
-    if (query) {
+    query = String(query).trim()
+    const page = decodeCursor(cursor, this.id, 'browse-v2', query) ?? 1
+    if (!Number.isSafeInteger(page) || page < 1 || page > 1000) throw new PlayerError('分页信息无效')
+    if (/^(?:ss|ep)\d|^https?:\/\//i.test(query)) {
       const { series } = await this.season(bangumiLink(query), signal)
-      this.db.prepare('INSERT OR REPLACE INTO library VALUES(?,?)').run(series.id, Date.now())
+      this.db.prepare('INSERT OR REPLACE INTO library(id,added,body) VALUES(?,?,?)').run(series.id, Date.now(), JSON.stringify(series))
       this.db.exec('DELETE FROM library WHERE id NOT IN (SELECT id FROM library ORDER BY added DESC,id DESC LIMIT 48)')
+      this.pages.clear()
       return { items: [series], cursor: null }
     }
-    const library = this.db.prepare('SELECT id FROM library ORDER BY added DESC,id DESC LIMIT 48').all().map(row => row.id)
-    const ids = library.slice(offset, offset + pageSize), items = []
-    let error
-    for (const id of ids) {
-      try { items.push((await this.season({ season_id: 'ss' + id }, signal)).series) } catch (e) { error = e }
-    }
-    if (ids.length && !items.length && error) throw error
-    return { items, cursor: offset + ids.length < library.length
-      ? encodeCursor(this.id, 'list', query, offset + ids.length) : null }
+    const size = Math.max(1, Math.min(30, pageSize)), key = JSON.stringify([query, page, size])
+    const saved = page === 1 ? (await Promise.all(this.db.prepare(
+      'SELECT id,body FROM library ORDER BY added DESC,id DESC LIMIT ?').all(query ? 48 : 8).map(async row => {
+      try {
+        if (row.body) {
+          const series = JSON.parse(row.body)
+          return !query || series.title.toLocaleLowerCase().includes(query.toLocaleLowerCase()) ? series : null
+        }
+        if (query) return null
+        const series = (await this.season({ season_id: 'ss' + row.id }, signal)).series
+        this.db.prepare('UPDATE library SET body=? WHERE id=?').run(JSON.stringify(series), row.id)
+        return series
+      } catch { return null }
+    }))).filter(Boolean) : []
+    const mergeSaved = value => saved.length ? { ...value,
+      items: [...new Map([...saved, ...value.items].map(row => [row.id, row])).values()] } : value
+    const cached = this.pages.get(key)
+    if (cached?.until > Date.now()) return mergeSaved(cached.value)
+    const data = await this.request(query ? 'fetchBangumiSearch' : 'fetchBangumiIndex',
+      query ? { keyword: query, page } : { page, pageSize: size }, signal)
+    const rows = query ? data?.result : data?.list
+    if (!Array.isArray(rows)) throw apiError()
+    const items = rows.filter(row => number(row.season_id) && typeof row.title === 'string').slice(0, 40).map(row => ({
+      id: String(row.season_id), title: plain(row.title).slice(0, 320),
+      description: [plain(row.badge), plain(row.desc || row.evaluate || row.index_show || row.styles || '')].filter(Boolean).join(' · ').slice(0, 2000),
+      episodes: Number(row.ep_size || row.total) || null, coverURL: row.cover,
+    }))
+    const more = query ? Number(data.numPages) > page : data.has_next === 1 || data.has_next === true
+    const value = { items, cursor: more && items.length ? encodeCursor(this.id, 'browse-v2', query, page + 1) : null }
+    this.pages.set(key, { value, until: Date.now() + 60000 })
+    while (this.pages.size > 48) this.pages.delete(this.pages.keys().next().value)
+    return mergeSaved(value)
+  }
+  localSeries() {
+    return this.db.prepare('SELECT body FROM library WHERE body IS NOT NULL ORDER BY added DESC,id DESC LIMIT 48').all()
+      .flatMap(row => { try { return [JSON.parse(row.body)] } catch { return [] } })
   }
   async getSeries(id, { signal } = {}) {
     if (!number(id)) throw invalidLink()
@@ -172,7 +216,11 @@ export class BilibiliSource {
     if (!(duration > 0 && duration <= 7200)) throw new PlayerError('番剧时长无效或超过两小时限制')
     const locator = track => {
       const urls = [track.baseUrl || track.base_url || track.url, ...(track.backupUrl || track.backup_url || [])].filter(Boolean)
+      const segment = track.SegmentBase || track.segment_base
       return { url: allowedURL(urls[0], bilibiliMediaHosts).href,
+        mime: (track.mimeType || track.mime_type || (track.codecs?.startsWith('mp4a') ? 'audio/mp4' : 'video/mp4')) + '; codecs="' + track.codecs + '"',
+        ...(segment ? { initialization: segment.Initialization || segment.initialization,
+          indexRange: segment.indexRange || segment.index_range } : {}),
         backupURLs: urls.slice(1, 4).flatMap(url => { try { return [allowedURL(url, bilibiliMediaHosts).href] } catch { return [] } }) }
     }
     const audio = (data.dash?.audio || []).filter(track => !drm(track) && /^mp4a\./i.test(track.codecs || ''))
@@ -184,9 +232,9 @@ export class BilibiliSource {
         : Math.abs(Number(a.id) - 32) - Math.abs(Number(b.id) - 32)) || a.bandwidth - b.bandwidth)
     if (video.length && audio) return { candidates: video.slice(0, 2).map(track => ({
       kind: 'tracks', codec: 'h264', video: locator(track), audio: locator(audio),
-    })), fetchMedia: this.fetchMedia }
+    })), fetchMedia: this.fetchMedia, durationMs: Math.round(duration * 1000) }
     if (data.durl?.length === 1) return { candidates: [{ kind: 'file', codec: 'h264', url: locator(data.durl[0]).url }], fetchMedia: this.fetchMedia }
     throw new PlayerError('该集暂未提供大小合适的 AVC/AAC 完整片源')
   }
-  dispose() { this.seasons.clear(); this.auth.dispose(); this.db.close() }
+  dispose() { this.seasons.clear(); this.pages.clear(); this.auth.dispose(); this.db.close() }
 }

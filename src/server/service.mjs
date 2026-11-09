@@ -322,7 +322,7 @@ export class Service {
         return this.store.removeHistory(p.seriesId)
       case 'read_panel_chunk':
       case 'read_panel_manifest':
-        if (browser || scope.streams?.get(p.episodeId) !== p.stream)
+        if ((browser && !this.catalog.panelMedia?.remote?.owns(p.episodeId, p.stream)) || scope.streams?.get(p.episodeId) !== p.stream)
           throw new PlayerError('请先准备当前分集', 403)
         if (name === 'read_panel_manifest') return this.catalog.panelMedia.manifest(p.episodeId, p.stream)
         return this.catalog.panelMedia.chunk(p.episodeId, p.stream, p.asset, p.offset)
@@ -348,8 +348,12 @@ export class Service {
           scope.playing = p.episodeId
         }
         const result = this.catalog.prepare(p.episodeId, browser, !!p.retry)
-        if (browser && result.status === 'ready') scope.grants.add(p.episodeId)
-        if (!browser && result.stream) {
+        if (browser && result.status === 'ready' && result.src) scope.grants.add(p.episodeId)
+        if (result.stream) {
+          if (browser && scope.playing !== p.episodeId) {
+            this.catalog.panelMedia.unpin(scope.playing, scope)
+            scope.streams = new Map(); scope.playing = p.episodeId
+          }
           this.catalog.panelMedia.pin(p.episodeId, scope)
           scope.streams ??= new Map()
           scope.streams.set(p.episodeId, result.stream)

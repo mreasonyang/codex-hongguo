@@ -17,7 +17,7 @@ async function fixture(t) {
 test('uninstall removes all default user data, including corrupt databases, caches, device profiles and partial files', async t => {
   const { root, options } = await fixture(t)
   for (const file of ['player.sqlite', 'player.sqlite-wal', 'player.sqlite-shm', 'player.sqlite-journal', 'unfinished-file']) await writeFile(join(root, file), 'data')
-  for (const folder of ['media', 'panel-media', 'device']) {
+  for (const folder of ['media', 'panel-media', 'dash-media', 'device']) {
     await mkdir(join(root, folder)); await writeFile(join(root, folder, 'file'), 'data')
   }
   await removeUserData(options)
@@ -31,12 +31,12 @@ test('a custom data directory loses all plugin data but keeps unrelated user fil
   await mkdir(root)
   await writeFile(join(root, 'user-file'), 'keep')
   for (const file of ['player.sqlite', 'player.sqlite-wal', 'player.sqlite-shm', 'player.sqlite-journal']) await writeFile(join(root, file), 'data')
-  for (const folder of ['media', 'panel-media', 'device']) {
+  for (const folder of ['media', 'panel-media', 'dash-media', 'device']) {
     await mkdir(join(root, folder)); await writeFile(join(root, folder, 'file'), 'data')
   }
   await removeUserData({ ...options, env: { HONGGUO_DATA_DIR: root } })
   assert.equal(await readFile(join(root, 'user-file'), 'utf8'), 'keep')
-  for (const file of ['player.sqlite', 'player.sqlite-wal', 'player.sqlite-shm', 'player.sqlite-journal', 'media', 'panel-media', 'device']) await assert.rejects(lstat(join(root, file)), { code: 'ENOENT' })
+  for (const file of ['player.sqlite', 'player.sqlite-wal', 'player.sqlite-shm', 'player.sqlite-journal', 'media', 'panel-media', 'dash-media', 'device']) await assert.rejects(lstat(join(root, file)), { code: 'ENOENT' })
 })
 
 test('default data links and links inside the data directory are deleted without deleting external targets', { skip: process.platform === 'win32' }, async t => {

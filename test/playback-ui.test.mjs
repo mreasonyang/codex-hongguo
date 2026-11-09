@@ -1179,3 +1179,36 @@ test('switching Provider while covered cancels the old hover resume intent', asy
   assert.equal(f.video.paused, true)
   assert.equal(f.video.plays, played)
 })
+
+test('an on-demand stream resumes deep progress without waiting for a growing HLS playlist', async t => {
+  const f = setup(t)
+  f.event('dash'); await f.poll()
+  f.ui.unload(); f.video.currentTime = 0; f.video.duration = 1200
+  f.panel.allowed = new Set(['hg-11'])
+  let preparations = 0
+  f.service.catalog = { prepare: () => { preparations++; return { status: 'ready', format: 'dash',
+    stream: 'dash-test', manifest: '{}', durationMs: 1200000 } }, panelMedia: { pin() {}, unpin() {} } }
+  f.store.save({ seriesId: 'hg-1', episodeId: 'hg-11', title: 'Test', label: '1', positionMs: 600000, durationMs: 1200000 })
+  await f.ui.start(); await flush()
+  assert.equal(preparations, 1)
+  assert.equal(f.video.currentTime, 600)
+  assert.equal(f.video.paused, false)
+})
+for (const terminal of ['Stop', 'Interrupt']) test(`on-demand preparation cannot defeat the cover or a covered ${terminal}`, async t => {
+  const f = await hoveringPlayer(t, false)
+  f.ui.unload(); f.panel.allowed = new Set(['hg-11']); f.video.currentTime = 0
+  f.service.catalog = { prepare: () => ({ status: 'ready', format: 'dash', stream: 'dash-test', manifest: '{}', durationMs: 60000 }),
+    panelMedia: { pin() {}, unpin() {} } }
+  let release
+  const gate = new Promise(resolve => { release = resolve }), call = f.service.call.bind(f.service)
+  f.service.call = async (scope, name, args) => { if (name === 'prepare_playback') await gate; return call(scope, name, args) }
+  const starting = f.ui.start(); await flush()
+  leavePanel(f); release(); await starting; await flush()
+  assert.equal(f.ui.decoy.covered, true)
+  assert.equal(f.video.plays, 0)
+  f.event('one', terminal); await f.poll()
+  await enterPanel(t, f)
+  assert.equal(f.ui.decoy.covered, false)
+  assert.equal(f.video.paused, true)
+  assert.equal(f.video.plays, 0, 'returning to the panel cannot revive an ended task')
+})

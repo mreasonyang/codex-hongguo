@@ -47,9 +47,11 @@ export async function boundedResponse(input, {
   }
   throw invalid()
 }
-export function mediaFetcher({ allows = host => hongguoHosts.test(host), headers = {} } = {}) {
-  return async (url, budget, timeout, _redirects = 0, range) => {
-    const { response: res, url: finalURL } = await boundedResponse(url, { allows, headers, budget, timeout, range })
+export function mediaFetcher({ allows = host => hongguoHosts.test(host), headers = {}, signal: lifetime } = {}) {
+  return async (url, budget, timeout, _redirects = 0, range, signal) => {
+    const signals = [lifetime, signal].filter(Boolean)
+    const { response: res, url: finalURL } = await boundedResponse(url, { allows, headers, budget, timeout, range,
+      signal: signals.length ? AbortSignal.any(signals) : undefined })
     const validRange = !range || (res.status === 206 && res.headers.get('content-range')?.split('/')[0] ===
       'bytes ' + range.offset + '-' + (range.offset + range.length - 1))
     if (!res.ok || !validRange) {
