@@ -34,43 +34,49 @@ export class Catalog {
     const preferred = this.store.preferences().defaultSource
     return this.sources.defaultSource?.(preferred) ?? this.sources.fallback(preferred)
   }
-  async list({ source = this.defaultSource(), query = '', cursor, preview } = {}) {
+  contentContext(source = this.defaultSource(), overrides = {}) {
+    return this.sources.contentContext?.(source, this.store.preferences(), overrides) ?? {}
+  }
+  feedContext(context) { return !context.contentType || (context.contentType === 'bangumi' && !context.category) ? '' : JSON.stringify(context) }
+  async list({ source = this.defaultSource(), query = '', cursor, preview, contentType, category } = {}) {
     if (!this.sources.loaded) await this.sources.ready
     source = sourceId(source)
     const adapter = this.sources.get(source)
+    const context = this.contentContext(source, { contentType, category })
     if (!query && adapter.discovery === false) {
-      const page = await sourceCall(() => adapter.listSeries({ cursor, pageSize: 16 }))
+      const page = await sourceCall(() => adapter.listSeries({ cursor, pageSize: 16, ...context }))
       return { items: this.rows(page, true, source), cursor: page.cursor }
     }
-    if (!query) return { items: this.withLocalSeries(await this.recommendations(preview, source), source), cursor: null }
-    const page = await sourceCall(() => this.sources.get(source).listSeries({ query, cursor, pageSize: 16 }))
+    if (!query) return { items: this.withLocalSeries(await this.recommendations(preview, source, context), source, context), cursor: null }
+    const page = await sourceCall(() => this.sources.get(source).listSeries({ query, cursor, pageSize: 16, ...context }))
     return { items: this.rows(page, true, source), cursor: page.cursor }
   }
-  async recommendations(preview = false, source = this.defaultSource()) {
+  async recommendations(preview = false, source = this.defaultSource(), context = this.contentContext(source)) {
     if (!this.sources.loaded) await this.sources.ready
     source = sourceId(source)
     const adapter = this.sources.get(source)
+    const feedContext = this.feedContext(context)
     if (adapter.discovery === false) {
-      const rows = this.rows(await sourceCall(() => adapter.listSeries({ pageSize: 48 })), false, source)
-      this.store.saveWaitingFeed(rows, Date.now(), source)
+      const rows = this.rows(await sourceCall(() => adapter.listSeries({ pageSize: 48, ...context })), false, source)
+      this.store.saveWaitingFeed(rows, Date.now(), source, feedContext)
       return rows
     }
     const terms = adapter.recommendationTerms ?? this.store.preferences().searchTerms
-    const key = 'feed:' + source + ':' + createHash('sha256').update(JSON.stringify(terms)).digest('hex')
+    const key = 'feed:' + source + ':' + createHash('sha256').update(JSON.stringify(feedContext ? [terms, context] : terms)).digest('hex')
     const cached = this.store.catalogCache(key)?.value
-    const titles = preview && !cached ? this.store.waitingFeed(true, source) : []
+    const titles = preview && !cached ? this.store.waitingFeed(true, source, feedContext) : []
     const refresh = this.metadata.get(key, async () => {
       const firstPage = Promise.withResolvers()
       this.firstPages.set(key, firstPage.promise)
       try {
-        const rows = await this.collectFeed(firstPage.resolve, terms, source)
+        const rows = await this.collectFeed(firstPage.resolve, terms, source, context)
         if (!rows.length && this.sources.get(source).discovery !== false) throw new PlayerError('片源暂时不可达，请稍后重试', 503)
         const covered = rows.filter(row => row.hasCover)
         return { items: (covered.length >= 12 ? covered : rows).slice(0, 48),
-          titles: rows.map(({ id, title }) => ({ id, title })),
+          titles: rows.map(({ id, title, contentType, episodes }) => ({ id, title, ...(contentType ? { contentType } : {}), ...(episodes ? { episodes } : {}) })),
           covers: rows.flatMap(({ id }) => this.covers.get(id)?.url ? [[id, this.covers.get(id).url]] : []) }
       } finally { this.firstPages.delete(key) }
-    }, { feed: source }).then(value => this.feedItems(value))
+    }, { feed: feedContext ? { source, context: feedContext } : source }).then(value => this.feedItems(value))
     if (preview && (cached || titles.length)) {
       void refresh.catch(() => {})
       return cached ? this.feedItems(cached) : titles
@@ -85,24 +91,25 @@ export class Catalog {
     while (this.covers.size > 160) this.covers.delete(this.covers.keys().next().value)
     return value.items
   }
-  withLocalSeries(rows, source) {
-    const local = this.sources.get(source).localSeries?.()
+  withLocalSeries(rows, source, context = this.contentContext(source)) {
+    const local = this.sources.get(source).localSeries?.(context)?.filter(row => !context.category || context.category === 'all' || row.category === context.category)
     return local?.length ? [...new Map([...this.rows({ items: local.slice(0, 8) }, true, source), ...rows].map(row => [row.id, row])).values()].slice(0, 48) : rows
   }
-  async waitingRecommendations(source = this.defaultSource()) {
+  async waitingRecommendations(source = this.defaultSource(), context = this.contentContext(source)) {
     this.sources.get(source)
-    const cached = this.store.waitingFeed(false, source)
-    if (cached.length) return this.withLocalSeries(cached, source)
-    const previous = this.store.waitingFeed(true, source)
-    const refresh = this.recommendations(false, source)
+    const feedContext = this.feedContext(context)
+    const cached = this.store.waitingFeed(false, source, feedContext)
+    if (cached.length) return this.withLocalSeries(cached, source, context)
+    const previous = this.store.waitingFeed(true, source, feedContext)
+    const refresh = this.recommendations(false, source, context)
     if (previous.length) {
       void refresh.catch(() => {})
-      return this.withLocalSeries(previous, source)
+      return this.withLocalSeries(previous, source, context)
     }
     await refresh
-    return this.withLocalSeries(this.store.waitingFeed(true, source), source)
+    return this.withLocalSeries(this.store.waitingFeed(true, source, feedContext), source, context)
   }
-  async collectFeed(onFirstPage, terms = this.store.preferences().searchTerms, source = 'hongguo') {
+  async collectFeed(onFirstPage, terms = this.store.preferences().searchTerms, source = 'hongguo', context = {}) {
     const adapter = this.sources.get(source)
     const rows = new Map(),
       seen = new Set()
@@ -115,7 +122,7 @@ export class Catalog {
     let cursor, lastError
     for (let i = 0; i < 6 && rows.size < 48; i++) {
       try {
-        const page = await sourceCall(() => adapter.listSeries({ cursor, pageSize: 16 }))
+        const page = await sourceCall(() => adapter.listSeries({ cursor, pageSize: 16, ...context }))
         merge(page)
         cursor = page.cursor
         if (!cursor || seen.has(cursor)) break
@@ -128,7 +135,7 @@ export class Catalog {
     for (const term of adapter.discovery === false ? [] : adapter.recommendationTerms ?? terms) {
       if (rows.size >= 24) break
       try {
-        merge(await sourceCall(() => adapter.listSeries({ query: term, pageSize: 16 })))
+        merge(await sourceCall(() => adapter.listSeries({ query: term, pageSize: 16, ...context })))
       } catch (e) {
         lastError = e
       }
@@ -148,6 +155,10 @@ export class Catalog {
           title: s.title,
           description: s.description || '',
           episodes: s.episodes || null,
+          ...(s.contentType ? { contentType: s.contentType } : {}),
+          ...(s.author ? { author: String(s.author).slice(0, 80) } : {}),
+          ...(s.durationMs > 0 ? { durationMs: s.durationMs } : {}),
+          ...(s.defaultEpisodeId ? { defaultEpisodeId: qualify(source, s.defaultEpisodeId, 'episode') } : {}),
           hasCover: !!this.covers.get(id)?.url,
           ...(lookupCover ? { lookupCover: true } : {}),
         }
@@ -219,6 +230,7 @@ export class Catalog {
     const { adapter, id, source } = this.sources.forId(seriesId)
     const page = await sourceCall(() => adapter.listEpisodes(id, { cursor, pageSize: 120 }))
     return {
+      ...(page.series ? { series: this.rows({ items: [page.series] }, true, source)[0] } : {}),
       items: (page.items || [])
         .map((ep) => ({
           id: qualify(source, ep.id, 'episode'),

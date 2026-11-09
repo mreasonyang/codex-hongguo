@@ -12,6 +12,7 @@ export type Context = {
 export type SourceId = string
 export type Preferences = {
   defaultSource: SourceId
+  contentPreferences?: Record<string, { contentType: string; category?: string }>
   autoPrompt: boolean
   autoplayNext: boolean
   autoPauseOnFinish: boolean

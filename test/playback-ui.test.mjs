@@ -43,7 +43,7 @@ class Video extends Element {
 // start and pause paths run unchanged against a real Service and SQLite store.
 const source = readFileSync(new URL('../src/ui/player.ts', import.meta.url), 'utf8') + `
 export const fixture = {
-  poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer, changeSource, list, history, refreshProviders,
+  poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer, changeSource, changeContent, contentChoice, list, history, refreshProviders,
   sourceState() { return { source: activeSource, cards: cards.map(row => row.id), watched: watched.map(row => row.seriesId) } },
   setProviders(items) { providers = items.filter(item => item.available); syncSourceButton() },
   decoy, coverPage, settings, sourceConfirmation,
@@ -1174,6 +1174,55 @@ async function accountPlayer(t) {
   assert.equal(f.elements.get('accountQrArea').hidden, false)
   return { ...f, authCalls }
 }
+async function contentPlayer(t, single = false) {
+  const f = setup(t), listing = []
+  const types = [{ id: 'bangumi', name: '番剧' }, { id: 'video', name: '视频', queryHint: '搜索视频',
+    categories: [{ id: '', name: '推荐' }, { id: 'all', name: '热门' }, { id: '36', name: '知识' }] }]
+  const sources = new ProviderRegistry(f.store.root, { builtins: ['hongguo', 'demo'].map(id => ({
+    manifest: { apiVersion: 1, id, name: id, version: '1.0.0', ...(id === 'demo' ? { contentTypes: types } : {}) },
+    createProvider: () => ({ id, recommendationTerms: [],
+      contentTypeOfId: value => value === 'v' ? 'video' : 'bangumi',
+      async listSeries(options) { listing.push(options); return { items: [{ id: options.contentType === 'video' ? 'v' : 's',
+        title: '测试内容', contentType: options.contentType || 'bangumi', episodes: single ? 1 : 2 }], cursor: null } },
+      async getSeries() {}, async getCover() {}, async resolvePlayback() {},
+      async listEpisodes(value) { return { series: { id: value, title: '视频标题', contentType: value === 'v' ? 'video' : 'bangumi', author: '测试 UP' },
+        items: Array.from({ length: single ? 1 : 2 }, (_, i) => ({ id: value + (i + 1), number: i + 1, label: i ? '构图实践' : '曝光基础', playable: true })) } },
+    }),
+  })) })
+  t.after(() => sources.dispose()); await sources.ready
+  f.service.catalog = new Catalog(f.store, { sources })
+  f.ui.setProviders(sources.list()); await f.ui.changeSource('demo')
+  return { ...f, listing }
+}
+test('content tabs persist video/category choices and restore Hongguo chrome when switching back', async t => {
+  const f = await contentPlayer(t)
+  assert.equal(f.elements.get('contentTypes').hidden, false)
+  assert.equal(f.elements.get('contentCategories').hidden, true)
+  await f.ui.changeContent('video', '36')
+  assert.equal(f.store.preferences().contentPreferences.demo.contentType, 'video')
+  assert.equal(f.store.preferences().contentPreferences.demo.category, '36')
+  assert.equal(f.elements.get('query').placeholder, '搜索视频')
+  assert.equal(f.elements.get('contentCategories').hidden, false)
+  assert.ok(f.listing.some(options => options.contentType === 'video' && options.category === '36'))
+  await f.ui.changeSource('hongguo')
+  assert.equal(f.elements.get('contentTypes').hidden, true)
+  assert.equal(f.elements.get('contentCategories').hidden, true)
+  assert.equal(f.elements.get('query').placeholder, '搜索剧名')
+})
+test('multi-P shows original chapter titles and single videos hide the episode selector', async t => {
+  const f = await contentPlayer(t)
+  await f.ui.changeContent('video', 'all')
+  await f.ui.select({ id: 'p.demo.s.dg', title: '视频', contentType: 'video' })
+  assert.equal(f.elements.get('episodeHeading').textContent, '分 P')
+  assert.equal(f.elements.get('episodeCount').textContent, '2 P')
+  assert.deepEqual(f.elements.get('episodes').children.map(b => b.textContent), ['P1 · 曝光基础', 'P2 · 构图实践'])
+  assert.equal(f.elements.get('episodesPane').hidden, false)
+  assert.equal(f.elements.get('next').getAttribute('aria-label'), '下一 P')
+  const single = await contentPlayer(t, true)
+  await single.ui.changeContent('video', 'all')
+  await single.ui.select({ id: 'p.demo.s.dg', title: '单视频', contentType: 'video' })
+  assert.equal(single.elements.get('episodesPane').hidden, true)
+})
 test('a login-required playback failure offers a direct route to the source account page', async t => {
   const f = await accountPlayer(t)
   await f.ui.settings.finish()

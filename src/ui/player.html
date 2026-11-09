@@ -280,12 +280,14 @@
             <span>换一批</span>
           </button>
         </div>
+        <div id="contentTypes" class="contentTypes" role="tablist" aria-label="内容类型" hidden></div>
+        <div id="contentCategories" class="contentCategories" role="group" aria-label="视频分区" hidden></div>
         <form id="search" role="search">
           <svg class="i" aria-hidden="true"><use href="#i-search" /></svg>
           <input
             id="query"
             type="search"
-            maxlength="120"
+            maxlength="500"
             placeholder="搜索剧名"
             aria-label="搜索剧名"
             autocomplete="off"
@@ -401,9 +403,9 @@
               </label>
             </div>
           </div>
-          <div class="episodesPane">
+          <div class="episodesPane" id="episodesPane">
             <div class="paneHead">
-              <h3>选集</h3>
+              <h3 id="episodeHeading">选集</h3>
               <span id="episodeCount"></span>
             </div>
             <div id="groups" role="group" aria-label="分集范围"></div>

@@ -1,5 +1,12 @@
 // The catalog supplies show names and episode titles. Translate player chrome only.
 const en: Record<string, string> = {
+  番剧: 'Series', 视频: 'Videos', 内容类型: 'Content type', 视频分区: 'Video category',
+  热门: 'Popular', 知识: 'Knowledge', 科技: 'Technology', 游戏: 'Gaming', 生活: 'Lifestyle', 美食: 'Food', 音乐: 'Music',
+  发现视频: 'Discover videos', 发现番剧: 'Discover series', '分 P': 'Parts', '上一 P': 'Previous part', '下一 P': 'Next part',
+  '看下一 P': 'Next part', '随机一 P': 'Random part', '更多分 P': 'More parts', '视频已播完': 'Video finished',
+  '正在读取视频…': 'Loading video…',
+  '搜索视频，也可粘贴 BV/AV 编号或链接': 'Search videos or paste a BV/AV ID or link',
+  '暂时没有找到视频，请换个关键词试试': 'No videos found. Try another keyword.',
   片源账号: 'Source accounts', 返回设置: 'Back to settings', 登录二维码: 'Sign-in QR code',
   登录片源账号: 'Sign in to source', 未登录: 'Signed out', 大会员: 'Premium member',
   播放设置: 'Playback', 替身页面: 'Decoy page', 推荐设置: 'Recommendations',

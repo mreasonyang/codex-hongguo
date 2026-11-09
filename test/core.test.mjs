@@ -320,7 +320,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   })
   assert.equal(data.isError, true)
   const resources = (await client.listResources()).resources
-  const playerUri = 'ui://hongguo/v34/player', waitingUri = 'ui://hongguo/v34/waiting'
+  const playerUri = 'ui://hongguo/v35/player', waitingUri = 'ui://hongguo/v35/waiting'
   assert.equal(tools.find(t => t.name === 'show_waiting_picks')._meta.ui.resourceUri, waitingUri)
   assert.equal(tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri, playerUri)
   assert.deepEqual(resources.map(r => r.uri).sort(), [playerUri, waitingUri])
@@ -332,6 +332,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
     'ui://hongguo/v6/player', 'ui://hongguo/v6/waiting', 'ui://hongguo/v7/waiting',
     'ui://hongguo/v8/player', 'ui://hongguo/v9/waiting', 'ui://hongguo/v11/player', 'ui://hongguo/v12/waiting',
     'ui://hongguo/v16/player', 'ui://hongguo/v16/waiting', 'ui://hongguo/v17/player', 'ui://hongguo/v17/waiting',
+    'ui://hongguo/v34/player', 'ui://hongguo/v34/waiting',
     ...Array.from({ length: 16 }, (_, i) => [`ui://hongguo/v${i + 18}/player`, `ui://hongguo/v${i + 18}/waiting`]).flat()]) {
     const read = (await client.readResource({ uri })).contents[0]
     assert.equal(read.uri, uri)

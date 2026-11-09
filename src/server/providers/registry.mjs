@@ -7,12 +7,17 @@ import { sourceId, parseId } from '../sources/ids.mjs'
 import { sourceCall } from '../sources/contracts.mjs'
 import { boundedResponse, responseBytes, mediaFetcher } from '../sources/network.mjs'
 import { PlayerError } from '../errors.mjs'
+import { videoCategories } from '../sources/bilibili-content.mjs'
 
 const methods = ['listSeries', 'getSeries', 'listEpisodes', 'getCover', 'resolvePlayback']
 export const builtins = [
   { manifest: { apiVersion: 1, id: 'hongguo', name: '红果', version: '1.0.0', nsfw: false }, createProvider: ctx => new HongguoSource(ctx.root) },
   { manifest: { apiVersion: 1, id: 'bilibili', name: '哔哩哔哩', version: '1.0.0',
     authentication: 'qrcode', nsfw: false,
+    contentTypes: [
+      { id: 'bangumi', name: '番剧', queryHint: '搜索番名，也可粘贴番剧链接', emptyMessage: '暂时没有找到番剧，请换个关键词试试' },
+      { id: 'video', name: '视频', queryHint: '搜索视频，也可粘贴 BV/AV 编号或链接', emptyMessage: '暂时没有找到视频，请换个关键词试试', categories: videoCategories },
+    ],
     queryMode: 'search', queryHint: '搜索番名，也可粘贴番剧链接', emptyMessage: '暂时没有找到番剧，请换个关键词试试',
     network: { api: ['api.bilibili.com', 'passport.bilibili.com', 'passport.biligame.com'], media: ['*.bilivideo.com', '*.bilivideo.cn', '*.bilivideo.net', '*.hdslb.com'] } },
     createProvider: ctx => new BilibiliSource(ctx, { cookie: process.env.HONGGUO_BILIBILI_COOKIE || '' }) },
@@ -31,6 +36,21 @@ function validate(manifest) {
   if (manifest.authentication !== undefined && manifest.authentication !== 'qrcode') throw Error('MANIFEST')
   for (const key of ['nsfw', 'enabled'])
     if (manifest[key] !== undefined && typeof manifest[key] !== 'boolean') throw Error('MANIFEST')
+  if (manifest.contentTypes !== undefined) {
+    if (!Array.isArray(manifest.contentTypes) || !manifest.contentTypes.length || manifest.contentTypes.length > 8) throw Error('MANIFEST')
+    const ids = new Set()
+    for (const type of manifest.contentTypes) {
+      if (typeof type?.id !== 'string' || !/^[a-z][a-z0-9-]{0,23}$/.test(type.id) || ids.has(type.id) ||
+          typeof type.name !== 'string' || !type.name.trim() || type.name.length > 40) throw Error('MANIFEST')
+      ids.add(type.id)
+      for (const key of ['queryHint', 'emptyMessage'])
+        if (type[key] !== undefined && (typeof type[key] !== 'string' || type[key].length > 160)) throw Error('MANIFEST')
+      if (type.categories !== undefined) {
+        if (!Array.isArray(type.categories) || type.categories.length > 32 || new Set(type.categories.map(c => c.id)).size !== type.categories.length ||
+            type.categories.some(c => typeof c.id !== 'string' || !/^[a-z0-9-]{0,24}$/.test(c.id) || typeof c.name !== 'string' || !c.name.trim() || c.name.length > 40)) throw Error('MANIFEST')
+      }
+    }
+  }
   return manifest
 }
 function allows(hosts = []) {
@@ -92,6 +112,7 @@ export class ProviderRegistry {
       ...(manifest.queryMode ? { queryMode: manifest.queryMode } : {}),
       ...(manifest.emptyMessage ? { emptyMessage: manifest.emptyMessage } : {}),
       ...(manifest.authentication ? { authentication: manifest.authentication } : {}),
+      ...(manifest.contentTypes ? { contentTypes: structuredClone(manifest.contentTypes) } : {}),
       nsfw: manifest.nsfw ?? false,
       enabled: manifest.enabled !== false, available: false, code: 'DISABLED' }
     const definition = { manifest, factory, builtin, status }
@@ -151,6 +172,25 @@ export class ProviderRegistry {
     }
   }
   list() { return this.status.map(row => ({ ...row })) }
+  contentContext(source, preferences = {}, overrides = {}, resolveCategory = true) {
+    const types = this.definitions.get(source)?.manifest.contentTypes
+    if (!types) {
+      if (overrides.contentType || overrides.category) throw new PlayerError('该片源不支持此内容类型')
+      return {}
+    }
+    const saved = preferences.contentPreferences?.[source] || {}
+    const contentType = overrides.contentType ?? saved.contentType ?? types[0].id
+    const type = types.find(t => t.id === contentType)
+    if (!type) throw new PlayerError('内容类型无效')
+    const category = overrides.category ?? (saved.contentType === contentType ? saved.category : '') ?? ''
+    if (!type.categories) {
+      if (category) throw new PlayerError('内容分区无效')
+      return { contentType }
+    }
+    if (!type.categories.some(c => c.id === category)) throw new PlayerError('内容分区无效')
+    const preferred = resolveCategory && !category ? this.get(source).preferredCategory?.() : undefined
+    return { contentType, category: preferred && type.categories.some(c => c.id === preferred) ? preferred : category || (resolveCategory ? 'all' : '') }
+  }
   get(id = 'hongguo') {
     const adapter = this.adapters.get(sourceId(id))
     if (!adapter) throw new PlayerError('片源插件不可用，请切换其他片源', 503)

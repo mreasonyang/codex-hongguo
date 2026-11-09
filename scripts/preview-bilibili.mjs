@@ -22,7 +22,8 @@ const nsfwFixture = process.argv.includes('--nsfw-fixture') ? [{
   }),
 }] : []
 let fixtureConfirmed = false
-store.setPreferences({ defaultSource: 'bilibili', defaultMuted: true })
+store.setPreferences({ defaultSource: 'bilibili', defaultMuted: true,
+  ...(process.argv.includes('--video') ? { contentPreferences: { bilibili: { contentType: 'video', category: 'all' } } } : {}) })
 const sources = new ProviderRegistry(root, { builtins: [builtins[0],
   { manifest: builtins[1].manifest, createProvider: ctx => new BilibiliSource(authFixture ? { ...ctx, fetch: async (input, options) => {
     const url = new URL(input)

@@ -19,9 +19,13 @@ type Series = {
   cover?: string
   hasCover?: boolean
   lookupCover?: boolean
+  contentType?: string
+  author?: string
+  durationMs?: number
+  defaultEpisodeId?: string
 }
 type Episode = { id: string; label: string; number: number; codec: string; playable: boolean }
-type Page<T> = { items: T[]; cursor?: string }
+type Page<T> = { items: T[]; cursor?: string; series?: Series }
 type Progress = {
   seriesId: string
   episodeId: string
@@ -69,7 +73,8 @@ let activeQuery = '',
 let activeSource: SourceId = 'hongguo', sourceGeneration = 0, switchingSource = false
 let sourceUpdate = Promise.resolve()
 const sourceOf = (id: string): SourceId => id.startsWith('p.') ? id.split('.')[1] : 'hongguo'
-type Provider = { id: string; name: string; available: boolean; nsfw: boolean; code?: string; queryHint?: string; queryMode?: 'search' | 'link'; emptyMessage?: string; authentication?: 'qrcode' }
+type ContentType = { id: string; name: string; queryHint?: string; emptyMessage?: string; categories?: { id: string; name: string }[] }
+type Provider = { id: string; name: string; contentTypes?: ContentType[]; available: boolean; nsfw: boolean; code?: string; queryHint?: string; queryMode?: 'search' | 'link'; emptyMessage?: string; authentication?: 'qrcode' }
 let providers: Provider[] = [{ id: 'hongguo', name: '红果', available: true, nsfw: false }]
 let sourceChoice = 0
 const sourceConfirmation = createSourceConfirmation({ translate: tr })
@@ -109,7 +114,8 @@ function syncSourceButton() {
   control.dataset.busy = String(switchingSource)
   const name = providers.find(provider => provider.id === activeSource)?.name || activeSource
   el('sourceName').textContent = activeSource === 'hongguo' ? tr('红果短剧') : tr(name)
-  const query = el<HTMLInputElement>('query'), hint = providers.find(provider => provider.id === activeSource)?.queryHint || '搜索剧名'
+  syncContentControls()
+  const query = el<HTMLInputElement>('query'), hint = activeContentType()?.queryHint || providers.find(provider => provider.id === activeSource)?.queryHint || '搜索剧名'
   query.placeholder = tr(hint); query.setAttribute('aria-label', tr(hint))
   const submit = el<HTMLFormElement>('search').querySelector('button')
   if (submit) submit.textContent = tr(providers.find(provider => provider.id === activeSource)?.queryMode === 'link' ? '添加番剧' : '搜索')
@@ -126,6 +132,68 @@ function syncSourceButton() {
     control.removeAttribute('aria-controls')
     control.removeAttribute('aria-expanded')
   }
+}
+function contentChoice() {
+  const types = providers.find(p => p.id === activeSource)?.contentTypes
+  if (!types?.length) return {}
+  const saved = prefs.contentPreferences?.[activeSource]
+  return { contentType: saved?.contentType || types[0].id, category: saved?.category || '' }
+}
+function activeContentType() {
+  return providers.find(p => p.id === activeSource)?.contentTypes?.find(t => t.id === contentChoice().contentType)
+}
+function syncContentControls() {
+  const types = providers.find(p => p.id === activeSource)?.contentTypes || [], choice = contentChoice()
+  const tabs = el('contentTypes'), categories = el('contentCategories')
+  tabs.hidden = types.length < 2
+  tabs.replaceChildren(...types.map(type => {
+    const b = button(type.name, () => changeContent(type.id))
+    b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(type.id === choice.contentType))
+    b.disabled = switchingSource
+    return b
+  }))
+  const entries = activeContentType()?.categories || []
+  categories.hidden = !entries.length
+  categories.replaceChildren(...entries.map(category => {
+    const b = button(category.name, () => changeContent(choice.contentType!, category.id))
+    b.setAttribute('aria-pressed', String(category.id === choice.category)); b.disabled = switchingSource
+    return b
+  }))
+  text('homeTitle', activeSource === 'hongguo' ? '选剧' : choice.contentType === 'video' ? '发现视频' : '发现番剧')
+}
+async function changeContent(contentType: string, category = '') {
+  if (switchingSource || (contentChoice().contentType === contentType && contentChoice().category === category)) return
+  const source = activeSource, generation = ++sourceGeneration
+  ++listing; clearTimeout(searchTimer)
+  switchingSource = true; syncSourceButton()
+  try {
+    const updated = await call<Preferences>('set_content_preferences', { source, contentType, category })
+    if (source !== activeSource || generation !== sourceGeneration) return
+    prefs = updated; ++preferencesRevision
+    cards = []; watched = []; cursor = undefined; activeQuery = ''; batch = 0
+    queryInput.value = ''; syncSourceButton(); drawCards()
+    await Promise.all([list(false, ''), history()])
+    if (source === activeSource && generation === sourceGeneration && !series) drawCards()
+  } catch (error) { if (generation === sourceGeneration) notice(explain(error)) }
+  finally { switchingSource = false; syncSourceButton() }
+}
+function seriesMeta(s: Series) {
+  if (s.contentType !== 'video') return s.episodes ? tr(s.episodes + ' 集') : ''
+  return [s.author, s.durationMs ? clock(s.durationMs / 1000) : '', s.episodes && s.episodes > 1 ? s.episodes + ' P' : ''].filter(Boolean).join(' · ')
+}
+function syncEpisodeLabels() {
+  const ordinary = series?.contentType === 'video'
+  text('episodeHeading', ordinary ? '分 P' : '选集')
+  el('episodes').setAttribute('aria-label', tr(ordinary ? '分 P' : '选集'))
+  el('episodes').classList.toggle('videoParts', ordinary)
+  el('episodesPane').hidden = ordinary && episodes.length === 1 && !epCursor
+  for (const [id, label] of [['prev', ordinary ? '上一 P' : '上一集'], ['next', ordinary ? '下一 P' : '下一集']]) {
+    el(id).setAttribute('aria-label', tr(label)); el(id).title = tr(label)
+  }
+  el('random').title = tr(ordinary ? '随机一 P' : '随机一集')
+  const randomLabel = el('random').querySelector('.lbl')
+  if (randomLabel) randomLabel.textContent = tr(ordinary ? '随机一 P' : '随机一集')
+  text('moreEpisodes', ordinary ? '更多分 P' : '更多分集')
 }
 function showSourceMenu(focus = false) {
   if (el<HTMLButtonElement>('source').disabled) return
@@ -303,7 +371,7 @@ function save(reset = false) {
     seriesId: series.id,
     episodeId: episode.id,
     title: series.title,
-    label: episode.label,
+    label: series.contentType === 'video' ? 'P' + episode.number + ' · ' + episode.label : episode.label,
     positionMs: Math.round((playback === 'finished' ? duration : video.currentTime) * 1000),
     durationMs: Math.round(duration * 1000),
   }
@@ -353,9 +421,9 @@ function pick(ep: Episode) {
   episode = ep
   group = Math.floor(Math.max(0, episodes.indexOf(ep)) / 50)
   notice('')
-  const number = '第 ' + ep.number + ' 集'
+  const number = series?.contentType === 'video' ? (episodes.length > 1 || epCursor ? 'P' + ep.number : '') : '第 ' + ep.number + ' 集'
   const named = ep.label.replace(/\s/g, '') !== '第' + ep.number + '集'
-  text('subtitle', [number, named ? ep.label : '', ep.codec].filter(Boolean).join(' · '))
+  text('subtitle', [number, named ? ep.label : '', series?.author, ep.codec].filter(Boolean).join(' · '))
   text('time', '0:00')
   seek.value = '0'
   fill(seek)
@@ -363,6 +431,7 @@ function pick(ep: Episode) {
   if (!ep.playable) notice('该集当前不可播放，请检查片源许可或 FFmpeg 自检结果')
 }
 function drawEpisodes() {
+  syncEpisodeLabels()
   const pages = Math.ceil(episodes.length / 50)
   el('groups').replaceChildren(
     ...Array.from({ length: pages > 1 ? pages : 0 }, (_, i) => {
@@ -379,7 +448,7 @@ function drawEpisodes() {
   )
   el('episodes').replaceChildren(
     ...episodes.slice(group * 50, (group + 1) * 50).map((ep) => {
-      const b = button(String(ep.number), () => playEpisode(ep))
+      const b = button(series?.contentType === 'video' ? 'P' + ep.number + ' · ' + ep.label : String(ep.number), () => playEpisode(ep))
       b.disabled = !ep.playable
       b.title = ep.label
       b.dataset.id = ep.id
@@ -387,7 +456,7 @@ function drawEpisodes() {
     }),
   )
   el('moreEpisodes').hidden = !epCursor
-  el('episodeCount').textContent = episodes.length ? tr(episodes.length + (epCursor ? '+' : '') + ' 集') : ''
+  el('episodeCount').textContent = episodes.length ? (series?.contentType === 'video' ? episodes.length + (epCursor ? '+' : '') + ' P' : tr(episodes.length + (epCursor ? '+' : '') + ' 集')) : ''
   syncButtons()
 }
 async function select(s: Series, requested?: string, playNow = false, waitingTurn?: string) {
@@ -400,6 +469,7 @@ async function select(s: Series, requested?: string, playNow = false, waitingTur
     cards = []; watched = []; cursor = undefined; activeQuery = ''
     closeSourceMenu(); syncSourceButton()
   }
+  requested ??= s.defaultEpisodeId
   const exactEpisode = waitingTurn && requested
   el('home').hidden = true
   el('watch').hidden = false
@@ -419,7 +489,7 @@ async function select(s: Series, requested?: string, playNow = false, waitingTur
   renderPicks()
   video.poster = s.cover || ''
   text('title', s.title)
-  text('subtitle', '正在读取分集…')
+  text('subtitle', s.contentType === 'video' ? '正在读取视频…' : '正在读取分集…')
   drawEpisodes()
   syncCards()
   await saved
@@ -433,6 +503,16 @@ async function select(s: Series, requested?: string, playNow = false, waitingTur
     call<Page<Episode>>('get_episodes', { seriesId: s.id }),
     call<Page<Progress>>('get_history', { seriesId: s.id }),
   ])
+  if (ticket !== selection) return
+  if (first.series) {
+    series = s = { ...s, ...first.series }; text('title', s.title)
+    if (s.contentType && contentChoice().contentType && s.contentType !== contentChoice().contentType) {
+      const updated = await call<Preferences>('set_content_preferences', { source: activeSource, contentType: s.contentType, category: '' })
+      if (ticket !== selection) return
+      prefs = updated
+      ++preferencesRevision; syncSourceButton(); cards = []; cursor = undefined
+    }
+  }
   requested ??= recent.items[0]?.episodeId
   let page = first
   if (ticket !== selection) return
@@ -537,7 +617,7 @@ async function nextEpisode(auto = false) {
   const next = await followingEpisode(valid)
   if (!valid()) return
   if (next) await playEpisode(next)
-  else if (auto) void pause('本集已播完')
+  else if (auto) void pause(series?.contentType === 'video' ? '视频已播完' : '本集已播完')
 }
 el('prev').onclick = () => {
   const prev = episodes
@@ -592,12 +672,12 @@ function drawCards() {
   el('featured').replaceChildren()
   if (featured) {
     const b = button('', () => select(featured, undefined, true)),
-      art = coverArt(featured.title, featured.episodes ? tr(featured.episodes + ' 集') : ''),
+      art = coverArt(featured.title, seriesMeta(featured)),
       body = document.createElement('span'),
       eyebrow = document.createElement('small'),
       title = document.createElement('strong'),
       cta = document.createElement('span')
-    b.className = 'feature'
+    b.className = 'feature' + (featured.contentType === 'video' ? ' videoCard' : '')
     b.dataset.id = featured.id
     b.setAttribute('aria-label', tr('播放') + ' · ' + featured.title)
     body.className = 'featureText'
@@ -622,10 +702,10 @@ function drawCards() {
   el('cards').replaceChildren(
     ...pool.slice(batch * 12, (batch + 1) * 12).map((s) => {
       const b = button('', () => select(s, undefined, true))
-      b.className = 'card'
+      b.className = 'card' + (s.contentType === 'video' ? ' videoCard' : '')
       b.dataset.id = s.id
       b.title = s.title
-      const img = coverArt(s.title, s.episodes ? tr(s.episodes + ' 集') : ''),
+      const img = coverArt(s.title, seriesMeta(s)),
         title = document.createElement('span')
       title.className = 'cardTitle'
       title.textContent = s.title
@@ -725,6 +805,7 @@ function catalogState(kind: '' | 'loading' | 'empty' | 'error', message = '') {
 }
 async function list(more = false, query = activeQuery) {
   const t = ++listing
+  const content = contentChoice()
   if (!more) {
     activeQuery = query
     cards = []
@@ -739,7 +820,7 @@ async function list(more = false, query = activeQuery) {
   let liveResults = false
   if (!more && !query) {
     // Paint cached titles (or the first discovery page) while the full catalog loads.
-    void call<Page<Series>>('list_series', { source: activeSource, preview: true }, 90000).then(page => {
+    void call<Page<Series>>('list_series', { source: activeSource, preview: true, ...content }, 90000).then(page => {
       if (t !== listing || liveResults || !page.items.length) return
       cards = page.items
       drawCards()
@@ -754,7 +835,7 @@ async function list(more = false, query = activeQuery) {
     while (fetchFirst || (results.length < needed && cursor && !visited.has(cursor))) {
       fetchFirst = false
       if (cursor) visited.add(cursor)
-      const page = await call<Page<Series>>('list_series', { source: activeSource, query, cursor }, 90000)
+      const page = await call<Page<Series>>('list_series', { source: activeSource, query, cursor, ...content }, 90000)
       if (t !== listing) return
       const known = new Set(results.map((s) => s.id))
       for (const item of page.items)
@@ -775,12 +856,14 @@ async function list(more = false, query = activeQuery) {
     batch = desired % pages
     drawCards()
     if (cards.length) catalogState('')
-    else if (query) catalogState('empty', '没有找到相符的剧目')
+    else if (query) catalogState('empty', activeContentType()?.emptyMessage || '没有找到相符的剧目')
     else {
-      const message = providers.find(provider => provider.id === activeSource)?.emptyMessage
+      const message = activeContentType()?.emptyMessage || providers.find(provider => provider.id === activeSource)?.emptyMessage
       catalogState(message ? 'empty' : 'error', message || '片源暂时没有返回推荐剧目')
     }
     el('more').hidden = pages <= 1 && !cursor
+    if (!more && cards.length === 1 && /^(?:BV[0-9A-Za-z]{10}|av[1-9]\d*|(?:ss|ep)[1-9]\d*)$|^https:\/\//i.test(query))
+      await select(cards[0], cards[0].defaultEpisodeId, true)
   } catch (e) {
     if (t === listing) {
       catalogState('error', explain(e))
@@ -790,7 +873,7 @@ async function list(more = false, query = activeQuery) {
 }
 async function history() {
   const source = activeSource, generation = sourceGeneration
-  const page = await call<Page<Progress>>('get_history', { source })
+  const page = await call<Page<Progress>>('get_history', { source, contentType: contentChoice().contentType })
   if (source !== activeSource || generation !== sourceGeneration) return
   watched = page.items
   drawContinue()
@@ -896,12 +979,17 @@ async function readTurnState() {
     authRevision = state.authRevision
     if (state.preferences && revision === preferencesRevision) {
       const promptChanged = prefs.autoPrompt !== state.preferences.autoPrompt
+      const contentChanged = JSON.stringify(prefs.contentPreferences?.[activeSource]) !== JSON.stringify(state.preferences.contentPreferences?.[activeSource])
       syncDefaultMute(state.preferences)
       prefs = state.preferences
       configureDecoy()
       autoNext.checked = prefs.autoplayNext
       if (!autoNext.checked) cancelNextPreload()
       if (promptChanged) renderPicks()
+      if (contentChanged) {
+        syncSourceButton()
+        if (!series && !switchingSource) { cards = []; void Promise.all([list(false, ''), history()]).catch(() => {}) }
+      }
     }
     const reason = finishedTurn(current, state)
     const starting = startedTurn(current, state)
@@ -1086,7 +1174,7 @@ function finishEpisode() {
   void save()
   if (autoNext.checked && pageActive) {
     void nextEpisode(true).catch(e => notice(explain(e)))
-  } else void pause('本集已播完')
+  } else void pause(series?.contentType === 'video' ? '视频已播完' : '本集已播完')
   void saved.then(history).catch(() => {})
 }
 video.onended = finishEpisode
@@ -1255,6 +1343,7 @@ async function changeSource(next: SourceId) {
     activeSource = next; context.source = next
     syncSourceButton()
     await Promise.all([list(false, ''), history()])
+    if (generation === sourceGeneration && !series) drawCards()
   } catch {
     if (generation === sourceGeneration) {
       notice('视频源暂未切换，请重试')

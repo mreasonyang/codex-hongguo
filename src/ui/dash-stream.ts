@@ -8,9 +8,9 @@ const assetName = /^(?:video|audio)-(?:init\.mp4|\d{5}\.m4s)$/
 export function dashStream(video: HTMLVideoElement, episodeId: string, stream: string, raw: string,
   fail: (reason: string) => void, ended: () => void, startPosition = 0) {
   const manifest = JSON.parse(raw) as Manifest
-  if (manifest.version !== 1 || !(manifest.duration > 0 && manifest.duration <= 7200) ||
+  if (manifest.version !== 1 || !(manifest.duration > 0 && manifest.duration <= 86400) ||
       manifest.tracks?.length !== 2 || manifest.tracks.some(track => !assetName.test(track.initialization) ||
-        !MediaSource.isTypeSupported(track.mime) || !track.segments?.length || track.segments.length > 7200 ||
+        !MediaSource.isTypeSupported(track.mime) || !track.segments?.length || track.segments.length > 32768 ||
         track.segments.some(s => !assetName.test(s.asset) || !Number.isFinite(s.time) || s.time < 0 ||
           !(s.duration > 0) || s.time + s.duration > manifest.duration + 2)))
     throw Error('当前面板无法处理该番剧的音视频分段')
