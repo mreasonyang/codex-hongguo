@@ -9,7 +9,8 @@ import { allowedURL, responseBytes } from './network.mjs'
 import { BilibiliAuth } from './bilibili-auth.mjs'
 
 export const bilibiliMediaHosts = host => /(?:^|\.)(?:bilivideo\.com|bilivideo\.cn|bilivideo\.net|hdslb\.com)$/.test(host)
-const headers = { Referer: 'https://www.bilibili.com/', 'User-Agent': 'Mozilla/5.0' }
+const headers = { Referer: 'https://www.bilibili.com/',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36' }
 const number = value => /^[1-9]\d{0,19}$/.test(String(value))
 const invalidLink = () => new PlayerError('请粘贴 B 站番剧链接或 ss/ep 编号')
 export function bangumiLink(input) {
@@ -78,6 +79,9 @@ export class BilibiliSource {
           headers: { ...headers, ...(cookie && url.hostname === 'api.bilibili.com' ? { Cookie: cookie } : {}) } })
         if (!response.ok) throw apiError(response.status)
         const data = await response.json()
+        if (method === 'fetchBangumiSearch' && url.pathname.endsWith('/search/type') && data.data &&
+            Object.hasOwn(data.data, 'v_voucher'))
+          throw new PlayerError('B 站搜索暂时需要验证，请稍后重试', 503)
         const anonymousSigningKeys = method === 'fetchBangumiSearch' && url.pathname === '/x/web-interface/nav' &&
           data.code === -101 && data.data?.wbi_img
         if (data.code !== 0 && !anonymousSigningKeys) throw apiError(Number(data.code))
@@ -90,6 +94,19 @@ export class BilibiliSource {
       }
     }
     try {
+      if (method === 'fetchBangumiSearch' && !/(?:^|;\s*)buvid3=/.test(cookie)) {
+        if (!this.visitor) {
+          const response = await this.context.fetch('https://api.bilibili.com/x/frontend/finger/spi',
+            { signal: combined, headers, budget: 65536 })
+          const data = await response.json()
+          if (!response.ok || data.code !== 0 || !/^[a-zA-Z0-9_-]{8,128}$/.test(data.data?.b_3 || '')) throw apiError()
+          if (combined?.aborted) throw new PlayerError('请求已取消', 499)
+          this.visitor = data.data.b_3
+        }
+        // Normal web search requires a visitor identifier, including when no
+        // account is signed in. Keep it in memory and on the API host only.
+        cookie = [cookie, 'buvid3=' + this.visitor].filter(Boolean).join('; ')
+      }
       const sdk = await (this.sdk ??= this.loadSdk())
       // Logged-in calls use amagi's native account/entitlement/signing flow.
       // Its SDK boundary routes internal requests through the same adapter too.
@@ -155,9 +172,17 @@ export class BilibiliSource {
       items: [...new Map([...saved, ...value.items].map(row => [row.id, row])).values()] } : value
     const cached = this.pages.get(key)
     if (cached?.until > Date.now()) return mergeSaved(cached.value)
-    const data = await this.request(query ? 'fetchBangumiSearch' : 'fetchBangumiIndex',
-      query ? { keyword: query, page } : { page, pageSize: size }, signal)
-    const rows = query ? data?.result : data?.list
+    let data
+    try {
+      data = await this.request(query ? 'fetchBangumiSearch' : 'fetchBangumiIndex',
+        query ? { keyword: query, page } : { page, pageSize: size }, signal)
+    } catch (error) {
+      if (signal?.aborted || this.context.signal?.aborted || !saved.length) throw error
+      // Searching the local library still works during an upstream outage or
+      // verification challenge. Never treat a challenge as an empty online feed.
+      return mergeSaved({ items: [], cursor: null })
+    }
+    const rows = query ? data?.result ?? (Number(data?.numResults) === 0 ? [] : undefined) : data?.list
     if (!Array.isArray(rows)) throw apiError()
     const items = rows.filter(row => number(row.season_id) && typeof row.title === 'string').slice(0, 40).map(row => ({
       id: String(row.season_id), title: plain(row.title).slice(0, 320),

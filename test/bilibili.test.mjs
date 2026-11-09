@@ -36,6 +36,7 @@ async function fixture(t, { payload = media, cookie = '', root } = {}) {
     async fetch(input, options) {
       const url = new URL(input); requests.push({ url, options })
       assert.equal(url.hostname, 'api.bilibili.com')
+      if (url.pathname.endsWith('/finger/spi')) return Response.json({ code: 0, data: { b_3: 'synthetic-visitor' } })
       if (url.pathname.endsWith('/index/result')) return Response.json({ code: 0, data: { list: [], has_next: 0 } })
       if (url.pathname.endsWith('/nav')) return Response.json({ code: 0, data: { isLogin: true, vipStatus: 0,
         wbi_img: { img_url: 'https://i0.hdslb.com/bfs/wbi/' + 'a'.repeat(32) + '.png',
@@ -105,12 +106,14 @@ test('browse and signed name search work without importing a link, with source/q
   const { provider, context, requests } = await fixture(t)
   context.fetch = async (input, options) => {
     const url = new URL(input); requests.push({ url, options })
+    if (url.pathname.endsWith('/finger/spi')) return Response.json({ code: 0, data: { b_3: 'synthetic-visitor' } })
     if (url.pathname.endsWith('/nav')) return Response.json({ code: -101, data: { isLogin: false,
       wbi_img: { img_url: 'https://i0.hdslb.com/bfs/wbi/' + 'a'.repeat(32) + '.png',
         sub_url: 'https://i0.hdslb.com/bfs/wbi/' + 'b'.repeat(32) + '.png' } } })
     const row = { season_id: '123', title: '<em class="keyword">番剧</em>&amp;动画', cover: 'https://i0.hdslb.com/cover.jpg' }
     if (url.pathname.endsWith('/index/result')) return Response.json({ code: 0, data: { list: [row], has_next: 1 } })
     assert.equal(url.pathname, '/x/web-interface/wbi/search/type')
+    assert.match(options.headers['User-Agent'], /AppleWebKit.*Chrome\/142/)
     assert.equal(url.searchParams.get('keyword'), '番剧')
     assert.equal(url.searchParams.get('search_type'), 'media_bangumi')
     assert.equal(url.searchParams.get('fnval'), null)
@@ -126,7 +129,9 @@ test('browse and signed name search work without importing a link, with source/q
   assert.equal(requests.at(-1).url.searchParams.get('page'), '2')
   await assert.rejects(provider.listSeries({ query: '其他番剧', cursor: first.cursor }), /不匹配/)
   await assert.rejects(provider.listSeries({ cursor: first.cursor }), /不匹配/)
-  assert.equal(requests.some(r => r.options.headers.Cookie), false)
+  assert.equal(requests.find(r => r.url.pathname.endsWith('/search/type')).options.headers.Cookie, 'buvid3=synthetic-visitor')
+  assert.equal(requests.find(r => r.url.pathname.endsWith('/finger/spi')).options.headers.Cookie, undefined)
+  assert.equal(requests.some(r => String(r.options.headers.Cookie).includes('SESSDATA')), false)
 })
 test('Bilibili discovery populates homepage and chat recommendations without Hongguo seed searches', async t => {
   const { provider, root, context } = await fixture(t)
@@ -146,6 +151,42 @@ test('Bilibili discovery populates homepage and chat recommendations without Hon
   assert.ok(home.items.every(row => row.id.startsWith('p.bilibili.')))
   assert.deepEqual((await catalog.waitingRecommendations('bilibili')).map(row => row.id), home.items.map(row => row.id))
   assert.deepEqual(store.waitingFeed(true, 'hongguo'), [])
+})
+test('a successful search with no result array is empty, and still finds matching imported titles', async t => {
+  const { provider, context } = await fixture(t), fetch = context.fetch
+  context.fetch = async (input, options) => new URL(input).pathname.endsWith('/wbi/search/type')
+    ? Response.json({ code: 0, data: { numResults: 0, numPages: 0 } }) : fetch(input, options)
+  assert.deepEqual(await provider.listSeries({ query: '不存在的番剧' }), { items: [], cursor: null })
+  await provider.listSeries({ query: 'ss2251' })
+  const local = await provider.listSeries({ query: season.title })
+  assert.equal(local.items[0].id, '2251')
+  assert.equal(local.items[0].title, season.title)
+})
+test('a verification ticket is never a search result and local matches remain usable without revealing the ticket', async t => {
+  const { provider, context } = await fixture(t), fetch = context.fetch
+  context.fetch = async (input, options) => new URL(input).pathname.endsWith('/wbi/search/type')
+    ? Response.json({ code: 0, data: { v_voucher: 'synthetic-verification-ticket' } }) : fetch(input, options)
+  await assert.rejects(provider.listSeries({ query: '未知番剧' }), error => /验证/.test(error.message) && !/ticket/.test(error.message))
+  await provider.listSeries({ query: 'ss2251' })
+  const local = await provider.listSeries({ query: season.title })
+  assert.equal(local.items[0].id, '2251')
+  assert.doesNotMatch(JSON.stringify(local), /voucher|ticket/)
+})
+test('search adds a guest identifier without replacing an existing account cookie or exposing either in results', async t => {
+  const { provider, context, requests } = await fixture(t, { cookie: 'SESSDATA=synthetic-login' }), fetch = context.fetch
+  context.fetch = async (input, options) => {
+    if (new URL(input).pathname.endsWith('/search/type')) {
+      requests.push({ url: new URL(input), options })
+      return Response.json({ code: 0, data: { numResults: 0, numPages: 0 } })
+    }
+    return fetch(input, options)
+  }
+  const first = await provider.listSeries({ query: '新番' })
+  await provider.listSeries({ query: '动画' })
+  assert.equal(requests.filter(r => r.url.pathname.endsWith('/finger/spi')).length, 1)
+  assert.equal(requests.find(r => r.url.pathname.endsWith('/search/type')).options.headers.Cookie,
+    'SESSDATA=synthetic-login; buvid3=synthetic-visitor')
+  assert.doesNotMatch(JSON.stringify(first), /SESSDATA|buvid3|synthetic/)
 })
 test('a newly imported title is visible across processes even while homepage and waiting feeds are cached', async t => {
   const a = await fixture(t), b = await fixture(t, { root: a.root })
