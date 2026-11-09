@@ -99,8 +99,25 @@ async function refreshProviders() {
   if (!providers.some(provider => provider.id === activeSource) && fallback) await changeSource(fallback.id)
 }
 function renderProviderAccount(_settings: Preferences, disabled: boolean) {
+  syncSettingsSource(disabled)
   account.sync(providers.filter(provider => provider.authentication &&
     (!provider.nsfw || provider.id === activeSource)).map(({ id, name }) => ({ id, name })), disabled)
+}
+function syncSettingsSource(disabled = false) {
+  const select = el<HTMLSelectElement>('settingsSource')
+  const signature = JSON.stringify(providers.map(({ id, name, nsfw }) => [id, name, nsfw]))
+  // Polling Settings must not recreate an open native select menu.
+  if (select.dataset.providers !== signature) {
+    select.replaceChildren(...providers.map(provider => {
+      const option = document.createElement('option')
+      option.value = provider.id
+      option.textContent = tr(provider.id === 'hongguo' ? '红果短剧' : provider.name) + (provider.nsfw ? ' · NSFW' : '')
+      return option
+    }))
+    select.dataset.providers = signature
+  }
+  select.value = activeSource
+  select.disabled = disabled || settings.closing || switchingSource || sourceConfirmation.pending || providers.length < 2
 }
 function closeSourceMenu(focus = false) {
   clearTimeout(sourceMenuTimer)
@@ -109,6 +126,7 @@ function closeSourceMenu(focus = false) {
   if (focus) el('source').focus()
 }
 function syncSourceButton() {
+  syncSettingsSource()
   const control = el<HTMLButtonElement>('source')
   control.dataset.source = activeSource
   control.dataset.busy = String(switchingSource)
@@ -262,6 +280,7 @@ const settings = createSettings({
   read: () => prefs,
   save: patch => call<Preferences>('set_preferences', patch, 4000),
   syncExtra: renderProviderAccount,
+  modalOpen: () => sourceConfirmation.pending,
   back: () => account.back(),
   closed: () => account.hide(),
   edited: () => { ++preferencesRevision },
@@ -1351,6 +1370,18 @@ async function changeSource(next: SourceId) {
     }
   }
   finally { switchingSource = false; syncSourceButton() }
+}
+el<HTMLSelectElement>('settingsSource').onchange = async () => {
+  const next = el<HTMLSelectElement>('settingsSource').value
+  // Keep the current source selected until confirmation and the service commit.
+  syncSettingsSource()
+  if (switchingSource || sourceConfirmation.pending || !providers.some(provider => provider.id === next)) return
+  try {
+    const switching = changeSource(next)
+    syncSettingsSource()
+    await switching
+  } catch (error) { notice(explain(error)) }
+  finally { syncSettingsSource() }
 }
 el('source').onclick = e => {
   showSourceMenu(e?.detail === 0)

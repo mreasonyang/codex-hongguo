@@ -16,6 +16,7 @@ const en: Record<string, string> = {
   '请用片源对应的 App 扫码并确认登录': 'Scan with this source’s app and confirm sign-in.',
   '登录暂时不可用，请重试': 'Sign-in is temporarily unavailable. Try again.',
   视频源: 'Video source', 红果: 'Hongguo',
+  '也可以从左上角快捷切换': 'You can also switch from the top-left icon.',
   哔哩哔哩: 'Bilibili', 添加番剧: 'Add series',
   '搜索番名，也可粘贴番剧链接': 'Search series or paste a series link',
   '暂时没有找到番剧，请换个关键词试试': 'No series found. Try another keyword.',

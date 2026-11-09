@@ -178,6 +178,47 @@ test('leaving the source popover closes it, while crossing into it cancels dismi
   assert.equal(menu.hidden, true)
   assert.equal(f.ui.sourceState().source, 'hongguo')
 })
+test('Settings source select switches immediately, remembers the choice and tracks the top-left entry', async t => {
+  const f = setup(t)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  f.ui.settings.open()
+  const select = f.elements.get('settingsSource')
+  assert.equal(select.value, 'hongguo')
+  assert.deepEqual(select.children.map(o => o.textContent), ['红果短剧', '示例片源'])
+  const option = select.children[0]
+  f.ui.settings.sync(); f.ui.settings.sync()
+  assert.equal(select.children[0], option, 'polling must not recreate the native menu')
+  select.value = 'demo'; await select.onchange()
+  assert.equal(f.store.preferences().defaultSource, 'demo')
+  assert.equal(select.value, 'demo')
+  assert.equal(f.elements.get('sourceName').textContent, '示例片源')
+  assert.equal(f.elements.get('settings').hidden, false)
+  await f.ui.changeSource('hongguo')
+  assert.equal(select.value, 'hongguo')
+  assert.equal(select.disabled, false)
+})
+test('Settings source selection preserves the current value when the service rejects a switch', async t => {
+  const f = setup(t), call = f.service.call.bind(f.service)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  f.service.call = (scope, name, args) => name === 'set_source' ? Promise.reject(Error('Synthetic failure')) : call(scope, name, args)
+  f.ui.settings.open()
+  const select = f.elements.get('settingsSource')
+  select.value = 'demo'; await select.onchange()
+  assert.equal(select.value, 'hongguo')
+  assert.equal(f.store.preferences().defaultSource, 'hongguo')
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(select.disabled, false)
+})
+test('Settings disables source selection when only one source is available and ignores reselecting the current source', async t => {
+  const f = setup(t); f.video.paused = false
+  f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'unavailable', name: 'Unavailable', available: false }])
+  const select = f.elements.get('settingsSource')
+  assert.equal(select.children.length, 1); assert.equal(select.disabled, true)
+  select.value = 'hongguo'; await select.onchange()
+  assert.equal(f.video.paused, false)
+  assert.equal(f.ui.episodeId(), 'hg-11')
+})
 test('keyboard opening focuses the current provider and Escape returns to the source button', t => {
   const f = setup(t), control = f.elements.get('source'), menu = f.elements.get('sourceMenu')
   control.onkeydown({ key: 'ArrowDown', preventDefault() {} })
@@ -262,6 +303,29 @@ async function nsfwPlayer(t) {
   f.elements.get('sourceConfirmation').append(f.elements.get('sourceCancel'), f.elements.get('sourceConfirm'))
   return f
 }
+test('Settings NSFW selection keeps playback and Settings open until explicit confirmation', async t => {
+  const f = await nsfwPlayer(t); f.video.paused = false; f.ui.settings.open()
+  const select = f.elements.get('settingsSource')
+  select.focus()
+  assert.match(select.children[1].textContent, /NSFW/)
+  select.value = 'demo'; const first = select.onchange(); await flush()
+  assert.equal(select.value, 'hongguo'); assert.equal(select.disabled, true)
+  assert.equal(f.video.paused, false)
+  assert.equal(f.elements.get('settings').hidden, false)
+  f.elements.get('sourceCancel').onclick(); await first
+  assert.equal(select.value, 'hongguo'); assert.equal(select.disabled, false)
+  assert.equal(f.video.paused, false)
+  const escape = new Event('keydown', { cancelable: true }); Object.assign(escape, { key: 'Escape' })
+  select.value = 'demo'; const second = select.onchange(); await flush()
+  f.document.dispatchEvent(escape); await second
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(select.value, 'hongguo')
+  assert.equal(f.video.paused, false)
+  select.value = 'demo'; const third = select.onchange(); await flush()
+  f.elements.get('sourceConfirm').onclick(); await third
+  assert.equal(select.value, 'demo'); assert.equal(f.store.preferences().defaultSource, 'demo')
+  assert.equal(f.elements.get('settings').hidden, false)
+})
 test('cancelling NSFW selection leaves the source, playback, progress and default untouched', async t => {
   const f = await nsfwPlayer(t); f.video.paused = false
   const request = f.ui.changeSource('demo'); await flush()

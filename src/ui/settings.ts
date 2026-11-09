@@ -10,6 +10,7 @@ type Options = {
   edited: () => void
   translate: (value: string) => string
   syncExtra?: (settings: Preferences, disabled: boolean) => void
+  modalOpen?: () => boolean
   back?: () => boolean
   closed?: () => void
 }
@@ -137,7 +138,7 @@ export function createSettings(options: Options, doc: Document = document) {
   }, true)
   doc.addEventListener('click', event => {
     if (revealClick) { revealClick = false; return }
-    if (form.hidden || content.inert || event.defaultPrevented) return
+    if (form.hidden || content.inert || event.defaultPrevented || options.modalOpen?.()) return
     const path = event.composedPath()
     if (path.includes(form) || path.includes(trigger)) return
     // Dismiss first, without also activating a player control beneath the click.
@@ -146,7 +147,7 @@ export function createSettings(options: Options, doc: Document = document) {
     void finish()
   }, true)
   doc.addEventListener('keydown', event => {
-    if (form.hidden || content.inert || event.defaultPrevented || event.key !== 'Escape' ||
+    if (form.hidden || content.inert || event.defaultPrevented || options.modalOpen?.() || event.key !== 'Escape' ||
       event.isComposing || event.keyCode === 229) return
     event.preventDefault()
     event.stopPropagation()
@@ -157,6 +158,7 @@ export function createSettings(options: Options, doc: Document = document) {
   }, true)
   return {
     get busy() { return busy > 0 },
+    get closing() { return !!finishing },
     sync,
     update: enqueue,
     values: () => ({ ...options.read(), ...pending }),

@@ -149,6 +149,14 @@
       <form id="settings" class="sheet" hidden>
         <div id="settingsMain" class="settingsMain">
         <p class="settingsHint">以下设置对所有聊天生效，修改后自动保存</p>
+        <section class="settingsGroup" aria-labelledby="sourceSettingsTitle">
+          <h2 id="sourceSettingsTitle" class="settingsGroupTitle">视频源</h2>
+          <div class="select settingsSourceSelect">
+            <select id="settingsSource" aria-labelledby="sourceSettingsTitle"></select>
+            <svg class="i" aria-hidden="true"><use href="#i-down" /></svg>
+          </div>
+          <p class="settingsHint">也可以从左上角快捷切换</p>
+        </section>
         <section class="settingsGroup" aria-labelledby="playbackSettingsTitle">
         <h2 id="playbackSettingsTitle" class="settingsGroupTitle">播放设置</h2>
         <label class="switchRow">
