@@ -54,17 +54,27 @@ export class BilibiliSource {
     this.context = context; this.loadSdk = loadSdk
     this.seasons = new Map(); this.pending = new Map()
     this.pages = new Map()
-    mkdirSync(context.dataDir, { recursive: true, mode: 0o700 })
-    this.db = new DatabaseSync(join(context.dataDir, 'library.sqlite'))
-    this.db.exec('PRAGMA busy_timeout=3000; CREATE TABLE IF NOT EXISTS library(id TEXT PRIMARY KEY, added INTEGER NOT NULL)')
-    this.db.exec('BEGIN IMMEDIATE')
-    try {
-      if (!this.db.prepare('PRAGMA table_info(library)').all().some(column => column.name === 'body'))
-        this.db.exec('ALTER TABLE library ADD COLUMN body TEXT')
-      this.db.exec('COMMIT')
-    } catch (error) { this.db.exec('ROLLBACK'); this.db.close(); throw error }
     this.fetchMedia = context.mediaFetcher(headers)
     this.auth = new BilibiliAuth(context, (...args) => this.request(...args), { cookie, onChange: () => this.seasons.clear() })
+  }
+  // Registering an available Provider must not open an unused library or keep
+  // the Hongguo-only profile locked on Windows. The SDK is lazy for the same reason.
+  get db() {
+    if (this.closed) throw new PlayerError('片源已关闭，请重新打开播放器', 503)
+    if (this.database) return this.database
+    mkdirSync(this.context.dataDir, { recursive: true, mode: 0o700 })
+    const db = new DatabaseSync(join(this.context.dataDir, 'library.sqlite'))
+    try {
+      db.exec('PRAGMA busy_timeout=3000; CREATE TABLE IF NOT EXISTS library(id TEXT PRIMARY KEY, added INTEGER NOT NULL); BEGIN IMMEDIATE')
+      if (!db.prepare('PRAGMA table_info(library)').all().some(column => column.name === 'body'))
+        db.exec('ALTER TABLE library ADD COLUMN body TEXT')
+      db.exec('COMMIT')
+    } catch (error) {
+      try { db.exec('ROLLBACK') } catch { /* No transaction if opening failed. */ }
+      db.close(); throw error
+    }
+    this.database = db
+    return db
   }
   async request(method, options, signal, { cookie = this.auth.cookie() } = {}) {
     const signals = [this.context.signal, signal, AbortSignal.timeout(12000)].filter(Boolean)
@@ -261,5 +271,9 @@ export class BilibiliSource {
     if (data.durl?.length === 1) return { candidates: [{ kind: 'file', codec: 'h264', url: locator(data.durl[0]).url }], fetchMedia: this.fetchMedia }
     throw new PlayerError('该集暂未提供大小合适的 AVC/AAC 完整片源')
   }
-  dispose() { this.seasons.clear(); this.pages.clear(); this.auth.dispose(); this.db.close() }
+  dispose() {
+    this.closed = true
+    this.seasons.clear(); this.pages.clear(); this.auth.dispose()
+    this.database?.close(); this.database = undefined
+  }
 }

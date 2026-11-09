@@ -50,15 +50,18 @@ async function fixture(t, { payload = media, cookie = '', root } = {}) {
   return { root, controller, context, requests, provider }
 }
 
-test('Bilibili starts by default with NSFW false and keeps its SDK lazy', async t => {
+test('Bilibili is available by default with NSFW false while its SDK and library stay lazy', async t => {
   const root = await mkdtemp(join(tmpdir(), 'bilibili-default-'))
   defer(t, () => rm(root, { recursive: true, force: true }))
   const registry = new ProviderRegistry(root); await registry.ready; defer(t, () => registry.dispose())
   assert.deepEqual(registry.list().filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili'])
   assert.equal(registry.list().find(p => p.id === 'bilibili').nsfw, false)
-  await access(join(root, 'device/providers/bilibili'))
+  await assert.rejects(access(join(root, 'device/providers/bilibili')))
   assert.equal(registry.get('bilibili').sdk, undefined)
   assert.equal(registry.get('hongguo').id, 'hongguo')
+  await registry.dispose()
+  await assert.rejects(access(join(root, 'device/providers/bilibili')))
+  assert.throws(() => registry.get('bilibili').db, /片源已关闭/)
 })
 
 test('only canonical season/episode links and ss/ep IDs are accepted', () => {
