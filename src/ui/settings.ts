@@ -10,6 +10,7 @@ type Options = {
   edited: () => void
   translate: (value: string) => string
   syncExtra?: (settings: Preferences, disabled: boolean) => void
+  back?: () => boolean
   closed?: () => void
 }
 
@@ -98,6 +99,7 @@ export function createSettings(options: Options, doc: Document = document) {
   }
   function finish(): Promise<boolean> {
     if (finishing) return finishing
+    options.back?.()
     if (!saveTerms()) { terms.focus(); return Promise.resolve(false) }
     const epoch = generation
     if (!busy && keys(pending).length) void enqueue({ ...pending })
@@ -150,6 +152,7 @@ export function createSettings(options: Options, doc: Document = document) {
     event.stopPropagation()
     if (help.close()) return
     if (style.expanded) { style.close(); return }
+    if (options.back?.()) return
     void finish()
   }, true)
   return {

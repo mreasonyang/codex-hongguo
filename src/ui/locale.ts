@@ -1,5 +1,13 @@
 // The catalog supplies show names and episode titles. Translate player chrome only.
 const en: Record<string, string> = {
+  片源账号: 'Source accounts', 返回设置: 'Back to settings', 登录二维码: 'Sign-in QR code',
+  登录片源账号: 'Sign in to source', 未登录: 'Signed out', 大会员: 'Premium member',
+  播放设置: 'Playback', 替身页面: 'Decoy page', 推荐设置: 'Recommendations',
+  登录已失效: 'Session expired', 暂不可用: 'Unavailable',
+  '以下设置对所有聊天生效，修改后自动保存': 'Applies to all chats. Changes save automatically.',
+  '登录态仅保存在本机，访问权限以片源账号为准': 'Your session stays on this device. Access depends on your source account.',
+  '请用片源对应的 App 扫码并确认登录': 'Scan with this source’s app and confirm sign-in.',
+  '登录暂时不可用，请重试': 'Sign-in is temporarily unavailable. Try again.',
   视频源: 'Video source', 红果: 'Hongguo',
   哔哩哔哩: 'Bilibili', 添加番剧: 'Add series',
   '搜索番名，也可粘贴番剧链接': 'Search series or paste a series link',

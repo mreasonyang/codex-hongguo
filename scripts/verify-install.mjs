@@ -18,7 +18,7 @@ const root = join(tmp, '本地 市场'),
 const npmMarket = join(tmp, 'npm 市场')
 const version = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version
 const channel = releaseChannel(version)
-const playerUri = 'ui://hongguo/v33/player', waitingUri = 'ui://hongguo/v33/waiting'
+const playerUri = 'ui://hongguo/v34/player', waitingUri = 'ui://hongguo/v34/waiting'
 const commands = Object.fromEntries(['npm', 'codex', 'openssl'].map(name => [name, findExecutable(name)]))
 const env = {
   HOME: tmp,

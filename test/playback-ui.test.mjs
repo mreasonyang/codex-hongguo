@@ -1170,10 +1170,28 @@ async function accountPlayer(t) {
   t.after(() => sources.dispose())
   f.service.catalog = new Catalog(f.store, { sources })
   await f.elements.get('prefs').onclick()
-  f.elements.get('accountLogin').onclick(); await flush()
+  f.elements.get('accountRows').children[0].onclick(); await flush()
   assert.equal(f.elements.get('accountQrArea').hidden, false)
   return { ...f, authCalls }
 }
+test('a login-required playback failure offers a direct route to the source account page', async t => {
+  const f = await accountPlayer(t)
+  await f.ui.settings.finish()
+  await f.ui.changeSource('demo')
+  f.ui.selected(); f.ui.unload()
+  const call = f.service.call.bind(f.service)
+  f.service.call = (scope, name, args) => name === 'prepare_playback'
+    ? Promise.resolve({ status: 'error', reason: 'B 站需要登录后观看' }) : call(scope, name, args)
+  await f.ui.start(); await flush()
+  assert.equal(f.elements.get('accountNeeded').hidden, false)
+  await f.elements.get('accountNeeded').onclick(); await flush()
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.elements.get('settingsMain').hidden, true)
+  assert.equal(f.elements.get('accountPage').hidden, false)
+  assert.equal(f.elements.get('accountQrArea').hidden, false)
+  assert.equal(f.ui.sourceState().source, 'demo')
+  assert.equal(f.video.paused, true)
+})
 for (const dismiss of ['close', 'Escape', 'outside', 'trigger', 'player-close']) {
   test(`Provider QR is cancelled by ${dismiss} through main Settings lifecycle`, async t => {
     const f = await accountPlayer(t)
@@ -1189,10 +1207,15 @@ for (const dismiss of ['close', 'Escape', 'outside', 'trigger', 'player-close'])
     }
     await flush()
     assert.equal(f.authCalls.length, 1)
-    assert.equal(f.elements.get('providerAccount').hidden, true)
+    assert.equal(f.elements.get('providerAccount').hidden, dismiss !== 'Escape')
     assert.equal(f.elements.get('accountQrArea').hidden, true)
     assert.equal(f.elements.get('accountQr').getAttribute('src'), null)
-    assert.equal(f.elements.get('settings').hidden, true)
+    assert.equal(f.elements.get('settings').hidden, dismiss !== 'Escape')
+    if (dismiss === 'Escape') {
+      assert.equal(f.elements.get('accountPage').hidden, true)
+      assert.equal(f.elements.get('settingsMain').hidden, false)
+      await f.ui.settings.finish()
+    }
   })
 }
 test('a stale poll cannot undo a pending setting edit while QR login is open and Close waits', async t => {

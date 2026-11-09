@@ -42,7 +42,11 @@ const play = el<HTMLButtonElement>('play'),
 const text = (id: string, s: string) => {
   el(id).textContent = id === 'title' ? s : tr(s)
 }
-const notice = (s: string) => text('notice', s)
+const notice = (s: string) => {
+  text('notice', s)
+  el('accountNeeded').hidden = !providers.find(provider => provider.id === activeSource)?.authentication ||
+    !/B 站需要登录后观看|B 站仅提供试看/.test(s)
+}
 const explain = (e: unknown) => (e instanceof Error ? e.message : '操作失败，请重试')
 const clock = (s: number) => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0')
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -71,8 +75,8 @@ let sourceChoice = 0
 const sourceConfirmation = createSourceConfirmation({ translate: tr })
 let sourceMenuTimer: ReturnType<typeof setTimeout> | undefined
 let authRevision: string | undefined
-const account = new ProviderAccount(async () => {
-  if (providers.find(provider => provider.id === activeSource)?.authentication) {
+const account = new ProviderAccount(async source => {
+  if (source === activeSource) {
     authRevision = undefined
     await home()
   }
@@ -89,13 +93,9 @@ async function refreshProviders() {
   const fallback = providers.find(provider => !provider.nsfw)
   if (!providers.some(provider => provider.id === activeSource) && fallback) await changeSource(fallback.id)
 }
-function renderProviderAccount() {
-  // Account UI remains available without Provider enable switches. Polling must
-  // not recreate the account controller or cancel an in-progress QR login.
-  const source = providers.find(provider => provider.authentication &&
-    (!provider.nsfw || provider.id === activeSource))?.id
-  if (!source) account.hide()
-  else if (account.source !== source) void account.show(source)
+function renderProviderAccount(_settings: Preferences, disabled: boolean) {
+  account.sync(providers.filter(provider => provider.authentication &&
+    (!provider.nsfw || provider.id === activeSource)).map(({ id, name }) => ({ id, name })), disabled)
 }
 function closeSourceMenu(focus = false) {
   clearTimeout(sourceMenuTimer)
@@ -194,6 +194,7 @@ const settings = createSettings({
   read: () => prefs,
   save: patch => call<Preferences>('set_preferences', patch, 4000),
   syncExtra: renderProviderAccount,
+  back: () => account.back(),
   closed: () => account.hide(),
   edited: () => { ++preferencesRevision },
   applied: updated => {
@@ -1339,6 +1340,16 @@ el('prefs').onclick = async () => {
     await refreshProviders()
     if (!playerReady) return
     settings.open()
+  } catch (error) { notice(explain(error)) }
+}
+el('accountNeeded').onclick = async () => {
+  try {
+    const source = activeSource
+    await openingPreferences()
+    await refreshProviders()
+    if (!playerReady || source !== activeSource) return
+    settings.open()
+    await account.open(source)
   } catch (error) { notice(explain(error)) }
 }
 el('choose').onclick = async () => {

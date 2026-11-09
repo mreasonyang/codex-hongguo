@@ -147,21 +147,10 @@
       </div>
 
       <form id="settings" class="sheet" hidden>
-        <p class="settingsHint">以下设置对所有聊天生效</p>
-        <section id="providerAccount" class="providerAccount" aria-label="B 站账号" hidden>
-          <div class="accountHeader">
-            <span class="accountMark" aria-hidden="true">B</span>
-            <div class="accountInfo"><strong id="accountName">B 站账号</strong><p id="accountStatus" role="status" aria-live="polite">未登录，可观看允许匿名访问的番剧</p></div>
-          </div>
-          <div id="accountQrArea" class="accountQrArea" hidden><img id="accountQr" alt="哔哩哔哩登录二维码" width="184" height="184" /></div>
-          <div class="accountActions">
-            <button type="button" id="accountLogin" class="btn">扫码登录</button>
-            <button type="button" id="accountCancel" class="btn ghost" hidden>取消登录</button>
-            <button type="button" id="accountLogout" class="btn ghost" hidden>退出登录</button>
-          </div>
-          <p class="settingsHint">登录态仅保存在本机；会员与购买权益以 B 站账号为准</p>
-        </section>
-        <p class="settingsHint">修改后自动保存</p>
+        <div id="settingsMain" class="settingsMain">
+        <p class="settingsHint">以下设置对所有聊天生效，修改后自动保存</p>
+        <section class="settingsGroup" aria-labelledby="playbackSettingsTitle">
+        <h2 id="playbackSettingsTitle" class="settingsGroupTitle">播放设置</h2>
         <label class="switchRow">
           <span>任务结束自动暂停</span>
           <input type="checkbox" id="autoPauseOnFinish" class="switch" />
@@ -182,6 +171,9 @@
           <input type="checkbox" id="defaultMuted" class="switch" aria-describedby="defaultMutedTip" />
           <span id="defaultMutedTip" class="settingTip" role="tooltip" hidden>修改后同步当前播放器；新打开时也沿用此设置</span>
         </div>
+        </section>
+        <section class="settingsGroup" aria-labelledby="decoySettingsTitle">
+        <h2 id="decoySettingsTitle" class="settingsGroupTitle">替身页面</h2>
         <div class="switchRow">
           <span class="settingLabel">
             <label for="hoverDecoyEnabled">启用替身页面</label>
@@ -214,6 +206,9 @@
             </div>
           </div>
         </div>
+        </section>
+        <section class="settingsGroup" aria-labelledby="recommendationSettingsTitle">
+        <h2 id="recommendationSettingsTitle" class="settingsGroupTitle">推荐设置</h2>
         <label class="switchRow">
           <span>当前回合进行时显示推荐</span>
           <input type="checkbox" id="autoPrompt" class="switch" />
@@ -226,10 +221,33 @@
           <input id="terms" maxlength="185" placeholder="用逗号分隔" aria-describedby="termsTip" />
           <span id="termsTip" class="settingTip" role="tooltip" hidden>按 Enter 或离开输入框时保存</span>
         </div>
+        </section>
+        <section id="providerAccount" class="settingsGroup" aria-labelledby="accountSettingsTitle" hidden>
+          <h2 id="accountSettingsTitle" class="settingsGroupTitle">片源账号</h2>
+          <div id="accountRows" class="accountRows"></div>
+        </section>
         <p id="settingsStatus" class="settingsHint" role="status" aria-live="polite"></p>
         <div class="sheetActions">
           <button type="button" id="settingsClose" class="btn primary">关闭</button>
         </div>
+        </div>
+        <section id="accountPage" class="accountPage" aria-labelledby="accountTitle" hidden>
+          <header class="accountPageHeader">
+            <button type="button" id="accountBack" class="link"><svg class="i" aria-hidden="true"><use href="#i-back" /></svg><span>返回设置</span></button>
+            <h2 id="accountTitle"></h2>
+          </header>
+          <div class="accountPageBody">
+            <strong id="accountName" hidden></strong>
+            <p id="accountStatus" role="status" aria-live="polite"></p>
+            <div id="accountQrArea" class="accountQrArea" hidden><img id="accountQr" alt="登录二维码" width="184" height="184" /></div>
+            <div class="accountActions">
+              <button type="button" id="accountLogin" class="btn">扫码登录</button>
+              <button type="button" id="accountCancel" class="btn ghost" hidden>取消登录</button>
+              <button type="button" id="accountLogout" class="btn ghost" hidden>退出登录</button>
+            </div>
+            <p class="settingsHint">登录态仅保存在本机，访问权限以片源账号为准</p>
+          </div>
+        </section>
       </form>
 
       <section class="linkage" aria-label="回合联动">
@@ -241,6 +259,7 @@
           <button id="choose" class="link" type="button" hidden>确认会话</button>
         </div>
         <div id="notice" role="status" aria-live="polite"></div>
+        <button id="accountNeeded" class="link" type="button" hidden>登录片源账号</button>
         <div id="choices"></div>
         <div id="prompt" hidden>
           <div class="promptHead">
