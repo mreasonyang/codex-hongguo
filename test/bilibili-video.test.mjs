@@ -10,6 +10,7 @@ import { Catalog } from '../src/server/catalog.mjs'
 import { Store } from '../src/server/store.mjs'
 import { Service } from '../src/server/service.mjs'
 import { qualify } from '../src/server/sources/ids.mjs'
+import { defer } from './cleanup.mjs'
 
 const bvid = 'BV17x411w7KC', native = 'video:' + bvid, sid = qualify('bilibili', native)
 const info = { bvid, aid: 170001, title: '摄影教程', desc: '基础教程', tid: 124, pic: 'https://i0.hdslb.com/test.jpg',
@@ -24,6 +25,7 @@ const stream = { timelength: 9000000, dash: {
 async function fixture(t, { root, cookie = '', vip = 0, videoInfo = info, playback = stream } = {}) {
   const own = !root
   root ||= await mkdtemp(join(tmpdir(), 'bilibili-videos-'))
+  if (own) defer(t, () => rm(root, { recursive: true, force: true }))
   const requests = [], controller = new AbortController()
   const context = { dataDir: join(root, 'provider'), signal: controller.signal,
     async fetch(input, options = {}) {
@@ -48,7 +50,7 @@ async function fixture(t, { root, cookie = '', vip = 0, videoInfo = info, playba
   await sources.ready
   const catalog = new Catalog(store, { sources }), service = new Service(store, catalog)
   const panel = service.panel(service.open({ threadId: 'video-chat' }).panel)
-  t.after(async () => { await sources.dispose(); store.close(); if (own) await rm(root, { recursive: true, force: true }) })
+  defer(t, async () => { await sources.dispose(); store.close() })
   return { root, provider, store, catalog, service, panel, requests, context }
 }
 
