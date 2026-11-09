@@ -117,7 +117,9 @@ function syncSettingsSource(disabled = false) {
     select.dataset.providers = signature
   }
   select.value = activeSource
-  select.disabled = disabled || settings.closing || switchingSource || sourceConfirmation.pending || providers.length < 2
+  // The modal traps interaction; keep this control focusable so Cancel/Escape
+  // can restore focus before the confirmation promise settles.
+  select.disabled = disabled || settings.closing || switchingSource || providers.length < 2
 }
 function closeSourceMenu(focus = false) {
   clearTimeout(sourceMenuTimer)

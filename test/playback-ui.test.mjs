@@ -309,11 +309,12 @@ test('Settings NSFW selection keeps playback and Settings open until explicit co
   select.focus()
   assert.match(select.children[1].textContent, /NSFW/)
   select.value = 'demo'; const first = select.onchange(); await flush()
-  assert.equal(select.value, 'hongguo'); assert.equal(select.disabled, true)
+  assert.equal(select.value, 'hongguo'); assert.equal(select.disabled, false)
   assert.equal(f.video.paused, false)
   assert.equal(f.elements.get('settings').hidden, false)
   f.elements.get('sourceCancel').onclick(); await first
   assert.equal(select.value, 'hongguo'); assert.equal(select.disabled, false)
+  assert.equal(f.document.activeElement, select)
   assert.equal(f.video.paused, false)
   const escape = new Event('keydown', { cancelable: true }); Object.assign(escape, { key: 'Escape' })
   select.value = 'demo'; const second = select.onchange(); await flush()
