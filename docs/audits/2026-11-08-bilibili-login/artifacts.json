@@ -1,0 +1,8 @@
+{
+  "npmSHA256": "7b4f969285d12272ac8ff5b6b8241bc13c859c3aba0db92dcb53c0aeab7957b3",
+  "offlineSHA256": "12052237283ffff729f74c01b1a1e270bfde42ac339d52482ace5e6a066863f6",
+  "sourceFilesMatched": 114,
+  "projectLicense": "AGPL-3.0-only",
+  "sdkLicense": "GPL-3.0-only",
+  "qrRendererLicense": "MIT"
+}

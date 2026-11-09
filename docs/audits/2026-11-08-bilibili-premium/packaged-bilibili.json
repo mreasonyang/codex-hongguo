@@ -1,0 +1,20 @@
+{
+  "sdk": "@ikenxuan/amagi@6.6.0",
+  "authentication": "anonymous",
+  "artifact": "packaged",
+  "installedUserPluginChanged": false,
+  "regularEpisodes": 13,
+  "preparationSeconds": 17,
+  "mediaBytes": 90293597,
+  "durationMs": 1436992,
+  "decodedPositionsSeconds": [
+    0,
+    600,
+    1431
+  ],
+  "mcpFragmentBytes": 319085,
+  "restartResume": "PASS",
+  "previewRejected": "PASS",
+  "disableRevokesCache": "PASS",
+  "result": "PASS"
+}

@@ -1,0 +1,15 @@
+{
+  "checkedAt": "2026-11-08T03:06:38.849Z",
+  "tests": 196,
+  "passed": 190,
+  "failed": 0,
+  "windowsOnlySkipped": 6,
+  "defaultOnlyHongguo": true,
+  "enabledHuangguoExplicitly": true,
+  "decodedProviders": 2,
+  "compiledServerSha256": "ca8da78f39271a9cd0ef27414099c84da3ca2470a4e24653339135aa6fd9a950",
+  "liveReceiptMatchesCurrentBuild": true,
+  "browserFixtureVerified": true,
+  "desktopPlaybackObserved": false,
+  "installedPluginUpdated": false
+}

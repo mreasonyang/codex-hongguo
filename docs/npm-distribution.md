@@ -36,8 +36,10 @@ MCP 使用同名的 `bin/run-node` / Windows `bin/run-node.exe` 入口，Hooks �
 - `assets/` 中的原创插件图标，兼容清单通过 `composerIcon` 和 `logo` 引用；便携源码清单使用相同资源。
 - `bin/`、预构建的 `dist/cli/`、`dist/server/`、`dist/hooks/`、`dist/setup/` 和 `dist/ui/`。
 - `dist/vendor/openhongguo/`，包括 WASM。
-- 截取后的中英文 README、项目 MIT 许可证 `LICENSE` 和 `licenses/` 第三方许可声明。
+- 截取后的中英文 README、项目 AGPLv3 许可证 `LICENSE`、项目声明 `NOTICE`、amagi 的 GPLv3 许可证 `COPYING` 和 `licenses/` 第三方许可声明。
+- `licenses/codex-hongguo-source.zip` 对应项目源码、构建脚本及 Windows 启动器源码，以及 `dist/licenses/amagi-6.6.0-source.tar.gz` 固定修订的 amagi 原始源码。
 
+包不声明安装依赖或生命周期脚本，也不包含本机绝对路径、观看媒体、设备档案和凭据；对应源码 ZIP 包含仓库测试与固定媒体夹具。便携清单保留在源码，安装包采用已验证的兼容清单。项目采用 [AGPLv3 许可证](../LICENSE)，npm 元数据使用 `AGPL-3.0-only`；第三方依赖仍按各自许可分发，amagi 保留 GPL-3.0-only。历史 MIT 授权说明见 [NOTICE](../NOTICE)。
 README 的界面截图以无损 WebP 留在源码仓库中，npm 包和离线 ZIP 均不携带截图。
 打包后的中英文 README 使用与发行版本标签绑定的 GitHub 图片地址，保留截图展示。
 安装验收检查安装目录中没有截图，且两份 README 的图片链接均指向该版本。
@@ -57,7 +59,6 @@ ARM64 校验源归档、架构和可执行文件字节一致性；这些回执�
 并重新校验实际文件；内存中的校验缓存也绑定该可执行文件身份。
 因此仅改变压缩归档不会触发同一程序的重复下载，损坏、身份不符或被替换的程序仍需重新安装。
 
-包不声明安装依赖或生命周期脚本，也不包含本机绝对路径、观看媒体、设备档案、测试数据和凭据。便携清单保留在源码，安装包采用已验证的兼容清单。项目采用 [MIT 许可证](../LICENSE)，npm 元数据使用 `MIT`；第三方依赖仍按各自许可分发。
 
 ## 产物与验收
 

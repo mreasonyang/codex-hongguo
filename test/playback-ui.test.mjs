@@ -8,19 +8,26 @@ import { webcrypto } from 'node:crypto'
 import { transformSync } from 'esbuild'
 import { Store } from '../src/server/store.mjs'
 import { Service } from '../src/server/service.mjs'
+import { Catalog } from '../src/server/catalog.mjs'
+import { ProviderRegistry } from '../src/server/providers/registry.mjs'
 import { createCoverPage } from '../src/ui/cover-page.ts'
 import { createSettings } from '../src/ui/settings.ts'
+import { createSourceConfirmation } from '../src/ui/source-confirmation.ts'
 
 class Element extends EventTarget {
   hidden = true; checked = false; value = '1'; dataset = {}; children = []; textContent = ''
   classList = { toggle() {}, add() {}, remove() {}, contains() { return false } }
   style = { setProperty() {} }
-  setAttribute() {}
+  attributes = new Map()
+  setAttribute(name, value) { this.attributes.set(name, value) }
+  getAttribute(name) { return this.attributes.get(name) ?? null }
   replaceChildren(...children) { this.children = children }
   append(...children) { this.children.push(...children) }
   querySelectorAll() { return [] }
+  querySelector(selector) { return selector === 'button[aria-checked="true"]' ? this.children.find(child => child.getAttribute('aria-checked') === 'true') : null }
+  contains(target) { return target === this || this.children.some(child => child.contains?.(target)) }
   focus() {}
-  removeAttribute() {}
+  removeAttribute(name) { this.attributes.delete(name) }
 }
 class Video extends Element {
   paused = true; ended = false; duration = 60; currentTime = 12; plays = 0
@@ -36,8 +43,10 @@ class Video extends Element {
 // start and pause paths run unchanged against a real Service and SQLite store.
 const source = readFileSync(new URL('../src/ui/player.ts', import.meta.url), 'utf8') + `
 export const fixture = {
-  poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer,
-  decoy, coverPage,
+  poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer, changeSource, list, history, refreshProviders,
+  sourceState() { return { source: activeSource, cards: cards.map(row => row.id), watched: watched.map(row => row.seriesId) } },
+  setProviders(items) { providers = items.filter(item => item.available); syncSourceButton() },
+  decoy, coverPage, settings, sourceConfirmation,
   unload() { loaded = false },
   selected() {
     coverPage.initialize('zh-CN');
@@ -45,12 +54,14 @@ export const fixture = {
     series = { id: 'hg-1', title: 'Test' };
     episode = { id: 'hg-11', label: '1', number: 1, codec: 'h264', playable: true };
     episodes = [episode];
+    syncSourceButton();
   },
   clearSelection() { series = null; episode = null },
   setEpisodes(items, cursor) { episodes = items; episode = items[0]; epCursor = cursor },
   episodeId() { return episode?.id },
 };`
 const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code
+const accountCode = transformSync(readFileSync(new URL('../src/ui/provider-account.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code
 const decoyCode = transformSync(readFileSync(new URL('../src/ui/hover-decoy.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code
 const flush = async () => { for (let i = 0; i < 50; i++) await Promise.resolve() }
 
@@ -66,19 +77,31 @@ function setup(t) {
     hidden: false, documentElement: new Element(), hasFocus: () => true,
     getElementById(id) { if (!elements.has(id)) elements.set(id, this.createElement()); return elements.get(id) },
     querySelector: () => video, querySelectorAll: () => [],
-    createElement: () => Object.assign(new Element(), { ownerDocument: document }),
+    createElement: () => {
+      const e = Object.assign(new Element(), { ownerDocument: document })
+      e.focus = () => { document.activeElement = e }; return e
+    },
   })
   const window = Object.assign(new EventTarget(), { innerWidth: 900, innerHeight: 700, setInterval: () => 1, clearInterval() {}, scrollTo() {} })
   const api = {
     browser: false, connect: async () => {}, hostLocale: () => 'zh',
-    call: (name, args = {}) => service.call(panel, name, args),
+    call: (name, args = {}) => name === 'get_providers' && !service.catalog.sources
+      ? Promise.resolve({ items: ['hongguo', 'demo'].map(id => ({ id, name: id === 'hongguo' ? '红果' : '示例片源', available: true, nsfw: false })) })
+      : service.call(panel, name, args),
   }
   const exports = {}, context = vm.createContext({
     module: { exports }, exports, document, window, navigator: {}, crypto: webcrypto,
     AbortController, DOMException, setTimeout, clearTimeout,
     require(name) {
+      if (name === './provider-account') {
+        const exports = {}, scope = vm.createContext({ module: { exports }, exports, document, Blob, URL, setTimeout, clearTimeout,
+          require: name => name === './api' ? api : { tr: value => value } })
+        vm.runInContext(accountCode, scope)
+        return scope.module.exports
+      }
       if (name === './api') return api
       if (name === './cover-page') return { createCoverPage }
+      if (name === './source-confirmation') return { createSourceConfirmation: options => createSourceConfirmation(options, document) }
       if (name === './settings') return { createSettings: options => createSettings(options, document) }
       if (name === './hover-decoy') {
         const exports = {}, decoyContext = vm.createContext({ module: { exports }, exports, document, window, setTimeout, clearTimeout })
@@ -89,14 +112,15 @@ function setup(t) {
       if (name === './playback-turn') return turnHelpers
       if (name === './media-startup') return mediaHelpers
       if (name === './panel-stream') return { panelStream(video) { queueMicrotask(()=>video.dispatchEvent(new Event('loadedmetadata'))); return ()=>{} } }
-      if (name === './ui-kit') return { setIcon() {}, fill() {}, icon: () => new Element() }
+      if (name === './ui-kit') return { setIcon() {}, fill() {}, icon: () => new Element(), coverArt: () => new Element(), setCover() {} }
       return {}
     },
   })
   vm.runInContext(code, context)
   const ui = context.module.exports.fixture
-  t.after(() => ui.decoy.dispose())
+  t.after(() => { ui.decoy.dispose(); ui.closePlayer() })
   ui.selected()
+  ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'demo', name: '示例片源', available: true }])
   let at = Date.now()
   return {
     store, peer, service, panel, video, document, window, ui, elements,
@@ -109,6 +133,230 @@ function setup(t) {
 }
 const turnHelpers = await import('../src/ui/playback-turn.ts')
 const mediaHelpers = await import('../src/ui/media-startup.ts')
+
+test('hovering or clicking the source mark opens a menu; only choosing a provider switches sources', async t => {
+  const f = setup(t)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  const control = f.elements.get('source')
+  const menu = f.elements.get('sourceMenu'), query = f.elements.get('query')
+  f.document.activeElement = query
+  assert.equal(control.getAttribute('aria-label'), '切换视频源')
+  control.onpointerenter({ pointerType: 'touch' })
+  assert.equal(menu.hidden, true)
+  control.onpointerenter({ pointerType: 'mouse' })
+  assert.equal(menu.hidden, false)
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+  assert.equal(f.document.activeElement, query)
+  control.onclick(); await flush()
+  assert.equal(menu.hidden, false)
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+  menu.children[1].onclick(); await flush()
+  assert.equal(f.ui.sourceState().source, 'demo')
+  assert.equal(control.dataset.source, 'demo')
+  assert.equal(control.getAttribute('aria-label'), '切换视频源')
+  assert.equal(f.elements.get('sourceName').textContent, '示例片源')
+  assert.equal(f.elements.get('sourceMenu').hidden, true)
+  assert.equal(control.disabled, false)
+  control.onclick(); await flush()
+  assert.equal(f.ui.sourceState().source, 'demo')
+  menu.children[0].onclick(); await flush()
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+})
+test('leaving the source popover closes it, while crossing into it cancels dismissal', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const f = setup(t), control = f.elements.get('sourceControl'), menu = f.elements.get('sourceMenu')
+  f.elements.get('source').onclick({ detail: 1 })
+  control.onpointerleave({ pointerType: 'touch' }); t.mock.timers.tick(160)
+  assert.equal(menu.hidden, false)
+  menu.onkeydown({ key: 'Escape', preventDefault() {} })
+  f.elements.get('source').onpointerenter({ pointerType: 'mouse' })
+  control.onpointerleave(); t.mock.timers.tick(80)
+  assert.equal(menu.hidden, false)
+  control.onpointerenter(); t.mock.timers.tick(160)
+  assert.equal(menu.hidden, false)
+  control.onpointerleave(); t.mock.timers.tick(160)
+  assert.equal(menu.hidden, true)
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+})
+test('keyboard opening focuses the current provider and Escape returns to the source button', t => {
+  const f = setup(t), control = f.elements.get('source'), menu = f.elements.get('sourceMenu')
+  control.onkeydown({ key: 'ArrowDown', preventDefault() {} })
+  assert.equal(menu.hidden, false)
+  assert.equal(f.document.activeElement, menu.children[0])
+  menu.onkeydown({ key: 'Escape', preventDefault() {} })
+  assert.equal(menu.hidden, true)
+  assert.equal(f.document.activeElement, control)
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+})
+test('additional providers use a checked menu and select through the existing source service', async t => {
+  const f = setup(t)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'demo', name: '示例片源', available: true },
+    { id: 'local', name: 'Local provider', available: true }])
+  const control = f.elements.get('source'), menu = f.elements.get('sourceMenu')
+  control.onclick()
+  assert.equal(menu.hidden, false)
+  assert.equal(control.getAttribute('aria-expanded'), 'true')
+  assert.equal(menu.children.length, 3)
+  assert.equal(menu.children[0].getAttribute('aria-checked'), 'true')
+  menu.children[2].onclick(); await flush()
+  assert.equal(f.ui.sourceState().source, 'local')
+  assert.equal(menu.hidden, true)
+  assert.equal(f.store.preferences().defaultSource, 'local')
+  assert.equal(f.elements.get('sourceName').textContent, 'Local provider')
+})
+test('link-based providers import only on submit while Hongguo keeps debounced search', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const f = setup(t), requests = []
+  f.service.catalog = { list: async input => { requests.push(input); return { items: [] } } }
+  f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true },
+    { id: 'bilibili', name: '哔哩哔哩', available: true, queryMode: 'link', queryHint: '粘贴番剧链接或 ss/ep 编号' }])
+  await f.ui.changeSource('bilibili'); requests.length = 0
+  const input = f.elements.get('query')
+  assert.equal(input.placeholder, '粘贴番剧链接或 ss/ep 编号')
+  input.value = 'ep50188'; input.dispatchEvent(new Event('input'))
+  t.mock.timers.tick(500); await flush()
+  assert.equal(requests.length, 0, 'typing a partial link must not import unrelated series')
+  f.elements.get('search').onsubmit({ preventDefault() {} }); await flush()
+  assert.equal(requests[0].query, 'ep50188')
+  await f.ui.changeSource('hongguo'); requests.length = 0
+  assert.equal(input.placeholder, '搜索剧名')
+  input.value = '重生'; input.dispatchEvent(new Event('input'))
+  t.mock.timers.tick(500); await flush()
+  assert.equal(requests[0].query, '重生')
+})
+test('a single available provider disables switching instead of opening an empty menu', t => {
+  const f = setup(t)
+  f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'demo', name: '示例片源', available: false }])
+  const control = f.elements.get('source')
+  assert.equal(control.disabled, true)
+  control.onpointerenter({ pointerType: 'mouse' })
+  control.onclick()
+  assert.equal(f.elements.get('sourceMenu').hidden, true)
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+})
+test('installed providers are available without any enable settings', async t => {
+  const f = setup(t)
+  const sources = new ProviderRegistry(f.store.root, { builtins: ['hongguo', 'demo'].map(id => ({
+    manifest: { apiVersion: 1, id, name: id, version: '1.0.0', nsfw: false },
+    createProvider: () => ({ id, async listSeries() { return { items: [], cursor: null } },
+      async getSeries() {}, async listEpisodes() { return { items: [], cursor: null } }, async getCover() {}, async resolvePlayback() {} }),
+  })) })
+  t.after(() => sources.dispose()); f.service.catalog = new Catalog(f.store, { sources })
+  await f.elements.get('prefs').onclick()
+  assert.equal(f.elements.has('providerSettings'), false)
+  assert.equal('enabledProviders' in f.store.preferences(), false)
+  assert.equal(sources.get('demo').id, 'demo')
+  assert.equal(f.elements.get('source').disabled, false)
+  await f.ui.settings.finish()
+  await f.ui.changeSource('demo')
+  assert.equal(f.ui.sourceState().source, 'demo')
+  assert.equal(f.elements.get('sourceConfirmation').hidden, true)
+})
+async function nsfwPlayer(t) {
+  const f = setup(t); await f.poll()
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true, nsfw: false },
+    { id: 'demo', name: 'Sensitive fixture', available: true, nsfw: true },
+    { id: 'local', name: 'Safe fixture', available: true, nsfw: false }])
+  f.elements.get('sourceConfirmation').append(f.elements.get('sourceCancel'), f.elements.get('sourceConfirm'))
+  return f
+}
+test('cancelling NSFW selection leaves the source, playback, progress and default untouched', async t => {
+  const f = await nsfwPlayer(t); f.video.paused = false
+  const request = f.ui.changeSource('demo'); await flush()
+  assert.equal(f.elements.get('sourceConfirmation').hidden, false)
+  assert.equal(f.document.activeElement, f.elements.get('sourceCancel'))
+  assert.equal(f.ui.sourceState().source, 'hongguo'); assert.equal(f.ui.episodeId(), 'hg-11')
+  assert.equal(f.video.paused, false); assert.equal(f.store.preferences().defaultSource, 'hongguo')
+  f.elements.get('sourceCancel').onclick(); await request
+  assert.equal(f.elements.get('sourceConfirmation').hidden, true)
+  assert.equal(f.ui.sourceState().source, 'hongguo'); assert.equal(f.ui.episodeId(), 'hg-11')
+  assert.equal(f.video.paused, false); assert.equal(f.store.history().length, 0)
+})
+test('only explicit NSFW confirmation commits the switch and a later entry asks again', async t => {
+  const f = await nsfwPlayer(t), requests = [], call = f.service.call.bind(f.service)
+  f.service.call = (scope,name,args) => { if (name === 'set_source') requests.push(args); return call(scope,name,args) }
+  const switching = f.ui.changeSource('demo'); await flush()
+  assert.equal(requests.length, 0)
+  f.elements.get('sourceConfirm').onclick(); await switching
+  assert.equal(f.ui.sourceState().source, 'demo'); assert.equal(f.store.preferences().defaultSource, 'demo')
+  assert.equal(requests[0].confirmNsfw, true)
+  await f.ui.changeSource('hongguo')
+  assert.equal(f.elements.get('sourceConfirmation').hidden, true)
+  assert.equal(requests[1].confirmNsfw, undefined)
+  const again = f.ui.changeSource('demo'); await flush()
+  assert.equal(f.elements.get('sourceConfirmation').hidden, false)
+  f.elements.get('sourceCancel').onclick(); await again
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+})
+test('NSFW dialog traps keyboard focus and Escape cancels without switching', async t => {
+  const f = await nsfwPlayer(t), request = f.ui.changeSource('demo'); await flush()
+  const key = value => { const event = new Event('keydown',{cancelable:true}); Object.assign(event,{key:value}); f.document.dispatchEvent(event) }
+  key('Tab'); assert.equal(f.document.activeElement, f.elements.get('sourceConfirm'))
+  key('Tab'); assert.equal(f.document.activeElement, f.elements.get('sourceCancel'))
+  key('Escape'); await request
+  assert.equal(f.elements.get('sourceConfirmation').hidden, true)
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+})
+test('a safe source choice supersedes a pending NSFW decision and closing cancels it', async t => {
+  const f = await nsfwPlayer(t), old = f.ui.changeSource('demo'); await flush()
+  await f.ui.changeSource('local'); await old
+  f.elements.get('sourceConfirm').onclick(); await flush()
+  assert.equal(f.ui.sourceState().source, 'local')
+  const next = f.ui.changeSource('demo'); await flush()
+  await f.ui.closePlayer(); await next
+  f.elements.get('sourceConfirm').onclick(); await flush()
+  assert.equal(f.ui.sourceState().source, 'local')
+})
+test('covering a pending NSFW decision cancels it and returning cannot switch sources', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const f = await nsfwPlayer(t); await f.settings({ hoverDecoyEnabled: true }); await f.poll()
+  await enterPanel(t, f)
+  const request = f.ui.changeSource('demo'); await flush()
+  f.ui.decoy.conceal(); await request
+  f.elements.get('sourceConfirm').onclick(); await flush()
+  assert.equal(f.elements.get('sourceConfirmation').hidden, true)
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+})
+
+test('switching providers saves progress, stops playback and discards the old catalog response', async t => {
+  const f = setup(t), old = Promise.withResolvers()
+  f.service.catalog = { list: async options => options.source === 'demo'
+    ? { items: [{ id: 'p.demo.s.MQ', title: 'Demo' }] } : old.promise }
+  const initial = f.ui.list()
+  await flush()
+  await f.ui.changeSource('demo')
+  assert.equal(f.ui.sourceState().source, 'demo')
+  assert.deepEqual([...f.ui.sourceState().cards], ['p.demo.s.MQ'])
+  assert.equal(f.ui.episodeId(), undefined)
+  assert.equal(f.video.paused, true)
+  assert.equal(f.store.history('hg-1', 'hg-11')[0].positionMs, 12000)
+  old.resolve({ items: [{ id: 'hg-1', title: 'Late red' }] })
+  await initial; await flush()
+  assert.deepEqual([...f.ui.sourceState().cards], ['p.demo.s.MQ'])
+  assert.equal(f.panel.source, 'demo')
+})
+test('global default changes do not switch an existing player and stale history cannot cross sources', async t => {
+  const f = setup(t), delayed = Promise.withResolvers(), call = f.service.call.bind(f.service)
+  let deferRed = true
+  f.service.call = async (scope, name, args = {}) => {
+    if (name === 'get_history' && args.source === 'hongguo' && deferRed) return delayed.promise
+    return call(scope, name, args)
+  }
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  const history = f.ui.history(); await flush()
+  await f.ui.changeSource('demo')
+  deferRed = false
+  delayed.resolve({ items: [{ seriesId: 'hg-1', episodeId: 'hg-11', title: 'late', label: '1', positionMs: 1, durationMs: 10 }] })
+  await history
+  assert.equal(f.ui.sourceState().watched.length, 0)
+  const other = f.service.panel(f.service.open({ threadId: 'C' }).panel)
+  await f.service.call(other, 'set_source', { source: 'hongguo' })
+  await f.poll()
+  assert.equal(f.ui.sourceState().source, 'demo')
+  assert.equal(f.store.preferences().defaultSource, 'hongguo')
+})
 
 test('global playback switches default for older settings, synchronize across chats and survive restart', async t => {
   const f = setup(t)
@@ -901,4 +1149,138 @@ test('preloading and next playback share a pending episode page without switchin
   assert.equal(f.calls.length, 0)
   assert.equal(f.ui.episodeId(), 'hg-11')
   assert.equal(f.video.paused, true)
+})
+
+async function accountPlayer(t) {
+  const f = setup(t), authCalls = []
+  const auth = {
+    revision: () => 'fixture-revision',
+    status: async () => ({ status: 'signed-out' }),
+    start: async () => ({ status: 'waiting', loginId: 'fixture-login', svg: '<svg/>', expiresAt: Date.now() + 180000 }),
+    poll: async () => ({ status: 'waiting' }),
+    cancel: async () => { authCalls.push('cancel'); return { status: 'cancelled' } },
+    logout: async () => ({ status: 'signed-out' }),
+  }
+  const sources = new ProviderRegistry(f.store.root, { builtins: ['hongguo', 'demo'].map(id => ({
+    manifest: { apiVersion: 1, id, name: id, version: '1.0.0', ...(id === 'demo' ? { authentication: 'qrcode' } : {}) },
+    createProvider: () => ({ id, ...(id === 'demo' ? { auth } : {}),
+      async listSeries() { return { items: [], cursor: null } }, async getSeries() {},
+      async listEpisodes() { return { items: [], cursor: null } }, async getCover() {}, async resolvePlayback() {} }),
+  })) })
+  t.after(() => sources.dispose())
+  f.service.catalog = new Catalog(f.store, { sources })
+  await f.elements.get('prefs').onclick()
+  f.elements.get('accountRows').children[0].onclick(); await flush()
+  assert.equal(f.elements.get('accountQrArea').hidden, false)
+  return { ...f, authCalls }
+}
+test('a login-required playback failure offers a direct route to the source account page', async t => {
+  const f = await accountPlayer(t)
+  await f.ui.settings.finish()
+  await f.ui.changeSource('demo')
+  f.ui.selected(); f.ui.unload()
+  const call = f.service.call.bind(f.service)
+  f.service.call = (scope, name, args) => name === 'prepare_playback'
+    ? Promise.resolve({ status: 'error', reason: 'B 站需要登录后观看' }) : call(scope, name, args)
+  await f.ui.start(); await flush()
+  assert.equal(f.elements.get('accountNeeded').hidden, false)
+  await f.elements.get('accountNeeded').onclick(); await flush()
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.elements.get('settingsMain').hidden, true)
+  assert.equal(f.elements.get('accountPage').hidden, false)
+  assert.equal(f.elements.get('accountQrArea').hidden, false)
+  assert.equal(f.ui.sourceState().source, 'demo')
+  assert.equal(f.video.paused, true)
+})
+for (const dismiss of ['close', 'Escape', 'outside', 'trigger', 'player-close']) {
+  test(`Provider QR is cancelled by ${dismiss} through main Settings lifecycle`, async t => {
+    const f = await accountPlayer(t)
+    for (let i = 0; i < 3; i++) await f.poll()
+    assert.equal(f.elements.get('accountQrArea').hidden, false, 'polling does not restart a QR login')
+    if (dismiss === 'close') f.elements.get('settingsClose').onclick()
+    if (dismiss === 'trigger') await f.elements.get('prefs').onclick()
+    if (dismiss === 'player-close') await f.ui.closePlayer()
+    if (dismiss === 'Escape' || dismiss === 'outside') {
+      const event = new Event(dismiss === 'Escape' ? 'keydown' : 'click', { cancelable: true })
+      Object.assign(event, { key: 'Escape', composedPath: () => [] })
+      f.document.dispatchEvent(event)
+    }
+    await flush()
+    assert.equal(f.authCalls.length, 1)
+    assert.equal(f.elements.get('providerAccount').hidden, dismiss !== 'Escape')
+    assert.equal(f.elements.get('accountQrArea').hidden, true)
+    assert.equal(f.elements.get('accountQr').getAttribute('src'), null)
+    assert.equal(f.elements.get('settings').hidden, dismiss !== 'Escape')
+    if (dismiss === 'Escape') {
+      assert.equal(f.elements.get('accountPage').hidden, true)
+      assert.equal(f.elements.get('settingsMain').hidden, false)
+      await f.ui.settings.finish()
+    }
+  })
+}
+test('a stale poll cannot undo a pending setting edit while QR login is open and Close waits', async t => {
+  const f = await accountPlayer(t), original = f.service.call.bind(f.service)
+  let resolvePoll, resolveSave
+  f.service.call = async (scope, name, args) => {
+    if (name === 'get_run_state') {
+      const result = await original(scope, name, args)
+      await new Promise(resolve => { resolvePoll = resolve }); return result
+    }
+    if (name === 'set_preferences') await new Promise(resolve => { resolveSave = resolve })
+    return original(scope, name, args)
+  }
+  const polling = f.ui.poll(); await flush()
+  const input = f.elements.get('defaultMuted'); input.checked = false; input.onchange(); await flush()
+  const closing = f.ui.settings.finish(); await flush()
+  assert.equal(input.disabled, true)
+  assert.equal(f.elements.get('settings').hidden, false)
+  resolvePoll(); await polling; await flush()
+  assert.equal(input.checked, false)
+  resolveSave(); assert.equal(await closing, true); await flush()
+  assert.equal(f.peer.preferences().defaultMuted, false)
+  assert.equal(f.elements.get('settings').hidden, true)
+})
+test('switching Provider while covered cancels the old hover resume intent', async t => {
+  const f = await hoveringPlayer(t)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  f.ui.decoy.conceal(); await flush()
+  const played = f.video.plays
+  await f.ui.changeSource('demo')
+  await enterPanel(t, f)
+  assert.equal(f.ui.sourceState().source, 'demo')
+  assert.equal(f.video.paused, true)
+  assert.equal(f.video.plays, played)
+})
+
+test('an on-demand stream resumes deep progress without waiting for a growing HLS playlist', async t => {
+  const f = setup(t)
+  f.event('dash'); await f.poll()
+  f.ui.unload(); f.video.currentTime = 0; f.video.duration = 1200
+  f.panel.allowed = new Set(['hg-11'])
+  let preparations = 0
+  f.service.catalog = { prepare: () => { preparations++; return { status: 'ready', format: 'dash',
+    stream: 'dash-test', manifest: '{}', durationMs: 1200000 } }, panelMedia: { pin() {}, unpin() {} } }
+  f.store.save({ seriesId: 'hg-1', episodeId: 'hg-11', title: 'Test', label: '1', positionMs: 600000, durationMs: 1200000 })
+  await f.ui.start(); await flush()
+  assert.equal(preparations, 1)
+  assert.equal(f.video.currentTime, 600)
+  assert.equal(f.video.paused, false)
+})
+for (const terminal of ['Stop', 'Interrupt']) test(`on-demand preparation cannot defeat the cover or a covered ${terminal}`, async t => {
+  const f = await hoveringPlayer(t, false)
+  f.ui.unload(); f.panel.allowed = new Set(['hg-11']); f.video.currentTime = 0
+  f.service.catalog = { prepare: () => ({ status: 'ready', format: 'dash', stream: 'dash-test', manifest: '{}', durationMs: 60000 }),
+    panelMedia: { pin() {}, unpin() {} } }
+  let release
+  const gate = new Promise(resolve => { release = resolve }), call = f.service.call.bind(f.service)
+  f.service.call = async (scope, name, args) => { if (name === 'prepare_playback') await gate; return call(scope, name, args) }
+  const starting = f.ui.start(); await flush()
+  leavePanel(f); release(); await starting; await flush()
+  assert.equal(f.ui.decoy.covered, true)
+  assert.equal(f.video.plays, 0)
+  f.event('one', terminal); await f.poll()
+  await enterPanel(t, f)
+  assert.equal(f.ui.decoy.covered, false)
+  assert.equal(f.video.paused, true)
+  assert.equal(f.video.plays, 0, 'returning to the panel cannot revive an ended task')
 })

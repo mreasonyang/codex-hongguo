@@ -13,6 +13,8 @@
 
 Watch Hongguo short dramas in the right-hand panel of Codex Desktop, with browsing, search, resume and autoplay next. By default, a new task resumes the selected episode; finishing or interrupting the task pauses playback and saves your position. You can turn off either behavior independently in Settings. The plugin supports local-executor Codex Desktop conversations.
 
+Hongguo and Bilibili are available by default. Explicitly installed local sources use the [Provider plugin API](docs/providers.md) (Chinese) and start automatically. Hover over the play mark at the top left and select a source. Providers declaring `nsfw: true` require confirmation before switching; cancelling preserves the current source. Recommendations, search, history and cache identities remain separate; switching saves your position and stops playback.
+
 This is an independent, unofficial plugin with original icon artwork. The red fruit echoes the name Hongguo ("red fruit"), while the leaf and play button form the plugin's own mark.
 
 After installation and Hook review, continue working normally. The optional **Watch while you wait** card offers up to three shows per turn. It prioritizes **Continue watching**, or **Watch next** when the saved episode is complete and another episode is available. Other slots rotate unwatched shows. Clicking a title opens the player in that chat and uses your default-mute setting.
@@ -76,11 +78,11 @@ Update with `npx.cmd "@kyun.si/codex-hongguo@beta" update`. On macOS / Linux, us
 - **Watch while waiting**: Both the conversation card and catalog can offer up to 3 titles. Choices stay fixed within a turn. Chats share local rotation records, which advance after titles become visible. Disable suggestions or edit additional search keywords in **Settings**.
 - **Pause and resume.** Click the picture, center button or toolbar playback button to pause. Click again to resume from the same position, during or after a task.
 - **Background playback.** Playback continues when you switch windows or tabs. When automatic pausing is enabled, a task ending or being interrupted in this chat also pauses background playback. Closing the player saves your position.
-- **Local preparation and split view**: Episodes are prepared locally and sent to the side panel in small chunks. HEVC video is converted to H.264 and non-AAC audio is converted to AAC as needed, so initial preparation can take time. The regular player offers **Split view** (`分屏`) after selecting an episode; open its one-time link in the Codex built-in browser within 60 seconds. Players opened from an inline suggestion card do not show this button; open the regular player from the right-side **＋** when needed.
+- **Local preparation and split view**: Hongguo full episodes are prepared locally and sent to the side panel in small chunks; HEVC video is converted to H.264 and non-AAC audio is converted to AAC as needed. Standard Bilibili dual-track streams read fragments near the playback position on demand without waiting for the full episode to download. The regular player offers **Split view** (`分屏`) after selecting an episode; open its one-time link in the Codex built-in browser within 60 seconds. Players opened from an inline suggestion card do not show this button; open the regular player from the right-side **＋** when needed.
 
 ### Global playback settings
 
-Open **Settings** at the top right of the player. Switches save automatically; recommendation keywords save on Enter or when leaving the field. **Close** waits for saving to finish. If saving fails, the panel stays open with a retry message.
+Open **Settings** at the top right of the player. Options are grouped into **Playback**, **Decoy page**, **Recommendations**, and **Source accounts**. Switches save automatically; recommendation keywords save on Enter or when leaving the field. On the main settings view, clicking outside, pressing Escape, or clicking **Close** waits for saving to finish before dismissing the sheet; if saving or keyword validation fails, the sheet stays open with a retry message. Pointer movement outside the panel does not close Settings.
 
 | Setting | Default | Behavior |
 | --- | --- | --- |
@@ -89,7 +91,9 @@ Open **Settings** at the top right of the player. Switches save automatically; r
 | Mute by default | On | Set the initial mute state for new players. Changes immediately update the current player and sync to other open players. |
 | Enable decoy page | Off | When the pointer leaves the Hongguo panel, show a decoy page and pause playback. Playback resumes when the pointer returns, unless it was paused manually. |
 
-Hover mode follows the player panel boundary: moving to the chat, another panel, or another window conceals the show title, artwork and controls. The loaded video is retained, and task-end automatic pausing still applies while covered. The cover is generated offline from built-in project tasks, technical notes, test reports and meeting notes, with varied layouts and content. Cover style in Settings offers Random, Project tasks, Technical notes, Test report and Meeting notes. Choices save and apply immediately without closing Settings. Style options are hidden when hover mode is off. A specific style is retained across openings, with new content generated for each opening and kept stable until closed. Outside clicks, Escape and Close consistently dismiss Settings; pointer movement does not. Covers follow the interface language and theme. Codex manages native tab titles and suggestion cards already present in the chat; covering the panel does not replace those.
+Hover mode follows the player panel boundary: moving to the chat, another panel, or another window conceals the show title, artwork and controls. The loaded video is retained, and task-end automatic pausing still applies while covered. The cover is generated offline from built-in project tasks, technical notes, test reports and meeting notes, with varied layouts and content. Cover style in Settings offers Random, Project tasks, Technical notes, Test report and Meeting notes. Choices save and apply immediately without closing Settings. Style options are hidden when hover mode is off. A specific style is retained across openings, with new content generated for each opening and kept stable until closed. Covers follow the interface language and theme. Codex manages native tab titles and suggestion cards already present in the chat; covering the panel does not replace those.
+
+**Source accounts** appears after the general settings as compact list rows (such as **Bilibili**). Clicking the **Bilibili** row opens a dedicated QR sign-in subpage rather than expanding a QR code inline in the settings list. When signed out or after a session expires, the subpage generates a QR code for the app and lets you refresh or retry if sign-in fails or the code expires. Clicking **Back to settings**, **Cancel sign-in**, or pressing Escape on the subpage cancels the current QR scan and returns to the main settings view (whereas pressing Escape on the main settings view saves and closes the entire Settings sheet); clicking outside or closing Settings also cancels any active QR scan. Once sign-in succeeds, it returns to the main settings view automatically and shows your nickname and membership status (**Signed in** or **Premium member**) on the account row. Clicking a signed-in row opens account management to sign out. When playback reports that sign-in is required or only a preview is available, **Sign in to source** next to the notice opens the same sign-in subpage directly.
 
 Settings are independent, saved across restarts, and shared by all chats. Task playback switches and default mute sync to open players. The speaker button changes only the current player, leaving the default unchanged; repeated snapshots preserve that manual choice until the default changes. New players restore the remembered volume. Autoplay requires an open player with an episode selected; it does not choose a show or reopen a closed player. Manual pausing lasts for the current task; the autoplay switch determines whether the next task resumes playback. Updates preserve saved choices.
 
@@ -133,19 +137,24 @@ The default user data directories below are removed automatically during uninsta
 | Windows | `%LOCALAPPDATA%\CodexHongguo\` (defaults to `%USERPROFILE%\AppData\Local\CodexHongguo\`) |
 | Linux | `codex-hongguo` under `XDG_DATA_HOME` (defaults to `~/.local/share/codex-hongguo/`) |
 
-Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn state, recommendation rotation, catalog and episode metadata, refresh state and settings. `media/` holds prepared full episodes, capped at 40 episodes and 1 GiB with protection for active files. `panel-media/` contains temporary panel fragments with separate cleanup; its size is outside that 1 GiB limit. `device/` holds the upstream SDK's anonymous device profile. Raw hook payloads, prompts and assistant replies are not written to disk. Third-party runtime dependency notices are under `licenses/` in the plugin root.
+Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn state, recommendation rotation, catalog and episode metadata, refresh state and settings. `media/` holds prepared full episodes, capped at 40 episodes and 1 GiB with protection for active files. `panel-media/` contains temporary panel fragments; `dash-media/` caches on-demand series fragments, capped at 128 MiB and cleaned on process exit. Both fragment caches are outside the full-episode 1 GiB limit. `device/` holds the upstream SDK's anonymous device profile. Raw hook payloads, prompts and assistant replies are not written to disk. Third-party runtime dependency notices are under `licenses/` in the plugin root.
 
 ## Features & Limitations
 
 | Area | Behavior & Scope |
 | --- | --- |
 | Host scope | Supports only Codex Desktop conversations running on the local executor; does not support cloud/remote executors or other host applications. |
-| Content source & streams | Connects to the Hongguo catalog only (no multi-provider source switcher); when an episode offers multiple streams, the player selects a playable stream automatically without a manual quality selector. |
+| Content source & streams | Includes Hongguo and Bilibili series; both are available by default, with QR sign-in, account management, and sign-out in Settings (**Source accounts**) or directly from login/preview playback prompts. Hover over the source icon to switch sources (NSFW sources require confirmation), then browse recommendations or search by series name; ss/ep links remain supported. Standard AVC/AAC tracks play and seek on demand without downloading the whole episode first. Previews and DRM are rejected. See [Providers](docs/providers.md). |
 | Recommendations & search | Catalog browsing and search rely on the anonymous upstream SDK; the home view prioritizes unwatched shows in batches of up to 12 (recommendations and episode pages share a persistent 15-minute cache across chats, serve stale data while refreshing, and back off after failures) and falls back to configurable search keywords when recommendations are sparse. |
 | Anonymous rate-limit recovery | When an anonymous device is rejected or streams come back empty, the SDK performs bounded retries and device resets before surfacing the failure reason with a retry action. |
 | Progress persistence | Saves playback position locally every ~5 seconds while playing, as well as on pause, seek, episode change, or panel hide. |
 | Turn linkage & autoplay | Task-start autoplay and task-end automatic pausing both default to on; see Global playback settings above. Autoplay next is enabled by default and remembers changes. |
 | Appearance & locale | Adapts to narrow sidebars (episodes below video) and wide panels (episodes beside video), following Codex light/dark themes and Chinese/English UI locales. |
+
+## License & Credits
+
+- **Project license**: [AGPL-3.0-only](LICENSE). amagi retains [GPL-3.0-only](COPYING), and other dependencies retain their own licenses. Distribution packages include matching project source, the pinned amagi source, and third-party notices. Earlier MIT grants remain valid; see [NOTICE](NOTICE). Copyrights for drama series, covers and media streams belong to their respective rightsholders.
+- **Upstream & specifications**: Inspired by [frostming/dsh-hongguo](https://github.com/frostming/dsh-hongguo), with Hongguo catalog and playback resolution powered by [openhongguo](https://github.com/beilunyang/openhongguo). Host integration follows [OpenAI Plugin Extensions](https://developers.openai.com/plugins/build/extensions), [Plugin Packaging](https://developers.openai.com/plugins/build/plugins), and [Codex Hooks](https://learn.chatgpt.com/docs/hooks).
 
 <!-- development -->
 
@@ -154,8 +163,3 @@ Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn s
 Development and testing instructions are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 See [npm distribution, upgrades and publishing](docs/npm-distribution.md) for package structure and release maintenance.
-
-## License & Credits
-
-- **Project license**: This project is licensed under the [MIT License](LICENSE); npm metadata uses `MIT`. Bundled third-party dependency notices are under `licenses/` in the plugin root. Copyrights for drama series, covers and media streams belong to their respective rightsholders.
-- **Upstream & specifications**: Inspired by [frostming/dsh-hongguo](https://github.com/frostming/dsh-hongguo), with Hongguo catalog and playback resolution powered by [openhongguo](https://github.com/beilunyang/openhongguo). Host integration follows [OpenAI Plugin Extensions](https://developers.openai.com/plugins/build/extensions), [Plugin Packaging](https://developers.openai.com/plugins/build/plugins), and [Codex Hooks](https://learn.chatgpt.com/docs/hooks).

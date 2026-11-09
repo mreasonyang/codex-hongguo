@@ -1,0 +1,16 @@
+{
+  "checkedAt": "2026-11-08T04:16:46.119Z",
+  "tests": 179,
+  "passed": 173,
+  "failed": 0,
+  "windowsOnlySkipped": 6,
+  "removedProviderRuntimeMatches": 0,
+  "providerFrameworkRetained": true,
+  "localPluginTestedAcrossRestarts": true,
+  "redFruitMediaFragmentDecoded": true,
+  "isolatedInstallAndUninstallPassed": true,
+  "installationReceiptMatchesPackage": true,
+  "compiledServerSha256": "40f1225b806f104d67b77b8ea8fd39da8d67ef92f32ecd7bf200e3a2137e22d6",
+  "desktopPlaybackObserved": false,
+  "installedPluginUpdated": false
+}

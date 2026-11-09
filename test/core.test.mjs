@@ -1,7 +1,8 @@
 import test from 'node:test'
+import { defer } from './cleanup.mjs'
 import { get } from 'node:http'
 import assert from 'node:assert/strict'
-import { copyFileSync, existsSync, mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
@@ -65,7 +66,7 @@ test('panel startup distinguishes policy, missing metadata, source and decode fa
 // Episode selection, cache lookup, panel streaming and browser grants use the normal service.
 function cachedCatalog(t, store, source = avcFixture, codec = 'h264') {
   const catalog = new Catalog(store)
-  t.mock.method(catalog, 'sdkCall', async (method, id) => {
+  t.mock.method(catalog.sources.get('hongguo'), 'sdkCall', async (method, id) => {
     assert.equal(method, 'listEpisodes')
     assert.equal(id, '10')
     return { items: [{ id: '101', number: 1, title: '第1集', playable: true }] }
@@ -87,7 +88,7 @@ const env = (dir) => ({ PATH: process.env.PATH, HONGGUO_DATA_DIR: dir })
 function setup(t) {
   const dir = mkdtempSync(join(tmpdir(), '红果 测试 ')),
     store = new Store(dir)
-  t.after(() => {
+  defer(t, () => {
     store.close()
     rmSync(dir, { force: true, recursive: true })
   })
@@ -190,7 +191,7 @@ test('loopback pairing, origin, Host, cookie, fixed-turn scope, replay and conti
   const { store } = setup(t),
     service = new Service(store, cachedCatalog(t, store)),
     web = new BrowserServer(service)
-  t.after(() => web.close())
+  defer(t, () => web.close())
   service.pair = (s) => web.pair(s)
   event(store, 'thread-a', 'turn1', 'UserPromptSubmit')
   const panel = service.panel(service.open({ thread_id: 'thread-a' }).panel)
@@ -259,10 +260,42 @@ test('loopback pairing, origin, Host, cookie, fixed-turn scope, replay and conti
   web.tickets.get(stale).expires = 0
   assert.equal((await post('/exchange', { ticket: stale })).status, 403)
 })
+test('compiled MCP starts all installed providers and persists source selection across restarts', async t => {
+  const { dir } = setup(t)
+  const directory = join(dir, 'plugins'), local = join(directory, 'demo')
+  mkdirSync(local, { recursive: true })
+  writeFileSync(join(local, 'provider.json'), JSON.stringify({ apiVersion: 1, id: 'demo', name: 'Demo', version: '1.0.0', entry: 'index.mjs' }))
+  writeFileSync(join(local, 'index.mjs'), `export function createProvider({id}) { return { id,
+    async listSeries() { return {items:[],cursor:null} }, async getSeries() {},
+    async listEpisodes() { return {items:[],cursor:null} }, async getCover() {}, async resolvePlayback() { return {candidates:[]} },
+  } }`)
+  async function start() {
+    const client = new Client({ name: 'provider-config-test', version: '1' })
+    await client.connect(new StdioClientTransport({ command: process.execPath,
+      args: ['--no-warnings', join(projectRoot, 'dist/server/index.mjs')], env: { ...env(dir), HONGGUO_PROVIDERS_DIR: directory }, stderr: 'ignore' }))
+    defer(t, () => client.close())
+    const opened = await client.callTool({ name: 'open_drama_panel', arguments: {} })
+    return { client, async call(name, args = {}) {
+      const result = await client.callTool({ name, arguments: { panel: opened._meta.panel, ...args } })
+      assert.ok(!result.isError)
+      return result._meta.data
+    } }
+  }
+  const first = await start()
+  assert.deepEqual((await first.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'demo'])
+  await first.client.close()
+  const second = await start()
+  assert.deepEqual((await second.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'demo'])
+  await second.call('set_source', { source: 'demo' })
+  await second.client.close()
+  const third = await start()
+  assert.deepEqual((await third.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'demo'])
+  assert.equal((await third.call('get_preferences')).defaultSource, 'demo')
+})
 test('compiled plugin exposes a model-visible waiting widget and keeps player controls app-only', async (t) => {
   let client
-  t.after(() => client?.close())
   const { dir } = setup(t)
+  defer(t, () => client?.close())
   client = new Client({ name: 'test', version: '1' })
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -287,7 +320,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   })
   assert.equal(data.isError, true)
   const resources = (await client.listResources()).resources
-  const playerUri = 'ui://hongguo/v30/player', waitingUri = 'ui://hongguo/v30/waiting'
+  const playerUri = 'ui://hongguo/v34/player', waitingUri = 'ui://hongguo/v34/waiting'
   assert.equal(tools.find(t => t.name === 'show_waiting_picks')._meta.ui.resourceUri, waitingUri)
   assert.equal(tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri, playerUri)
   assert.deepEqual(resources.map(r => r.uri).sort(), [playerUri, waitingUri])
@@ -299,7 +332,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
     'ui://hongguo/v6/player', 'ui://hongguo/v6/waiting', 'ui://hongguo/v7/waiting',
     'ui://hongguo/v8/player', 'ui://hongguo/v9/waiting', 'ui://hongguo/v11/player', 'ui://hongguo/v12/waiting',
     'ui://hongguo/v16/player', 'ui://hongguo/v16/waiting', 'ui://hongguo/v17/player', 'ui://hongguo/v17/waiting',
-    'ui://hongguo/v18/player', 'ui://hongguo/v18/waiting', 'ui://hongguo/v24/player', 'ui://hongguo/v24/waiting']) {
+    ...Array.from({ length: 16 }, (_, i) => [`ui://hongguo/v${i + 18}/player`, `ui://hongguo/v${i + 18}/waiting`]).flat()]) {
     const read = (await client.readResource({ uri })).contents[0]
     assert.equal(read.uri, uri)
     assert.deepEqual(read._meta.ui.csp, policy)
@@ -359,8 +392,8 @@ test('self-created CENC sample decrypts from stdin and decodes video and audio',
 
 test('media preparation deduplicates across database connections and protects active files', async (t) => {
   let second
-  t.after(() => second?.close())
   const { store, dir } = setup(t)
+  defer(t, () => second?.close())
   const { MediaCache, hasFfmpeg } = await import('../src/server/media.mjs')
   if (!hasFfmpeg()) {
     t.skip('FFmpeg unavailable')
@@ -370,7 +403,7 @@ test('media preparation deduplicates across database connections and protects ac
   let calls = 0
   const resolve = async () => {
     calls++
-    return { playback: { streams: [{ url: 'https://media.byteimg.com/example.mp4', codec: 'h264' }] } }
+    return { candidates: [{ kind: 'file', url: 'https://media.byteimg.com/example.mp4', codec: 'h264' }] }
   }
   const bytes = readFileSync(avcFixture)
   t.mock.method(globalThis, 'fetch', async () => new Response(bytes))
@@ -398,7 +431,7 @@ test('media preparation deduplicates across database connections and protects ac
 test('an inaccessible data directory reports failed persistence and cannot pretend to save progress', async (t) => {
   const { dir } = setup(t),
     fallback = new Store(dir, true)
-  t.after(() => fallback.close())
+  defer(t, () => fallback.close())
   const svc = new Service(fallback, new Catalog(fallback)),
     ctx = svc.panel(svc.open({}).panel)
   const health = await svc.call(ctx, 'get_health', {})
@@ -428,8 +461,8 @@ test('history has one row per drama and removes all its episodes', (t) => {
 })
 test('upgrading removes only the old sample progress and ignores late writes from an older open panel', (t) => {
   let current
-  t.after(() => current?.close())
   const { dir, store: old } = setup(t)
+  defer(t, () => current?.close())
   old.db.exec('PRAGMA user_version=0')
   const progress = { title: '剧名', label: '1', positionMs: 57000, durationMs: 120000 }
   old.save({ ...progress, seriesId: 'hg-10', episodeId: 'hg-101' })
@@ -447,7 +480,7 @@ test('sparse feeds merge keyword results and reuse one cached request', async (t
   const { store } = setup(t),
     catalog = new Catalog(store)
   let requests = 0
-  catalog.sdkCall = async (method, ...args) => {
+  catalog.sources.get('hongguo').sdkCall = async (method, ...args) => {
     requests++
     return {
       items: [
@@ -470,8 +503,8 @@ test('search posters reuse known covers and lazily resolve missing details once 
   const { store } = setup(t), catalog = new Catalog(store)
   const jpeg = await runFfmpeg(['-f', 'lavfi', '-i', 'color=c=blue:s=24x32', '-frames:v', '1', '-f', 'image2pipe', '-c:v', 'mjpeg', 'pipe:1'], null, true)
   let details = 0, downloads = 0
-  catalog.rows({ items: [{ id: '2', title: '缓存剧', cover_url: 'https://cover.byteimg.com/known.jpg' }] })
-  t.mock.method(catalog, 'sdkCall', async (method, id) => {
+  catalog.rows({ items: [{ id: '2', title: '缓存剧', coverURL: 'https://cover.byteimg.com/known.jpg' }] })
+  t.mock.method(catalog.sources.get('hongguo'), 'sdkCall', async (method, id) => {
     if (method === 'search') return { items: [{ id: '1', title: '搜索剧' }, { id: '2', title: '缓存剧' }], has_more: true, cursor: 'more' }
     assert.equal(method, 'getSeries'); assert.equal(id, '1'); details++
     return { cover_url: 'https://cover.byteimg.com/detail.jpg' }
@@ -481,7 +514,7 @@ test('search posters reuse known covers and lazily resolve missing details once 
     return new Response(jpeg)
   })
   const results = await catalog.list({ query: '剧' })
-  assert.equal(results.cursor, 'more')
+  assert.match(results.cursor, /^v1\./)
   assert.equal(results.items[0].lookupCover, true)
   assert.equal(results.items[1].hasCover, true)
   const posters = await Promise.all([catalog.cover('hg-1'), catalog.cover('hg-1')])
@@ -496,19 +529,20 @@ test('empty or failed provider feeds cool down before retrying and never become 
   const catalog = new Catalog(store)
   let now = 1000000
   catalog.metadata.now = () => now
-  t.mock.method(catalog, 'sdkCall', async () => ({ items: [] }))
+  const provider = catalog.sources.get('hongguo')
+  t.mock.method(provider, 'sdkCall', async () => ({ items: [] }))
   await assert.rejects(catalog.list(), { status: 503 })
-  const requests = catalog.sdkCall.mock.callCount()
+  const requests = provider.sdkCall.mock.callCount()
   await assert.rejects(catalog.list(), { status: 503 })
-  assert.equal(catalog.sdkCall.mock.callCount(), requests)
+  assert.equal(provider.sdkCall.mock.callCount(), requests)
   now = store.db.prepare('SELECT retry_at FROM catalog_cache').get().retry_at
-  catalog.sdkCall.mock.mockImplementation(async () => {
+  provider.sdkCall.mock.mockImplementation(async () => {
     throw Error('provider unavailable')
   })
   await assert.rejects(catalog.list(), { status: 503 })
   assert.deepEqual(store.waitingFeed(true), [])
   now = store.db.prepare('SELECT retry_at FROM catalog_cache').get().retry_at
-  catalog.sdkCall.mock.mockImplementation(async () => ({ items: [{ id: '17', title: '返回的剧名' }] }))
+  provider.sdkCall.mock.mockImplementation(async () => ({ items: [{ id: '17', title: '返回的剧名' }] }))
   assert.deepEqual((await catalog.list()).items.map((s) => s.id), ['hg-17'])
 })
 test('MCP full episode segments require the preparing panel and bounded offsets', async (t) => {
@@ -517,7 +551,7 @@ test('MCP full episode segments require the preparing panel and bounded offsets'
   const catalog = cachedCatalog(t, store)
   const run = t.mock.fn(runFfmpeg)
   catalog.panelMedia = new PanelMedia(store.root, run)
-  t.after(() => catalog.panelMedia.close())
+  defer(t, () => catalog.panelMedia.close())
   const svc = new Service(store, catalog)
   const a = svc.panel(svc.open({}).panel),
     b = svc.panel(svc.open({}).panel)
@@ -555,7 +589,7 @@ test('a panel can decode its first fragment while the rest is still being prepar
   let publish, finish
   const published = new Promise(resolve => { publish = resolve })
   const gate = new Promise(resolve => { finish = resolve })
-  t.after(() => finish())
+  defer(t, () => finish())
   catalog.panelMedia = new PanelMedia(store.root, async (...args) => {
     const output = await runFfmpeg(...args)
     if (args[0].at(-1) === 'index.m3u8') {
@@ -567,7 +601,7 @@ test('a panel can decode its first fragment while the rest is still being prepar
     }
     return output
   })
-  t.after(() => catalog.panelMedia.close())
+  defer(t, () => catalog.panelMedia.close())
   const svc = new Service(store, catalog), scope = svc.panel(svc.open({}).panel), other = svc.panel(svc.open({}).panel)
   await svc.call(scope, 'get_episodes', { seriesId: 'hg-10' })
   assert.equal((await svc.call(scope, 'prepare_playback', { episodeId: 'hg-101' })).status, 'preparing')
@@ -599,7 +633,7 @@ test('next-episode preload preserves the active stream and reuses real prepared 
   catalog.episodes = async () => ({ items: [101, 102].map(id => ({ id: 'hg-' + id, playable: true })) })
   const run = t.mock.fn(runFfmpeg)
   catalog.panelMedia = new PanelMedia(store.root, run)
-  t.after(() => catalog.panelMedia.close())
+  defer(t, () => catalog.panelMedia.close())
   const svc = new Service(store, catalog), scope = svc.panel(svc.open({}).panel)
   await assert.rejects(svc.call(scope, 'preload_playback', { episodeId: 'hg-102' }), /请先选择/)
   await svc.call(scope, 'get_episodes', { seriesId: 'hg-10' })
@@ -630,7 +664,7 @@ test('next-episode preload preserves the active stream and reuses real prepared 
 
 test('speculative preparation cannot evict any pinned panel stream', t => {
   const { store } = setup(t), media = new PanelMedia(store.root)
-  t.after(() => media.close())
+  defer(t, () => media.close())
   for (let i = 0; i < 4; i++) media.entries.set('hg-' + i, {
     id: 'hg-' + i, dir: join(media.root, 'absent-' + i), used: Date.now() - 60000,
     pending: false, viewers: new Set([{}]),
@@ -654,7 +688,7 @@ test('provider HEVC labels select H.264, copy AAC and discard partial hardware o
     writeFileSync(join(cwd, 'index.m3u8'), '#EXTM3U\n#EXT-X-ENDLIST\n')
   })
   catalog.panelMedia = new PanelMedia(dir, run)
-  t.after(() => catalog.panelMedia.close())
+  defer(t, () => catalog.panelMedia.close())
   for (const [index, label] of ['bytevc1', 'hevc', 'h265'].entries()) {
     const id = 'hg-' + (200 + index)
     copyFileSync(avcFixture, catalog.cache.path(id))
@@ -696,7 +730,7 @@ for (const video of ['hevc', 'h264']) {
     const catalog = cachedCatalog(t, store, source, 'MP4')
     const run = t.mock.fn(runFfmpeg)
     catalog.panelMedia = new PanelMedia(dir, run)
-    t.after(() => catalog.panelMedia.close())
+    defer(t, () => catalog.panelMedia.close())
     assert.equal(catalog.prepare('hg-101', false, false).status, 'preparing')
     const entry = catalog.panelMedia.entries.get('hg-101')
     await entry.job
@@ -752,7 +786,7 @@ for (const kind of ['hls', 'dash'])
       return new Response(readFileSync(join(dir, url.pathname.slice(1))))
     })
     const cache = new MediaCache(store, async () => ({
-      playback: { streams: [{ url: 'https://media.byteimg.com/' + filename, [kind]: true, codec: 'h264' }] },
+      candidates: [{ kind, url: 'https://media.byteimg.com/' + filename, codec: 'h264' }],
     }))
     let r
     for (let i = 0; i < 120; i++) {

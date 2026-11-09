@@ -1,0 +1,10 @@
+qrcode-generator 2.0.4
+Copyright (c) 2009 Kazuhiko Arase
+Project: https://github.com/kazuhikoarase/qrcode-generator
+Licensed under the MIT license. See LICENSE in this directory.
+Used locally to render the Bilibili sign-in QR code; no remote image service.
+
+The upstream npm package declares MIT in package.json and its source header,
+but omits a standalone license file. This directory preserves that notice and
+the MIT permission text. The source header also states:
+The word 'QR Code' is registered trademark of DENSO WAVE INCORPORATED.

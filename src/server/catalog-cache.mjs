@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { PlayerError } from './errors.mjs'
 
 export const catalogTtl = 15 * 60000
-const unavailable = () => new PlayerError('红果片源暂时不可达，请稍后重试', 503)
+const unavailable = () => new PlayerError('片源暂时不可达，请稍后重试', 503)
 const fresh = (entry, now, ttl) => entry?.value !== undefined && now >= entry.updatedAt && now - entry.updatedAt < ttl
 
 // SQLite leases coordinate all local MCP processes. Network work never holds a DB transaction.

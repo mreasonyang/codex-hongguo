@@ -93,7 +93,7 @@ export class BrowserServer {
       nonce = randomBytes(16).toString('base64')
     res.setHeader(
       'Content-Security-Policy',
-      `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`,
+      `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`,
     )
     const html = (text) => {
       res.setHeader('Content-Type', 'text/html; charset=utf-8')
@@ -113,7 +113,8 @@ export class BrowserServer {
       const id = randomBytes(12).toString('hex'),
         key = secret(),
         page = '/p/' + id + '/'
-      this.sessions.set(id, { ...item.scope, key, grants: new Set(), expires: Date.now() + 12 * 3600000 })
+      this.sessions.set(id, { ...item.scope, key, grants: new Set(), streams: new Map(), playing: undefined,
+        allowed: new Set(item.scope.allowed), expires: Date.now() + 12 * 3600000 })
       res.setHeader('Set-Cookie', 'hg=' + key + '; Path=' + page + '; HttpOnly; SameSite=Strict')
       return json({ page })
     }
@@ -130,16 +131,21 @@ export class BrowserServer {
           'data-host="browser"',
         ),
       )
-    if (route === 'context' && req.method === 'GET')
+    if (route === 'context' && req.method === 'GET') {
+      await this.service.syncProviders(session)
       return json({
         identified: !!session.sessionId,
         turnId: session.fixedTurn,
         selection: session.selection,
+        source: session.source,
       })
+    }
     if (route.startsWith('api/') && req.method === 'POST')
       return json(await this.service.call(session, route.slice(4), await body(req), true))
     if (route.startsWith('media/') && ['GET', 'HEAD'].includes(req.method)) {
       const id = route.slice(6)
+      await this.service.syncProviders(session)
+      this.service.catalog.sources?.forId(id, 'episode')
       if (!session.grants.has(id)) throw new PlayerError('请先选择该集', 403)
       const file = this.service.catalog.cache?.path(id)
       if (!file) throw new PlayerError('素材待重新准备', 404)

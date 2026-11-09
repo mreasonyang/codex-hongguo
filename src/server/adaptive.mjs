@@ -3,6 +3,7 @@ import { parse as parseMpd } from 'mpd-parser'
 import { open } from 'node:fs/promises'
 import { join } from 'node:path'
 import { PlayerError } from './errors.mjs'
+import { createDecipheriv } from 'node:crypto'
 
 const invalid = () => new PlayerError('该分段片源暂不支持，可重试其他片源')
 function audioFor(master, variant) {
@@ -16,6 +17,10 @@ async function tracks(url, read, depth = 0) {
   const page = await read(url, 256 * 1024)
   const body = page.bytes.toString('utf8').trimStart()
   if (body.startsWith('#EXTM3U')) {
+    for (const line of body.split(/\r?\n/).filter(line => /^#EXT-X-(?:KEY|SESSION-KEY):/.test(line))) {
+      if (line.startsWith('#EXT-X-SESSION-KEY:') || !/METHOD=(?:AES-128|NONE)(?:,|$)/.test(line) ||
+          (/KEYFORMAT=/.test(line) && !/KEYFORMAT="identity"(?:,|$)/.test(line))) throw invalid()
+    }
     const parser = new Parser()
     parser.push(body)
     parser.end()
@@ -85,14 +90,35 @@ export async function prepareAdaptive(source, dir, output, { cdn, run, codec, bu
     let init
     try {
       for (const segment of segments) {
-        if (segment.key || segment.discontinuity || segment.gap) throw invalid()
+        if (segment.discontinuity || segment.gap) throw invalid()
+        const keyInfo = segment.key
+        if (keyInfo && (keyInfo.method !== 'AES-128' || !keyInfo.uri || segment.map || segment.byterange)) throw invalid()
         for (const item of [segment.map, segment]) {
           if (!item) continue
           const url = new URL(item.resolvedUri || item.uri, base)
           const id = JSON.stringify([url.href, item.byterange])
           if (item === segment.map && init === id) continue
           if (item === segment.map && init) throw invalid()
-          const { bytes } = await read(url, 32 * 1024 * 1024, item.byterange)
+          let { bytes } = await read(url, 32 * 1024 * 1024, item.byterange)
+          if (keyInfo) {
+            // Keys are intentionally not cached by URL: a new KEY declaration can reuse that URI.
+            const key = (await read(new URL(keyInfo.uri, base), 16)).bytes
+            try {
+              if (key.length !== 16 || !bytes.length || bytes.length % 16) throw invalid()
+              const iv = Buffer.alloc(16)
+              if (keyInfo.iv) {
+                if (keyInfo.iv.length !== 4) throw invalid()
+                Array.from(keyInfo.iv).forEach((n, i) => iv.writeUInt32BE(n, i * 4))
+              } else {
+                const sequence = (playlist.mediaSequence || 0) + segments.indexOf(segment)
+                if (!Number.isSafeInteger(sequence) || sequence < 0) throw invalid()
+                iv.writeBigUInt64BE(BigInt(sequence), 8)
+              }
+              const decipher = createDecipheriv('aes-128-cbc', key, iv)
+              bytes = Buffer.concat([decipher.update(bytes), decipher.final()])
+            } catch { throw invalid() }
+            finally { key.fill(0) }
+          }
           await out.writeFile(bytes)
           if (item === segment.map) init = id
         }

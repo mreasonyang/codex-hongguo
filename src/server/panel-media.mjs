@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { runFfmpeg } from './media.mjs'
 import { PlayerError } from './errors.mjs'
 import { mp4DurationMs } from './mp4-duration.mjs'
+import { DashMedia } from './dash-media.mjs'
 
 const idle = 10 * 60_000
 const chunkSize = 192 * 1024
@@ -51,6 +52,7 @@ export class PanelMedia {
     this.root = join(root, 'panel-media')
     this.run = run
     this.entries = new Map()
+    this.remote = new DashMedia(root)
     mkdirSync(this.root, { recursive: true, mode: 0o700 })
     for (const item of readdirSync(this.root, { withFileTypes: true })) {
       const dir = join(this.root, item.name)
@@ -68,6 +70,7 @@ export class PanelMedia {
     rmSync(e.dir, { recursive: true, force: true })
   }
   sweep() {
+    this.remote.sweep()
     for (const e of this.entries.values()) if (!e.pending && Date.now() - e.used > idle) this.drop(e)
   }
   touch(e) {
@@ -127,6 +130,7 @@ export class PanelMedia {
     }
   }
   manifest(id, stream) {
+    if (this.remote.owns(id, stream)) return this.remote.manifest(id, stream)
     const e = this.entries.get(id)
     if (!e || e.stream !== stream || e.error || !e.manifest)
       throw new PlayerError('该播放分段已失效，请重新点播', 404)
@@ -164,6 +168,7 @@ export class PanelMedia {
     e.manifest = manifest
   }
   async chunk(id, stream, asset, offset) {
+    if (this.remote.owns(id, stream)) return this.remote.chunk(id, stream, asset, offset)
     const e = this.entries.get(id)
     if (!e || e.stream !== stream || e.error || !e.manifest || !assetName.test(asset))
       throw new PlayerError('该播放分段已失效，请重新点播', 404)
@@ -181,13 +186,16 @@ export class PanelMedia {
     }
   }
   pin(id, viewer) {
+    this.remote.pin(id, viewer)
     this.entries.get(id)?.viewers.add(viewer)
   }
   unpin(id, viewer) {
+    this.remote.unpin(id, viewer)
     this.entries.get(id)?.viewers.delete(viewer)
   }
   close() {
     clearInterval(this.timer)
+    this.remote.close()
     for (const e of this.entries.values()) {
       if (e.pending) e.job.finally(() => this.drop(e))
       else this.drop(e)

@@ -1,0 +1,13 @@
+{
+  "result": "PASS",
+  "version": "0.0.35",
+  "license": "AGPL-3.0-only",
+  "npmBytes": 5745695,
+  "npmSHA256": "5ed161110f341cd39f1f97fa18107cc35960ca8f87cc9e36a119e1b7d397c5c8",
+  "offlineBytes": 6107087,
+  "offlineSHA256": "29881bf8a9f355661df1f301d14ca9dea62187799dd5115a21e038dfcc7eced0",
+  "screenshotsExcluded": true,
+  "versionPinnedReadmes": true,
+  "licenseSourcesIncluded": true,
+  "sourceEntries": 127
+}

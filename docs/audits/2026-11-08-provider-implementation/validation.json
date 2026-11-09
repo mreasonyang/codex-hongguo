@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "checkedAt": "2026-11-07T18:21:28.257Z",
+  "branch": "feat/video-source-adapters",
+  "baseCommit": "5033523ca1a39bfb01ac3ad447fe788aa4db99a4",
+  "version": "0.0.34",
+  "platform": "darwin",
+  "arch": "arm64",
+  "unitTests": {
+    "command": "npm test",
+    "runtime": "v26.11.0",
+    "total": 188,
+    "passed": 182,
+    "failed": 0,
+    "skipped": 6,
+    "skipReason": "Windows-only interactive/platform tests"
+  },
+  "minimumNode": {
+    "runtime": "v22.16.0",
+    "passed": 36,
+    "failed": 0,
+    "scope": [
+      "providers.test.mjs",
+      "hghub-sdk.test.mjs",
+      "adaptive-encryption.test.mjs"
+    ]
+  },
+  "compiledServerSha256": "9ed6b64dba15eef0e44d61872fac85f9134ee58c161b555fc34b285d501c9ae7",
+  "packageSha256": "84d3bba2e9ec664a466c2188523a2544a6543255e4cc78ede344a5e644759d2a",
+  "installationChecks": 22,
+  "fullEpisodesDecoded": [
+    "hongguo",
+    "hghub"
+  ],
+  "browserPlaybackObserved": true,
+  "desktopPlaybackObserved": false,
+  "windowsLinuxDevicePlaybackObserved": false,
+  "receipts": [
+    "installation.json",
+    "live-mcp.json",
+    "browser.json"
+  ]
+}

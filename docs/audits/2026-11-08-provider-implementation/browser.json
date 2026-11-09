@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "browser": "Codex built-in Browser",
+  "isolatedState": true,
+  "hongguo": { "resumedFromSeconds": 1, "observedPositionSeconds": 20.121521, "readyState": 4, "mediaError": null },
+  "hghub": { "resumedFromSeconds": 1, "observedPositionSeconds": 11.08437, "readyState": 4, "mediaError": null },
+  "sourceSwitchStoppedOldPlayback": true,
+  "sourceHistoryIsolated": true,
+  "browserPlaybackObserved": true,
+  "codexMainWindowPlaybackObserved": false,
+  "screenshot": "browser-hongguo.png",
+  "scope": "BrowserServer served by isolated compiled MCP child; not the Codex main-window MCP App"
+}

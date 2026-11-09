@@ -1,0 +1,16 @@
+{
+  "browser": "Brave Browser native UI",
+  "environment": "disposable local fixture",
+  "userPluginChanged": false,
+  "checks": {
+    "providerAutosave": true,
+    "disabledProviderPersistsAfterReload": true,
+    "focusRetainedAfterSave": true,
+    "qrClearedAfterEscape": true,
+    "sourcePopoverSwitch": true,
+    "coverStyleAutosave": true,
+    "decoyOnExit": true,
+    "playerOnPointerReturn": true
+  },
+  "realPremiumAccountTested": false
+}

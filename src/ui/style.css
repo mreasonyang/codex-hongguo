@@ -598,6 +598,7 @@ input[type='range']::-moz-range-thumb {
   margin-bottom: 6px;
 }
 .brand {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -622,7 +623,68 @@ h1 {
   font-weight: 600;
   letter-spacing: 0.02em;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.sourceButton {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  margin: 0 -4px;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+}
+.sourceButton:hover:not(:disabled) { background: var(--hover); }
+.sourceButton:disabled { opacity: 1; }
+.sourceButton[data-busy='true'] { opacity: .55; }
+.sourceButton:not([data-source='hongguo']) .mark { background: var(--text-2); }
+.sourceMenu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 7px);
+  left: 0;
+  min-width: 168px;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--raised);
+  box-shadow: var(--_shadow);
+}
+.sourceMenu button {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  text-align: start;
+}
+.sourceMenu::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -8px;
+  height: 8px;
+}
+.sourceMenu button:hover, .sourceMenu button:focus-visible { background: var(--hover); }
+.sourceMenu button[aria-checked='true'] { background: var(--surface); }
+.sourceMenu .sourceLabel { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.sourceDot { flex: 0 0 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--text-2); }
+.sourceDot[data-source='hongguo'] { background: var(--brand); }
+.sourceDot[data-source='bilibili'] { background: #fb7299; }
+.sourceButton[data-source='bilibili'] .mark { background: #fb7299; }
+.sourceMenu .i { width: 13px; height: 13px; color: var(--text-2); }
+.sourceConfirmation { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: rgb(0 0 0 / .28); }
+.sourceConfirmationCard { box-sizing: border-box; width: min(100%, 360px); padding: 20px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--raised); box-shadow: var(--_shadow); }
+.sourceConfirmationCard h2 { margin: 0 0 12px; font-size: 17px; }
+.sourceConfirmationCard strong { overflow-wrap: anywhere; }
+.sourceConfirmationCard p { color: var(--text-2); line-height: 1.6; }
+.sourceConfirmationActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 .tools {
   display: flex;
   gap: 2px;
@@ -637,16 +699,37 @@ h1 {
   background: var(--bg);
   box-shadow: var(--_shadow);
 }
-#settings {
+.settingsMain, .settingsGroup {
   display: grid;
   gap: 12px;
 }
+.settingsMain { gap: 16px; }
+.settingsGroup + .settingsGroup { padding-top: 12px; border-top: 1px solid var(--line); }
+.settingsGroupTitle { margin: 0; font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); }
 .settingsHint {
   margin: 0;
   font-size: var(--fs-sm);
   color: var(--text-2);
   line-height: 1.5;
 }
+.accountRows { display: grid; gap: 2px; margin: -6px -6px 0; }
+.accountRow { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 8px 6px; border: 0; border-radius: var(--r-sm); background: transparent; text-align: left; }
+.accountRow:hover { background: var(--hover); }
+.accountMark { display: grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 6px; color: var(--text-2); background: var(--surface); font-size: var(--fs-sm); font-weight: 600; }
+.accountRow[data-source='bilibili'] .accountMark { color: #fb7299; }
+.accountRowInfo { display: flex; align-items: center; justify-content: space-between; flex: 1; min-width: 0; gap: 12px; }
+.accountRowName { min-width: 0; font-size: var(--fs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.accountRowStatus { max-width: 55%; color: var(--text-2); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.accountArrow { flex: none; color: var(--text-2); font-size: 18px; }
+.accountPageHeader { display: flex; align-items: center; gap: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.accountPageHeader h2 { margin: 0; font-size: var(--fs); font-weight: 600; }
+#accountBack { display: inline-flex; align-items: center; gap: 3px; min-height: 32px; }
+.accountPageBody { display: grid; justify-items: center; gap: 16px; padding: 20px 0 8px; text-align: center; }
+#accountName { max-width: 100%; overflow-wrap: anywhere; }
+#accountStatus { margin: 0; color: var(--text-2); font-size: var(--fs); line-height: 1.5; }
+.accountQrArea { padding: 8px; width: 200px; max-width: 100%; border-radius: 10px; background: #fff; }
+.accountQrArea img { display: block; width: 100%; height: auto; aspect-ratio: 1; }
+.accountActions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
 .settingLabel { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .settingLabel label { cursor: pointer; }
 .settingHelp {

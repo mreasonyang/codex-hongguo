@@ -1,0 +1,15 @@
+{
+  "artifact": "packaged",
+  "authentication": "anonymous",
+  "realAccountConfirmed": false,
+  "checks": [
+    "auth-tools-app-only",
+    "real-qr-generated-without-credential-fields",
+    "real-qr-waiting",
+    "panel-owner-binding",
+    "real-qr-cancelled",
+    "local-logout",
+    "disabled-provider-cannot-login"
+  ],
+  "result": "PASS"
+}

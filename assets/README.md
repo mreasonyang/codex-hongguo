@@ -1,6 +1,7 @@
 # Plugin icon
 
-Original artwork for codex-hongguo, distributed under the project's MIT license.
+Original artwork for codex-hongguo, distributed under the project's
+AGPL-3.0-only license. Earlier MIT releases retain their original grants; see NOTICE.
 
 The mark combines a coral-red fruit (`#F36C58`), a sage leaf (`#A8C8A0`) and an
 ivory play button (`#FFF4E5`) on a graphite background (`#242B2E`). The fruit

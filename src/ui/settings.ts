@@ -9,6 +9,9 @@ type Options = {
   applied: (settings: Preferences) => void
   edited: () => void
   translate: (value: string) => string
+  syncExtra?: (settings: Preferences, disabled: boolean) => void
+  back?: () => boolean
+  closed?: () => void
 }
 
 /** Autosave settings; only explicit dismissal closes the sheet after pending saves. */
@@ -36,6 +39,7 @@ export function createSettings(options: Options, doc: Document = document) {
     coverSettings.hidden = !element<HTMLInputElement>('hoverDecoyEnabled').checked
     style.sync(pending.coverStyle ?? settings.coverStyle, !!finishing || coverSettings.hidden)
     help.sync()
+    options.syncExtra?.({ ...settings, ...pending }, !!finishing)
   }
   function showStatus() {
     const failed = !busy && keys(pending).length > 0
@@ -89,16 +93,19 @@ export function createSettings(options: Options, doc: Document = document) {
     help.close()
     style.close()
     form.hidden = true
+    options.closed?.()
     trigger.setAttribute('aria-expanded', 'false')
     trigger.focus()
   }
   function finish(): Promise<boolean> {
     if (finishing) return finishing
+    options.back?.()
     if (!saveTerms()) { terms.focus(); return Promise.resolve(false) }
     const epoch = generation
     if (!busy && keys(pending).length) void enqueue({ ...pending })
     controls.forEach(control => { control.disabled = true })
     style.sync(pending.coverStyle ?? options.read().coverStyle, true)
+    options.syncExtra?.({ ...options.read(), ...pending }, true)
     finishing = (async () => {
       await queue
       if (epoch !== generation || keys(pending).length) return false
@@ -145,11 +152,14 @@ export function createSettings(options: Options, doc: Document = document) {
     event.stopPropagation()
     if (help.close()) return
     if (style.expanded) { style.close(); return }
+    if (options.back?.()) return
     void finish()
   }, true)
   return {
     get busy() { return busy > 0 },
     sync,
+    update: enqueue,
+    values: () => ({ ...options.read(), ...pending }),
     open() {
       help.close()
       const settings = options.read()
@@ -170,6 +180,7 @@ export function createSettings(options: Options, doc: Document = document) {
       controls.forEach(control => { control.disabled = false })
       terms.removeAttribute('aria-invalid')
       form.hidden = true
+      options.closed?.()
       trigger.setAttribute('aria-expanded', 'false')
       showStatus()
     },

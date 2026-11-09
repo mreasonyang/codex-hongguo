@@ -4,7 +4,7 @@ import { createSettings } from '../src/ui/settings.ts'
 
 const settle = async () => { for (let i = 0; i < 80; i++) await Promise.resolve() }
 function deferred() { let resolve; return { promise: new Promise(done => { resolve = done }), resolve } }
-function fixture({ hoverDecoyEnabled = false } = {}) {
+function fixture({ hoverDecoyEnabled = false, back } = {}) {
   const elements = new Map(), document = Object.assign(new EventTarget(), { getElementById: id => {
     if (!elements.has(id)) elements.set(id, {
       hidden: true, disabled: false, checked: false, value: '', dataset: {}, attributes: {},
@@ -25,7 +25,7 @@ function fixture({ hoverDecoyEnabled = false } = {}) {
       requests.push(structuredClone(patch)); await beforeSave(patch)
       stored = { ...stored, ...patch }; return structuredClone(stored)
     },
-    applied: value => { current = value; applied++ }, edited() {}, translate: value => value,
+    applied: value => { current = value; applied++ }, edited() {}, translate: value => value, back,
   }, document)
   settings.open()
   return { settings, elements, requests, document,
@@ -55,6 +55,24 @@ test('switches save small patches automatically, preserve unrelated settings and
   assert.equal(await f.settings.finish(), true)
   assert.equal(f.elements.get('settings').hidden, true)
   assert.equal(f.requests.length, 1)
+})
+
+test('Escape returns from the account page before closing Settings; closing reveals invalid fields', async () => {
+  let accountOpen = true
+  const f = fixture({ back: () => {
+    const wasOpen = accountOpen; accountOpen = false; return wasOpen
+  } })
+  f.dispatch('keydown', [], { key: 'Escape' }); await settle()
+  assert.equal(accountOpen, false)
+  assert.equal(f.elements.get('settings').hidden, false)
+  accountOpen = true
+  f.terms('')
+  assert.equal(await f.settings.finish(), false)
+  assert.equal(accountOpen, false)
+  assert.equal(f.elements.get('settings').hidden, false)
+  f.terms('都市')
+  f.dispatch('keydown', [], { key: 'Escape' }); await settle()
+  assert.equal(f.elements.get('settings').hidden, true)
 })
 
 test('help reveals on hover or click without changing settings, and Escape dismisses help before Settings', async () => {

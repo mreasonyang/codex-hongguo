@@ -4,64 +4,16 @@ import { ensureFfmpeg, isFfmpegReady } from '../runtime/ffmpeg-runtime.mjs'
 import { createWriteStream, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { PlayerError } from './errors.mjs'
 import { prepareAdaptive } from './adaptive.mjs'
+import { prepareTracks } from './tracks.mjs'
+import { cdn } from './sources/network.mjs'
+import { parseId } from './sources/ids.mjs'
 
 const MB = 1024 * 1024
 const maxEpisode = 256 * MB
-const domains =
-  /(?:^|\.)(?:qznovelvod\.com|byteimg\.com|fqnovelpic\.com|douyinvod\.com|bytecdn\.cn|ibytedtos\.com|snssdk\.com|pstatp\.com)$/i
-
-export async function cdn(url, budget, timeout, redirects = 0, range) {
-  const target = new URL(url)
-  // Some first-party CDN locators still use HTTP. Upgrade before the first request.
-  if (target.protocol === 'http:') target.protocol = 'https:'
-  if (
-    target.protocol !== 'https:' ||
-    target.port ||
-    target.username ||
-    target.password ||
-    !domains.test(target.hostname)
-  )
-    throw new PlayerError('片源地址不在支持的媒体域名内')
-  const headers = {}
-  if (range) {
-    if (
-      !Number.isSafeInteger(range.offset) ||
-      range.offset < 0 ||
-      !Number.isSafeInteger(range.length) ||
-      range.length < 1 ||
-      range.length > budget ||
-      !Number.isSafeInteger(range.offset + range.length)
-    )
-      throw new PlayerError('片源字节范围无效')
-    headers.Range = 'bytes=' + range.offset + '-' + (range.offset + range.length - 1)
-  }
-  const res = await fetch(target, { headers, redirect: 'manual', signal: AbortSignal.timeout(timeout) })
-  if ([301, 302, 303, 307, 308].includes(res.status) && redirects < 3 && res.headers.get('location')) {
-    await res.body?.cancel()
-    return cdn(new URL(res.headers.get('location'), target), budget, timeout, redirects + 1, range)
-  }
-  const validRange =
-    !range ||
-    (res.status === 206 &&
-      res.headers.get('content-range')?.split('/')[0] ===
-        'bytes ' + range.offset + '-' + (range.offset + range.length - 1))
-  if (!validRange || !res.ok || !res.body || Number(res.headers.get('content-length')) > budget) {
-    await res.body?.cancel()
-    throw new PlayerError('媒体地址已失效或超过大小限制，请重试')
-  }
-  let bytes = 0
-  const limit = new Transform({
-    transform(chunk, encoding, done) {
-      bytes += chunk.length
-      done(bytes > budget ? new PlayerError('素材超过大小限制') : null, chunk)
-    },
-  })
-  return { body: res.body, limit, url: target.href }
-}
+export { cdn } from './sources/network.mjs'
 export const ffmpeg = findExecutable('ffmpeg', process.env.HONGGUO_FFMPEG)
 export function hasFfmpeg() {
   return isFfmpegReady()
@@ -132,16 +84,21 @@ export async function remux(raw, output, codec, key) {
 
 // SQLite coordinates multiple stdio processes sharing the same user cache.
 export class MediaCache {
-  constructor(store, resolve, { maxFiles = 40, maxBytes = 1024 * MB } = {}) {
+  constructor(store, resolve, { maxFiles = 40, maxBytes = 1024 * MB, revision = () => '' } = {}) {
     this.db = store.db
     this.resolve = resolve
+    this.revision = revision
     this.dir = join(store.root, 'media')
     this.maxFiles = maxFiles
     this.maxBytes = maxBytes
     mkdirSync(this.dir, { recursive: true, mode: 0o700 })
     this.db.exec(`CREATE TABLE IF NOT EXISTS media (
       id TEXT PRIMARY KEY, status TEXT, owner TEXT, expires INTEGER, accessed INTEGER, size INTEGER DEFAULT 0,
-      codec TEXT DEFAULT '', reason TEXT DEFAULT '', hold_until INTEGER DEFAULT 0)`)
+      codec TEXT DEFAULT '', reason TEXT DEFAULT '', hold_until INTEGER DEFAULT 0, revision TEXT DEFAULT '')`)
+    this.transaction(() => {
+      if (!this.db.prepare('PRAGMA table_info(media)').all().some(column => column.name === 'revision'))
+        this.db.exec("ALTER TABLE media ADD COLUMN revision TEXT DEFAULT ''")
+    })
     for (const file of readdirSync(this.dir)) {
       if (
         /^[a-f0-9-]+\.part\.(source|mp4)$/.test(file) &&
@@ -162,7 +119,7 @@ export class MediaCache {
     }
   }
   path(id) {
-    if (!/^hg-[0-9]{1,32}$/.test(id)) throw new PlayerError('无效分集')
+    parseId(id, 'episode')
     return join(this.dir, id + '.mp4')
   }
   hold(id) {
@@ -173,16 +130,18 @@ export class MediaCache {
   prepare(id, retry = false) {
     const file = this.path(id),
       now = Date.now(),
-      owner = randomUUID()
+      owner = randomUUID(), revision = this.revision(id)
     const result = this.transaction(() => {
       const row = this.db.prepare('SELECT * FROM media WHERE id=?').get(id)
-      if (row?.status === 'ready' && existsSync(file)) {
+      const current = row?.revision === revision
+      if (row && !current) rmSync(file, { force: true })
+      if (current && row.status === 'ready' && existsSync(file)) {
         this.hold(id)
         return { status: 'ready', codec: row.codec }
       }
-      if (row?.status === 'error' && !retry && row.expires > now)
+      if (current && row.status === 'error' && !retry && row.expires > now)
         return { status: 'error', reason: row.reason }
-      if (row?.status === 'working' && row.expires > now) return { status: 'preparing' }
+      if (current && row.status === 'working' && row.expires > now) return { status: 'preparing' }
       if (
         this.db.prepare("SELECT count(*) AS n FROM media WHERE status='working' AND expires>?").get(now).n >=
         2
@@ -190,58 +149,55 @@ export class MediaCache {
         return { status: 'preparing' }
       this.db
         .prepare(
-          `INSERT INTO media(id,status,owner,expires,accessed) VALUES(?,'working',?,?,?)
-        ON CONFLICT(id) DO UPDATE SET status='working', owner=excluded.owner,expires=excluded.expires,accessed=excluded.accessed`,
+          `INSERT INTO media(id,status,owner,expires,accessed,revision) VALUES(?,'working',?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET status='working', owner=excluded.owner,expires=excluded.expires,accessed=excluded.accessed,revision=excluded.revision`,
         )
-        .run(id, owner, now + 600000, now)
+        .run(id, owner, now + 600000, now, revision)
       return null
     })
     if (result) return result
-    this.build(id, owner).catch(() => {}) // State is published to all pollers by build.
+    this.build(id, owner, revision).catch(() => {}) // State is published to all pollers by build.
     return { status: 'preparing' }
   }
-  async build(id, owner) {
+  async build(id, owner, revision) {
     const raw = join(this.dir, owner + '.part.source'),
       output = join(this.dir, owner + '.part.mp4')
     try {
-      const { playback, contentKey } = await this.resolve(id.slice(3))
-      const streams = (playback.streams || []).filter((s) => s.url)
-      const file = streams.find((s) => !s.hls && !s.dash)
-      const key = contentKey?.key
-      const candidates = [
-        file && (file.protected || playback.protected) ? file : undefined,
-        streams.find((s) => s.hls),
-        streams.find((s) => s.dash),
-        file,
-      ].filter(Boolean)
-      let codec,
+      let codec, lastError
+      for (let authorizationAttempt = 0; authorizationAttempt < 2; authorizationAttempt++) {
+        const descriptor = await this.resolve(id)
+        const fetchMedia = descriptor.fetchMedia || cdn
         lastError = new PlayerError('该集暂未提供可播放的片源')
-      for (const stream of new Set(candidates)) {
-        codec = String(stream.codec || 'MP4')
-          .replace(/[^\w.-]/g, '')
-          .slice(0, 24)
-        try {
-          if (stream.hls || stream.dash) {
-            if (stream.protected || playback.protected) throw new PlayerError('该分段片源需要单文件播放授权')
-            mkdirSync(raw, { mode: 0o700 })
-            await prepareAdaptive(stream.url, raw, output, { cdn, run: runFfmpeg, codec, budget: maxEpisode })
-          } else {
-            if ((playback.protected || stream.protected) && !/^[a-f0-9]{32}$/i.test(key || ''))
-              throw new PlayerError('片源未提供可用的播放授权')
-            const { body, limit } = await cdn(stream.url, maxEpisode, 60000)
-            await pipeline(body, limit, createWriteStream(raw, { mode: 0o600, flags: 'wx' }))
-            await remux(raw, output, codec, key)
-          }
-          lastError = null
-          break
-        } catch (error) {
-          lastError = error
-          rmSync(output, { force: true })
-        } finally {
-          rmSync(raw, { recursive: true, force: true })
+        for (const stream of descriptor.candidates || []) {
+          codec = String(stream.codec || 'MP4').replace(/[^\w.-]/g, '').slice(0, 24)
+          try {
+            if (stream.kind === 'hls' || stream.kind === 'dash') {
+              if (stream.encryption) throw new PlayerError('该分段片源需要单文件播放授权')
+              mkdirSync(raw, { mode: 0o700 })
+              await prepareAdaptive(stream.url, raw, output, { cdn: fetchMedia, run: runFfmpeg, codec, budget: maxEpisode })
+            } else if (stream.kind === 'tracks') {
+              mkdirSync(raw, { mode: 0o700 })
+              await prepareTracks(stream, raw, output, { cdn: fetchMedia, run: runFfmpeg, budget: maxEpisode })
+            } else if (stream.kind === 'file') {
+              const key = stream.encryption?.key
+              if (stream.encryption && (stream.encryption.kind !== 'cenc' || !/^[a-f0-9]{32}$/i.test(key || '')))
+                throw new PlayerError('片源未提供可用的播放授权')
+              const { body, limit } = await fetchMedia(stream.url, maxEpisode, 60000)
+              await pipeline(body, limit, createWriteStream(raw, { mode: 0o600, flags: 'wx' }))
+              await remux(raw, output, codec, key)
+            } else throw new PlayerError('不支持的媒体类型')
+            lastError = null
+            break
+          } catch (error) { lastError = error; rmSync(output, { force: true }) }
+          finally { rmSync(raw, { recursive: true, force: true }) }
         }
+        if (!lastError || lastError.code !== 'MEDIA_EXPIRED' || authorizationAttempt) break
       }
       if (lastError) throw lastError
+      if (this.revision(id) !== revision) {
+        this.db.prepare('DELETE FROM media WHERE id=? AND owner=?').run(id, owner)
+        return
+      }
       const size = statSync(output).size
       this.transaction(() => {
         if (this.db.prepare('SELECT owner FROM media WHERE id=?').get(id)?.owner !== owner) return
