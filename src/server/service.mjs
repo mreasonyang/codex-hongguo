@@ -38,7 +38,7 @@ export const schemas = {
   }),
   get_cover: z.object({ seriesId: dramaId }),
   get_episodes: z.object({ seriesId: dramaId, cursor }),
-  set_source: z.object({ source, remember: z.boolean().optional() }),
+  set_source: z.object({ source, remember: z.boolean().optional(), confirmNsfw: z.literal(true).optional() }),
   get_history: z.object({ seriesId: dramaId.optional(), episodeId: episodeId.optional(), source: source.optional() }),
   save_progress: z.object({
     seriesId: dramaId,
@@ -78,7 +78,6 @@ export const schemas = {
     hoverDecoyEnabled: z.boolean().optional(),
     coverStyle: z.enum(['random', 'tasks', 'document', 'report', 'minutes']).optional(),
     volume: z.number().positive().max(1).optional(),
-    enabledProviders: z.array(source).min(1).max(32).refine(ids => ids.includes('hongguo')).optional(),
   }),
   read_panel_chunk: z.object({
     episodeId,
@@ -133,15 +132,17 @@ export class Service {
   async waitingPicks(sessionId, turnId, inView, eligible, preferred) {
     if (!eligible()) return { items: [] }
     const pinned = this.store.turnPicks(sessionId, turnId)
-    const enabled = pick => {
+    const available = pick => {
       try {
         const source = parseId(pick.id).source
-        return !this.catalog.sources?.fallback || this.catalog.sources.fallback(source) === source
+        return (!this.catalog.sources?.fallback || this.catalog.sources.fallback(source) === source) &&
+          (!this.catalog.sources?.requiresConfirmation?.(source) || preferred === source)
       } catch { return false }
     }
-    if (pinned.length) return { items: pinned.filter(enabled) }
+    if (pinned.length) return { items: pinned.filter(available) }
     const source = this.store.recommendationSource(sessionId, turnId, preferred)
     if (this.catalog.sources?.fallback && this.catalog.sources.fallback(source) !== source) return { items: [] }
+    if (this.catalog.sources?.requiresConfirmation?.(source) && preferred !== source) return { items: [] }
     const [feed, resume] = await Promise.all([
       this.catalog.waitingRecommendations(source).catch(() => []), this.resumePick(source),
     ])
@@ -232,6 +233,8 @@ export class Service {
           if (!this.store.offerable(scope.sessionId, card.turnId)) throw new PlayerError('这条推荐已结束')
           const pick = this.store.turnPicks(scope.sessionId, card.turnId).find(item => item.id === p.seriesId)
           if (!pick) throw new PlayerError('请从本轮推荐中选剧', 403)
+          if (this.catalog.sources?.requiresConfirmation?.(parseId(pick.id).source) && scope.source !== parseId(pick.id).source)
+            throw new PlayerError('该片源包含 NSFW 内容，请确认后切换', 403)
           this.store.markPicksShown(scope.sessionId, card.turnId, () => this.store.offerable(scope.sessionId, card.turnId))
           card.selected = pick
           scope.source = parseId(pick.id).source
@@ -300,6 +303,8 @@ export class Service {
       case 'set_source':
         await this.catalog.sources?.ready
         this.catalog.sources?.get(p.source)
+        if (p.source !== scope.source && this.catalog.sources?.requiresConfirmation?.(p.source) && !p.confirmNsfw)
+          throw new PlayerError('该片源包含 NSFW 内容，请确认后切换', 403)
         if (p.remember !== false) {
           if (!this.store.persistent) throw new PlayerError('本机设置目录不可写', 503)
           this.store.setPreferences({ defaultSource: p.source })
@@ -380,14 +385,12 @@ export class Service {
       case 'get_providers':
         await this.catalog.sources?.ready
         return { items: this.catalog.sources?.list() ?? [
-          { id: 'hongguo', name: '红果', available: true, enabled: true, configurable: true },
+          { id: 'hongguo', name: '红果', available: true, nsfw: false },
         ] }
       case 'set_preferences': {
         if (!this.store.persistent) throw new PlayerError('本机设置目录不可写', 503)
-        if (p.enabledProviders) this.catalog.sources?.validateEnabled(p.enabledProviders)
         const previous = this.store.preferences()
         const settings = this.store.setPreferences(p)
-        if (p.enabledProviders) await this.syncProviders(scope)
         if (JSON.stringify(previous.searchTerms) !== JSON.stringify(settings.searchTerms)) {
           this.catalog.feed = null
           this.catalog.refresh = null
@@ -417,6 +420,8 @@ export class Service {
       case 'create_browser_pairing': {
         if (browser) throw new PlayerError('请从会话面板打开分屏', 403)
         if (p.seriesId && p.episodeId && !matchesSeries(p.seriesId, p.episodeId)) throw new PlayerError('剧目与分集来源不匹配')
+        if (p.seriesId && this.catalog.sources?.requiresConfirmation?.(parseId(p.seriesId).source) && scope.source !== parseId(p.seriesId).source)
+          throw new PlayerError('该片源包含 NSFW 内容，请确认后切换', 403)
         const state = p.follow && this.store.state(scope.sessionId, p.turnId)
         if (p.follow && (!p.turnId || state.state !== 'submitted'))
           throw new PlayerError('当前回合无法绑定，请选择手动播放')

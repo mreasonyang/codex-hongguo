@@ -30,7 +30,6 @@ try {
   const tools = (await client.listTools()).tools
   assert.ok(names.every(name => tools.some(tool => tool.name === name && tool._meta.ui.visibility.join(',') === 'app')))
   report.checks.push('auth-tools-app-only')
-  await client.callTool({ name: 'set_preferences', arguments: { panel, enabledProviders: ['hongguo', 'bilibili'] } })
   assert.equal((await call('get_provider_auth')).status, 'signed-out')
   stage = 'generate-real-qr'
   const qr = await call('start_provider_login')
@@ -46,7 +45,6 @@ try {
   assert.equal((await call('logout_provider')).status, 'signed-out')
   report.checks.push('real-qr-cancelled', 'local-logout')
   stage = 'disable-provider'
-  await client.callTool({ name: 'set_preferences', arguments: { panel, enabledProviders: ['hongguo'] } })
   const disabled = await client.callTool({ name: 'start_provider_login', arguments: { panel, source: 'bilibili' } })
   assert.equal(disabled.isError, true)
   report.checks.push('disabled-provider-cannot-login')

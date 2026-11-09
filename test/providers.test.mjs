@@ -45,83 +45,121 @@ function fixtures(create = id => adapter(id)) {
     manifest: { apiVersion: 1, id, name: id, version: '1.0.0' }, createProvider: context => create(id, context),
   }))
 }
-test('only Hongguo starts by default; enabling, stopping and restarting a provider owns its lifecycle', async t => {
+test('all discovered providers start by default and own their shutdown lifecycle', async t => {
   const root = await temporary(t), created = [], disposed = []
   const registry = new ProviderRegistry(root, { builtins: fixtures((id, context) => {
-    created.push([id, context.signal])
-    return { ...adapter(id), dispose() { disposed.push(id) } }
+    created.push([id, context.signal]); return { ...adapter(id), dispose() { disposed.push(id) } }
   }) })
   await registry.ready; defer(t, () => registry.dispose())
-  assert.deepEqual(created.map(([id]) => id), ['hongguo'])
-  assert.equal(registry.list().find(p => p.id === 'demo').enabled, false)
-  assert.throws(() => registry.get('demo'), /片源插件不可用/)
-  await registry.configure(['hongguo', 'demo'])
+  assert.deepEqual(created.map(([id]) => id), ['hongguo', 'demo'])
   assert.equal(registry.get('demo').id, 'demo')
-  await registry.configure(['hongguo'])
-  assert.deepEqual(disposed, ['demo'])
-  assert.equal(created[1][1].aborted, true)
-  assert.throws(() => registry.get('demo'))
-  await registry.configure(['hongguo', 'demo'])
-  assert.deepEqual(created.map(([id]) => id), ['hongguo', 'demo', 'demo'])
-  assert.equal(created[2][1].aborted, false)
+  assert.equal(registry.list().find(p => p.id === 'demo').nsfw, false)
+  await registry.dispose()
+  assert.deepEqual(disposed.sort(), ['demo', 'hongguo'])
+  assert.ok(created.every(([,signal]) => signal.aborted))
 })
-test('discovery does not import unconfigured local providers', async t => {
+test('configured directories load local entries by default and isolate broken entries', async t => {
   const root = await temporary(t), directory = join(root, 'plugins'); await mkdir(directory)
-  await install(directory, 'unselected', {}, 'throw Error("entry must remain unloaded")')
+  await install(directory, 'broken', {}, 'throw Error("entry failure detail")')
+  await install(directory, 'disabled', { enabled: false }, 'throw Error("must not import")')
   const registry = new ProviderRegistry(root, { directory }); await registry.ready
   defer(t, () => registry.dispose())
-  assert.equal(registry.list().find(p => p.id === 'unselected').code, 'DISABLED')
-  await registry.configure(['hongguo', 'unselected'])
-  assert.equal(registry.list().find(p => p.id === 'unselected').code, 'LOAD_FAILED')
+  assert.equal(registry.list().find(p => p.id === 'broken').code, 'LOAD_FAILED')
+  assert.equal(registry.list().find(p => p.id === 'disabled').code, 'DISABLED')
   assert.equal(registry.get('hongguo').id, 'hongguo')
-  assert.ok(!JSON.stringify(registry.list()).includes('entry must'))
+  assert.ok(!JSON.stringify(registry.list()).includes('entry failure detail'))
 })
-test('provider settings persist, sync between services, reject old cached media and keep progress', async t => {
+test('legacy enable lists are ignored, selected sources persist and removed-source grants are revoked', async t => {
   const root = await temporary(t), store = new Store(root), peer = new Store(root)
   defer(t, () => { store.close(); peer.close() })
+  store.db.prepare('INSERT OR REPLACE INTO player_preferences VALUES(1,?)').run(JSON.stringify({ enabledProviders: ['hongguo'] }))
   const make = database => {
-    const sources = new ProviderRegistry(root, { builtins: fixtures(), enabled: database.preferences().enabledProviders })
-    defer(t, () => sources.dispose())
+    const sources = new ProviderRegistry(root, { builtins: fixtures() }); defer(t, () => sources.dispose())
     const catalog = new Catalog(database, { sources }); catalog.ffmpeg = true
     const service = new Service(database, catalog), scope = service.panel(service.open({ threadId: 'A' }).panel)
     return { sources, catalog, service, scope }
   }
   const a = make(store), b = make(peer)
-  assert.deepEqual((await a.service.call(a.scope, 'get_providers', {})).items.filter(p => p.available).map(p => p.id), ['hongguo'])
-  await assert.rejects(a.service.call(a.scope, 'set_source', { source: 'demo' }))
-  await a.service.call(a.scope, 'set_preferences', { enabledProviders: ['hongguo', 'demo'] })
+  assert.deepEqual((await a.service.call(a.scope, 'get_providers', {})).items.filter(p => p.available).map(p => p.id), ['hongguo', 'demo'])
+  await assert.rejects(a.service.call(a.scope, 'set_preferences', { enabledProviders: ['hongguo'] }))
   await b.service.call(b.scope, 'set_source', { source: 'demo' })
   await b.service.call(b.scope, 'get_episodes', { seriesId: 'p.demo.s.MQ' })
   b.scope.grants = new Set(['p.demo.e.MQ']); b.scope.streams = new Map([['p.demo.e.MQ', 'old']]); b.scope.playing = 'p.demo.e.MQ'
   b.scope.selection = { seriesId: 'p.demo.s.MQ', episodeId: 'p.demo.e.MQ' }
   b.scope.waiting = { selected: { id: 'p.demo.s.MQ', title: 'Old pick' } }
   await b.service.call(b.scope, 'save_progress', { seriesId: 'p.demo.s.MQ', episodeId: 'p.demo.e.MQ', title: 'Kept', label: '1', positionMs: 1234, durationMs: 5000 })
-  const restarted = make(peer)
-  await restarted.sources.ready
-  assert.equal(restarted.sources.get('demo').id, 'demo')
-  await a.service.call(a.scope, 'set_preferences', { enabledProviders: ['hongguo'] })
+  const restarted = make(peer); await restarted.sources.ready
+  assert.equal(restarted.scope.source, 'demo')
+  b.sources.adapters.delete('demo')
   await b.service.call(b.scope, 'get_providers', {})
   assert.equal(b.scope.source, 'hongguo'); assert.equal(b.scope.allowed.size, 0)
   assert.equal(b.scope.grants.size, 0); assert.equal(b.scope.streams.size, 0)
   assert.equal(b.scope.selection, undefined); assert.equal(b.scope.waiting.selected, null)
-  assert.equal(store.preferences().defaultSource, 'hongguo')
+  assert.equal((await b.service.call(b.scope, 'get_preferences', {})).defaultSource, 'hongguo')
   await assert.rejects(b.service.call(b.scope, 'get_episodes', { seriesId: 'p.demo.s.MQ' }))
-  assert.throws(() => b.catalog.prepare('p.demo.e.MQ', true))
   assert.equal(peer.history(undefined, undefined, 30, 'demo')[0].positionMs, 1234)
-  await assert.rejects(a.service.call(a.scope, 'set_preferences', { enabledProviders: ['hongguo', 'missing'] }))
-  await assert.rejects(a.service.call(a.scope, 'set_preferences', { enabledProviders: ['demo'] }))
-  assert.deepEqual(peer.preferences().enabledProviders, ['hongguo'])
+  assert.equal('enabledProviders' in peer.preferences(), false)
+})
+test('NSFW switching requires explicit confirmation each time and never becomes an automatic default', async t => {
+  const root = await temporary(t), store = new Store(root); defer(t, () => store.close())
+  const sources = new ProviderRegistry(root, { builtins: fixtures().map(plugin => ({ ...plugin,
+    manifest: { ...plugin.manifest, nsfw: plugin.manifest.id === 'demo' } })) })
+  defer(t, () => sources.dispose())
+  const catalog = new Catalog(store, { sources }), service = new Service(store, catalog)
+  const scope = service.panel(service.open({ threadId: 'A' }).panel)
+  scope.allowed = new Set(['hg-1']); scope.playing = 'hg-1'
+  await assert.rejects(service.call(scope, 'set_source', { source: 'demo' }), /NSFW/)
+  await assert.rejects(service.call(scope, 'set_source', { source: 'demo', confirmNsfw: false }))
+  assert.equal(scope.source, 'hongguo'); assert.equal(scope.playing, 'hg-1')
+  assert.ok(scope.allowed.has('hg-1')); assert.equal(store.preferences().defaultSource, 'hongguo')
+  store.event({ session_id: 'A', turn_id: 'nsfw-turn', hook_event_name: 'UserPromptSubmit' })
+  store.db.prepare('INSERT INTO turn_picks VALUES(?,?,?,?,?)').run('A', 'nsfw-turn', JSON.stringify([{ id: 'p.demo.s.MQ', title: 'Sensitive fixture' }]), null, 1)
+  assert.deepEqual((await service.waitingPicks('A', 'nsfw-turn', true, () => true, 'hongguo')).items, [])
+  scope.waiting = { turnId: 'nsfw-turn', selected: null }
+  await assert.rejects(service.call(scope, 'select_waiting_pick', { seriesId: 'p.demo.s.MQ' }), /NSFW/)
+  await assert.rejects(service.call(scope, 'create_browser_pairing', { follow: false, seriesId: 'p.demo.s.MQ', episodeId: 'p.demo.e.MQ' }), /NSFW/)
+  assert.equal(scope.source, 'hongguo'); assert.equal(scope.waiting.selected, null)
+  await service.call(scope, 'set_source', { source: 'demo', confirmNsfw: true })
+  assert.equal(scope.source, 'demo'); assert.equal(store.preferences().defaultSource, 'demo')
+  assert.equal((await service.waitingPicks('A', 'nsfw-turn', true, () => true, scope.source)).items.length, 1)
+  assert.equal(service.open({ threadId: 'B' }).source, 'hongguo')
+  assert.equal((await service.call(scope, 'get_preferences', {})).defaultSource, 'hongguo')
+  await service.call(scope, 'set_source', { source: 'hongguo' })
+  await assert.rejects(service.call(scope, 'set_source', { source: 'demo' }), /NSFW/)
+  assert.equal(scope.source, 'hongguo')
+})
+test('invalid NSFW metadata rejects a local plugin before its entry runs', async t => {
+  const root = await temporary(t), directory = join(root, 'plugins'); await mkdir(directory)
+  await install(directory, 'bad-nsfw', { nsfw: 'false' }, 'throw Error("must not import")')
+  const registry = new ProviderRegistry(root, { directory }); await registry.ready; defer(t, () => registry.dispose())
+  assert.throws(() => registry.get('bad-nsfw'))
+  assert.ok(registry.list().some(p => p.code === 'LOAD_FAILED'))
+  assert.equal(registry.list().find(p => p.id === 'hongguo').nsfw, false)
+  assert.equal(registry.list().find(p => p.id === 'bilibili').nsfw, false)
+})
+
+test('version 3 preference migration removes the old enable list and preserves source, preferences and progress', async t => {
+  const root = await temporary(t)
+  let store = new Store(root)
+  store.setPreferences({ defaultSource: 'bilibili', volume: 0.43, coverStyle: 'minutes' })
+  store.save({ seriesId: 'hg-1', episodeId: 'hg-11', title: 'Kept', label: '1', positionMs: 1234, durationMs: 5000 })
+  const preferences = store.preferences(), history = store.history()
+  store.db.prepare('UPDATE player_preferences SET body=? WHERE id=1').run(JSON.stringify({ ...preferences, enabledProviders: ['hongguo'] }))
+  store.db.exec('PRAGMA user_version=3'); store.close()
+  store = new Store(root); defer(t, () => store.close())
+  assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 4)
+  assert.deepEqual(store.preferences(), preferences)
+  assert.deepEqual(store.history(), history)
+  assert.equal('enabledProviders' in JSON.parse(store.db.prepare('SELECT body FROM player_preferences WHERE id=1').get().body), false)
 })
 test('local providers load through the same contract, retain opaque IDs and dispose cleanly', async t => {
   const root = await temporary(t), directory = join(root, 'plugins'); await mkdir(directory)
   await install(directory, 'local')
   const registry = new ProviderRegistry(root, { directory }); await registry.ready
-  await registry.configure(['hongguo', 'local'])
   const provider = registry.get('local')
-  assert.equal(registry.list().filter(p => p.available).length, 2)
+  assert.equal(registry.list().filter(p => p.available).length, 3)
   assert.equal(registry.get('hongguo').id, 'hongguo')
   const store = new Store(join(root, 'data')); defer(t, () => store.close())
-  store.setPreferences({ enabledProviders: ['hongguo', 'local'] })
   const catalog = new Catalog(store, { sources: registry }); catalog.ffmpeg = true
   const list = await catalog.list({ source: 'local', query: 'fixture' })
   assert.equal(parseId(list.items[0].id).id, 'series/中文')
@@ -147,8 +185,8 @@ test('invalid, duplicate, disabled, escaping and broken plugins leave Hongguo op
   await install(directory, 'incomplete', {}, 'export function createProvider(){return {id:"incomplete"}}')
   const linked = await install(directory, 'linked')
   await rm(join(linked, 'index.mjs')); await symlink(join(directory, 'broken/index.mjs'), join(linked, 'index.mjs'))
-  const registry = new ProviderRegistry(root, { directory, enabled: ['hongguo', 'broken', 'incomplete'] }); await registry.ready
-  assert.deepEqual(registry.list().filter(p => p.available).map(p => p.id), ['hongguo'])
+  const registry = new ProviderRegistry(root, { directory }); await registry.ready
+  assert.deepEqual(registry.list().filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili'])
   assert.equal(registry.get('hongguo') instanceof HongguoSource, true)
   assert.ok(!JSON.stringify(registry.list()).includes('private diagnostic'))
   assert.ok(!JSON.stringify(registry.list()).includes(root))
@@ -164,7 +202,7 @@ test('an unavailable local directory is isolated and a removed default falls bac
 })
 test('removed sources cannot reopen through saved defaults or stale recommendations', async t => {
   const root = await temporary(t), store = new Store(root); defer(t, () => store.close())
-  store.setPreferences({ enabledProviders: ['hongguo', 'removed'], defaultSource: 'removed' })
+  store.setPreferences({ defaultSource: 'removed' })
   const catalog = new Catalog(store), service = new Service(store, catalog)
   defer(t, () => catalog.sources.dispose())
   const scope = service.panel(service.open({ threadId: 'A' }).panel)
@@ -219,7 +257,6 @@ test('network policies validate every redirect, preserve ranges and bound unknow
 })
 test('source changes preserve another panel, its history and fixed per-turn recommendations', async t => {
   const root = await temporary(t), store = new Store(root); defer(t, () => store.close())
-  store.setPreferences({ enabledProviders: ['hongguo', 'demo'] })
   const providers = new ProviderRegistry(root, { builtins: ['hongguo', 'demo'].map(id => ({
     manifest: { apiVersion: 1, id, name: id, version: '1.0.0' }, createProvider: () => adapter(id),
   })) })
@@ -274,7 +311,7 @@ test('a version-one database keeps legacy Hongguo progress, preferences and reco
     store.saveWaitingFeed([{ id: 'p.demo.s.MQ', title: 'Other source' }], Date.now(), 'demo')
     assert.equal(store.waitingFeed(false, 'hongguo')[0].id, 'hg-2')
     assert.equal(store.waitingFeed(false, 'demo')[0].id, 'p.demo.s.MQ')
-    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 3)
+    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 4)
   } finally { store.close() }
   const reopened = new Store(root)
   try { assert.equal(reopened.history()[0].positionMs, 12345) } finally { reopened.close() }
@@ -297,11 +334,11 @@ for (const branch of ['main', 'provider']) test(`version-two ${branch} database 
   const feed = [{ id: 'hg-3', title: 'Legacy recommendation' }]
   store.saveWaitingFeed(feed)
   store.save({ seriesId: 'hg-3', episodeId: 'hg-31', title: 'Legacy', label: '1', positionMs: 13000, durationMs: 60000 })
-  store.setPreferences({ volume: 0.43, hoverDecoyEnabled: true, coverStyle: 'minutes', enabledProviders: ['hongguo', 'demo'], defaultSource: 'demo' })
+  store.setPreferences({ volume: 0.43, hoverDecoyEnabled: true, coverStyle: 'minutes', defaultSource: 'demo' })
   store.saveWaitingFeed([{ id: 'p.demo.s.MQ', title: 'Plugin recommendation' }], Date.now(), 'demo')
   const history = store.history()
   if (branch === 'main') {
-    const { enabledProviders, defaultSource, ...legacy } = store.preferences()
+    const { defaultSource, ...legacy } = store.preferences()
     store.db.prepare('UPDATE player_preferences SET body=? WHERE id=1').run(JSON.stringify(legacy))
     store.db.exec('DROP TABLE source_recommendation_feed; DROP TABLE recommendation_source;')
   }
@@ -311,7 +348,7 @@ for (const branch of ['main', 'provider']) test(`version-two ${branch} database 
   store.close()
   for (let i = 0; i < 2; i++) {
     store = new Store(root)
-    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 3)
+    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 4)
     assert.deepEqual(store.preferences(), preferences)
     assert.deepEqual(store.history(), history)
     assert.deepEqual(store.waitingFeed(), feed)

@@ -80,16 +80,21 @@ export class Store {
           WHERE json_type(body, '$.decoyUrl') IS NOT NULL OR json_type(body, '$.decoyFrameUrl') IS NOT NULL;
         PRAGMA user_version=3; COMMIT;`)
     }
+    if (this.db.prepare('PRAGMA user_version').get().user_version < 4) {
+      this.db.exec(`BEGIN IMMEDIATE;
+        UPDATE player_preferences SET body=json_remove(body, '$.enabledProviders');
+        PRAGMA user_version=4; COMMIT;`)
+    }
   }
   preferences() {
     const row = this.db.prepare('SELECT body FROM player_preferences WHERE id=1').get()
     const defaults = {
       autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
       defaultMuted: true, volume: 0.7, hoverDecoyEnabled: false, coverStyle: 'random',
-      searchTerms: ['总裁', '重生', '逆袭'], defaultSource: 'hongguo', enabledProviders: ['hongguo'],
+      searchTerms: ['总裁', '重生', '逆袭'], defaultSource: 'hongguo',
     }
     const settings = row ? { ...defaults, ...JSON.parse(row.body) } : defaults
-    if (!settings.enabledProviders.includes(settings.defaultSource)) settings.defaultSource = 'hongguo'
+    delete settings.enabledProviders
     return settings
   }
   setupDismissed() {
@@ -103,7 +108,7 @@ export class Store {
     return this.transaction(() => {
       const previous = this.preferences()
       const updated = { ...previous, ...settings }
-      if (!updated.enabledProviders.includes(updated.defaultSource)) updated.defaultSource = 'hongguo'
+      delete updated.enabledProviders
       this.db.prepare('INSERT OR REPLACE INTO player_preferences VALUES(1,?)').run(JSON.stringify(updated))
       if (JSON.stringify(previous.searchTerms) !== JSON.stringify(updated.searchTerms)) {
         this.db.exec('DELETE FROM recommendation_feed')

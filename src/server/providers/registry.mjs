@@ -10,9 +10,9 @@ import { PlayerError } from '../errors.mjs'
 
 const methods = ['listSeries', 'getSeries', 'listEpisodes', 'getCover', 'resolvePlayback']
 export const builtins = [
-  { manifest: { apiVersion: 1, id: 'hongguo', name: '红果', version: '1.0.0' }, createProvider: ctx => new HongguoSource(ctx.root) },
+  { manifest: { apiVersion: 1, id: 'hongguo', name: '红果', version: '1.0.0', nsfw: false }, createProvider: ctx => new HongguoSource(ctx.root) },
   { manifest: { apiVersion: 1, id: 'bilibili', name: '哔哩哔哩', version: '1.0.0',
-    authentication: 'qrcode',
+    authentication: 'qrcode', nsfw: false,
     queryMode: 'search', queryHint: '搜索番名，也可粘贴番剧链接', emptyMessage: '暂时没有找到番剧，请换个关键词试试',
     network: { api: ['api.bilibili.com', 'passport.bilibili.com', 'passport.biligame.com'], media: ['*.bilivideo.com', '*.bilivideo.cn', '*.bilivideo.net', '*.hdslb.com'] } },
     createProvider: ctx => new BilibiliSource(ctx, { cookie: process.env.HONGGUO_BILIBILI_COOKIE || '' }) },
@@ -29,6 +29,8 @@ function validate(manifest) {
     if (manifest[key] !== undefined && (typeof manifest[key] !== 'string' || manifest[key].length > 160)) throw Error('MANIFEST')
   if (manifest.queryMode !== undefined && !['search', 'link'].includes(manifest.queryMode)) throw Error('MANIFEST')
   if (manifest.authentication !== undefined && manifest.authentication !== 'qrcode') throw Error('MANIFEST')
+  for (const key of ['nsfw', 'enabled'])
+    if (manifest[key] !== undefined && typeof manifest[key] !== 'boolean') throw Error('MANIFEST')
   return manifest
 }
 function allows(hosts = []) {
@@ -45,7 +47,7 @@ export class ProviderRegistry {
   constructor(root, options = {}) {
     this.root = root
     this.adapters = new Map(); this.status = []; this.controllers = new Map(); this.fetchers = new Map()
-    this.definitions = new Map(); this.enabled = new Set(options.enabled ?? ['hongguo'])
+    this.definitions = new Map()
     const pending = []
     for (const plugin of options.builtins || builtins) {
       const task = this.register(plugin.manifest, plugin.createProvider, true)
@@ -90,8 +92,8 @@ export class ProviderRegistry {
       ...(manifest.queryMode ? { queryMode: manifest.queryMode } : {}),
       ...(manifest.emptyMessage ? { emptyMessage: manifest.emptyMessage } : {}),
       ...(manifest.authentication ? { authentication: manifest.authentication } : {}),
-      enabled: this.enabled.has(manifest.id) && manifest.enabled !== false,
-      configurable: manifest.enabled !== false, available: false, code: 'DISABLED' }
+      nsfw: manifest.nsfw ?? false,
+      enabled: manifest.enabled !== false, available: false, code: 'DISABLED' }
     const definition = { manifest, factory, builtin, status }
     this.definitions.set(manifest.id, definition); this.status.push(status)
     if (status.enabled) return this.start(definition)
@@ -149,38 +151,14 @@ export class ProviderRegistry {
     }
   }
   list() { return this.status.map(row => ({ ...row })) }
-  validateEnabled(ids) {
-    if (!Array.isArray(ids) || !ids.includes('hongguo') || ids.length > 32 ||
-        ids.some(id => !this.definitions.get(id)?.status.configurable))
-      throw new PlayerError('请选择已安装的片源，并保留红果', 400)
-  }
-  configure(ids) {
-    this.configuring = (this.configuring ?? Promise.resolve()).catch(() => {}).then(async () => {
-      await this.ready
-      this.enabled = new Set(ids)
-      for (const definition of this.definitions.values()) {
-        const { manifest, status } = definition
-        const enabled = this.enabled.has(manifest.id) && status.configurable
-        if (status.enabled === enabled) continue
-        status.enabled = enabled
-        if (enabled) await this.start(definition)
-        else {
-          const adapter = this.adapters.get(manifest.id)
-          this.adapters.delete(manifest.id); this.fetchers.delete(manifest.id)
-          this.controllers.get(manifest.id)?.abort(); this.controllers.delete(manifest.id)
-          Object.assign(status, { available: false, code: 'DISABLED' })
-          if (adapter) await bounded(Promise.resolve().then(() => adapter.dispose?.()), 1000).catch(() => {})
-        }
-      }
-    })
-    return this.configuring
-  }
   get(id = 'hongguo') {
     const adapter = this.adapters.get(sourceId(id))
     if (!adapter) throw new PlayerError('片源插件不可用，请切换其他片源', 503)
     return adapter
   }
   fallback(id) { return this.adapters.has(id) ? id : 'hongguo' }
+  requiresConfirmation(id) { return this.definitions.get(id)?.status.nsfw === true }
+  defaultSource(id) { return this.requiresConfirmation(id) ? 'hongguo' : this.fallback(id) }
   forId(id, kind) { const ref = parseId(id, kind); return { adapter: this.get(ref.source), ...ref } }
   async resolvePlayback(id) {
     await this.ready
@@ -190,7 +168,6 @@ export class ProviderRegistry {
   }
   async dispose() {
     await this.ready
-    await this.configuring?.catch(() => {})
     for (const controller of this.controllers.values()) controller.abort()
     await Promise.allSettled([...this.adapters.values()].map(adapter => bounded(Promise.resolve().then(() => adapter.dispose?.()), 1000)))
   }

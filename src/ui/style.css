@@ -679,12 +679,12 @@ h1 {
 .sourceDot[data-source='bilibili'] { background: #fb7299; }
 .sourceButton[data-source='bilibili'] .mark { background: #fb7299; }
 .sourceMenu .i { width: 13px; height: 13px; color: var(--text-2); }
-.providerSettings { min-width: 0; margin: 0 0 10px; padding: 0 0 10px; border: 0; border-bottom: 1px solid var(--line); }
-.providerSettings legend { margin-bottom: 4px; font-weight: 600; font-size: 12px; }
-#providerSettings { display: grid; gap: 6px; margin: 4px 0 8px; }
-.providerSettings .switchRow { min-height: 28px; }
-.providerSettings .switchRow > span { display: flex; align-items: center; gap: 8px; }
-.providerSettings small { color: var(--text-3); font-size: 11px; font-weight: 400; }
+.sourceConfirmation { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: rgb(0 0 0 / .28); }
+.sourceConfirmationCard { box-sizing: border-box; width: min(100%, 360px); padding: 20px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--raised); box-shadow: var(--_shadow); }
+.sourceConfirmationCard h2 { margin: 0 0 12px; font-size: 17px; }
+.sourceConfirmationCard strong { overflow-wrap: anywhere; }
+.sourceConfirmationCard p { color: var(--text-2); line-height: 1.6; }
+.sourceConfirmationActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 .tools {
   display: flex;
   gap: 2px;

@@ -12,7 +12,6 @@ export type Context = {
 export type SourceId = string
 export type Preferences = {
   defaultSource: SourceId
-  enabledProviders: SourceId[]
   autoPrompt: boolean
   autoplayNext: boolean
   autoPauseOnFinish: boolean

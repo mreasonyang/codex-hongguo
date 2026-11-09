@@ -9,6 +9,7 @@ import { pickLabel, showWaitingPicks, waitingCard, type WaitingSelection } from 
 import { createHoverDecoy } from './hover-decoy'
 import { createCoverPage } from './cover-page'
 import { createSettings } from './settings'
+import { createSourceConfirmation } from './source-confirmation'
 
 type Series = {
   id: string
@@ -64,11 +65,10 @@ let activeQuery = '',
 let activeSource: SourceId = 'hongguo', sourceGeneration = 0, switchingSource = false
 let sourceUpdate = Promise.resolve()
 const sourceOf = (id: string): SourceId => id.startsWith('p.') ? id.split('.')[1] : 'hongguo'
-type Provider = { id: string; name: string; available: boolean; enabled?: boolean; configurable?: boolean; code?: string; queryHint?: string; queryMode?: 'search' | 'link'; emptyMessage?: string; authentication?: 'qrcode' }
-let providers: Provider[] = [{ id: 'hongguo', name: '红果', available: true }]
-let providerOptions: Provider[] = []
-const providerInputs = new Map<string, HTMLInputElement>()
-const providerHints = new Map<string, HTMLElement>()
+type Provider = { id: string; name: string; available: boolean; nsfw: boolean; code?: string; queryHint?: string; queryMode?: 'search' | 'link'; emptyMessage?: string; authentication?: 'qrcode' }
+let providers: Provider[] = [{ id: 'hongguo', name: '红果', available: true, nsfw: false }]
+let sourceChoice = 0
+const sourceConfirmation = createSourceConfirmation({ translate: tr })
 let sourceMenuTimer: ReturnType<typeof setTimeout> | undefined
 let authRevision: string | undefined
 const account = new ProviderAccount(async () => {
@@ -77,50 +77,23 @@ const account = new ProviderAccount(async () => {
     await home()
   }
 })
-let providerRefresh = 0, providerSettingsKey = ''
+let providerRefresh = 0
 async function refreshProviders() {
   const ticket = ++providerRefresh, generation = preferencesGeneration
   const items = (await call<{ items: Provider[] }>('get_providers')).items
   if (ticket !== providerRefresh || generation !== preferencesGeneration) return
-  providerOptions = items
-  providers = providerOptions.filter(provider => provider.available)
+  providers = items.filter(provider => provider.available)
   closeSourceMenu()
   syncSourceButton()
   settings.sync()
-  if (!providers.some(provider => provider.id === activeSource) && providers.length) await changeSource(providers[0].id)
+  const fallback = providers.find(provider => !provider.nsfw)
+  if (!providers.some(provider => provider.id === activeSource) && fallback) await changeSource(fallback.id)
 }
-function renderProviderSettings(desired: Preferences, disabled: boolean) {
-  const options = providerOptions.filter(provider => provider.configurable)
-  const key = JSON.stringify(options.map(({ id, name }) => ({ id, name })))
-  // Polls must not replace a focused control or cancel an in-progress QR login.
-  if (key !== providerSettingsKey) {
-    providerSettingsKey = key
-    providerInputs.clear(); providerHints.clear()
-    el('providerSettings').replaceChildren(...options.map(provider => {
-      const row = document.createElement('label'), label = document.createElement('span'), input = document.createElement('input')
-      row.className = 'switchRow'; label.textContent = tr(provider.name)
-      const hint = document.createElement('small')
-      providerHints.set(provider.id, hint); label.append(hint)
-      input.type = 'checkbox'; input.className = 'switch'
-      input.onchange = () => {
-        const enabled = new Set(settings.values().enabledProviders)
-        if (input.checked) enabled.add(provider.id)
-        else enabled.delete(provider.id)
-        enabled.add('hongguo')
-        void settings.update({ enabledProviders: [...enabled] })
-      }
-      providerInputs.set(provider.id, input)
-      row.append(label, input); return row
-    }))
-  }
-  for (const [id, input] of providerInputs) {
-    input.checked = desired.enabledProviders.includes(id)
-    input.disabled = disabled || id === 'hongguo'
-    const provider = options.find(provider => provider.id === id)!, hint = providerHints.get(id)!
-    hint.hidden = id !== 'hongguo' && !(provider.enabled && !provider.available)
-    hint.textContent = tr(id === 'hongguo' ? '始终启用' : '启动失败')
-  }
-  const source = options.find(provider => desired.enabledProviders.includes(provider.id) && provider.available && provider.authentication)?.id
+function renderProviderAccount() {
+  // Account UI remains available without Provider enable switches. Polling must
+  // not recreate the account controller or cancel an in-progress QR login.
+  const source = providers.find(provider => provider.authentication &&
+    (!provider.nsfw || provider.id === activeSource))?.id
   if (!source) account.hide()
   else if (account.source !== source) void account.show(source)
 }
@@ -141,9 +114,10 @@ function syncSourceButton() {
   const submit = el<HTMLFormElement>('search').querySelector('button')
   if (submit) submit.textContent = tr(providers.find(provider => provider.id === activeSource)?.queryMode === 'link' ? '添加番剧' : '搜索')
   const label = tr('切换视频源')
-  control.setAttribute('aria-label', providers.length < 2 ? tr(name) : label)
-  control.disabled = switchingSource || providers.length < 2
-  if (providers.length > 1) {
+  const canSwitch = providers.some(provider => provider.id !== activeSource)
+  control.setAttribute('aria-label', canSwitch ? label : tr(name))
+  control.disabled = switchingSource || !canSwitch
+  if (canSwitch) {
     control.setAttribute('aria-haspopup', 'menu')
     control.setAttribute('aria-controls', 'sourceMenu')
     control.setAttribute('aria-expanded', String(!el('sourceMenu').hidden))
@@ -187,7 +161,7 @@ let lastSave = 0,
 let prefs: Preferences = {
   autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
   defaultMuted: true, volume: 0.7, hoverDecoyEnabled: false, coverStyle: 'random',
-  searchTerms: ['总裁', '重生', '逆袭'], defaultSource: 'hongguo', enabledProviders: ['hongguo'],
+  searchTerms: ['总裁', '重生', '逆袭'], defaultSource: 'hongguo',
 }
 let playback: 'idle' | 'playing' | 'finished' = 'idle'
 type InterruptedPlayback = { action: number; lastPosition?: number }
@@ -218,16 +192,12 @@ const decoy = createHoverDecoy({ changed: decoyChanged })
 const coverPage = createCoverPage(el('decoy'))
 const settings = createSettings({
   read: () => prefs,
-  save: async patch => {
-    if (patch.enabledProviders && !patch.enabledProviders.includes(activeSource)) await pause()
-    return call<Preferences>('set_preferences', patch, 4000)
-  },
-  syncExtra: renderProviderSettings,
+  save: patch => call<Preferences>('set_preferences', patch, 4000),
+  syncExtra: renderProviderAccount,
   closed: () => account.hide(),
   edited: () => { ++preferencesRevision },
   applied: updated => {
     ++preferencesRevision
-    const providersChanged = JSON.stringify(prefs.enabledProviders) !== JSON.stringify(updated.enabledProviders)
     const termsChanged = JSON.stringify(prefs.searchTerms) !== JSON.stringify(updated.searchTerms)
     syncDefaultMute(updated)
     prefs = updated
@@ -235,7 +205,6 @@ const settings = createSettings({
     autoNext.checked = prefs.autoplayNext
     if (!autoNext.checked) cancelNextPreload()
     renderPicks()
-    if (providersChanged) void refreshProviders().catch(error => notice(explain(error)))
     if (termsChanged && !series) void list().catch(error => notice(explain(error)))
   },
   translate: tr,
@@ -247,6 +216,7 @@ function configureDecoy() {
 }
 function decoyChanged(covered: boolean) {
   if (covered) {
+    sourceConfirmation.cancel()
     const resume = !!episode && (!video.paused || preparing || playback === 'playing')
     const pending = preparing ? activeStart : undefined
     void pause('', true, true)
@@ -421,6 +391,8 @@ function drawEpisodes() {
 }
 async function select(s: Series, requested?: string, playNow = false, waitingTurn?: string) {
   const nextSource = sourceOf(s.id), changingSource = nextSource !== activeSource
+  const approval = changingSource ? await approveSource(nextSource) : {}
+  if (!approval) return
   if (changingSource) {
     activeSource = nextSource
     ++sourceGeneration; ++listing
@@ -452,7 +424,7 @@ async function select(s: Series, requested?: string, playNow = false, waitingTur
   await saved
   if (ticket !== selection) return
   if (changingSource) {
-    sourceUpdate = sourceUpdate.catch(() => {}).then(() => call('set_source', { source: nextSource, remember: false })).then(() => {})
+    sourceUpdate = sourceUpdate.catch(() => {}).then(() => call('set_source', { source: nextSource, remember: false, ...approval })).then(() => {})
   }
   await sourceUpdate
   if (ticket !== selection) return
@@ -923,14 +895,12 @@ async function readTurnState() {
     authRevision = state.authRevision
     if (state.preferences && revision === preferencesRevision) {
       const promptChanged = prefs.autoPrompt !== state.preferences.autoPrompt
-      const providersChanged = JSON.stringify(prefs.enabledProviders) !== JSON.stringify(state.preferences.enabledProviders)
       syncDefaultMute(state.preferences)
       prefs = state.preferences
       configureDecoy()
       autoNext.checked = prefs.autoplayNext
       if (!autoNext.checked) cancelNextPreload()
       if (promptChanged) renderPicks()
-      if (providersChanged) await refreshProviders()
     }
     const reason = finishedTurn(current, state)
     const starting = startedTurn(current, state)
@@ -1248,8 +1218,19 @@ queryInput.addEventListener('compositionstart', () => { composing = true; schedu
 queryInput.addEventListener('compositionend', () => { composing = false; scheduleSearch() })
 el('search').onsubmit = (e) => { e.preventDefault(); searchNow() }
 el('more').onclick = () => void list(true)
+async function approveSource(next: SourceId) {
+  const choice = ++sourceChoice
+  sourceConfirmation.cancel()
+  const provider = providers.find(provider => provider.id === next)
+  if (!provider?.nsfw) return {}
+  closeSourceMenu()
+  if (!await sourceConfirmation.request(tr(provider.name)) || choice !== sourceChoice || !playerReady) return null
+  return { confirmNsfw: true as const }
+}
 async function changeSource(next: SourceId) {
   if (next === activeSource || !playerReady) return
+  const approval = await approveSource(next)
+  if (!approval || next === activeSource || !playerReady) return
   const generation = ++sourceGeneration
   ++listing; ++selection
   closeSourceMenu()
@@ -1267,7 +1248,7 @@ async function changeSource(next: SourceId) {
   drawCards()
   try {
     await pending
-    sourceUpdate = sourceUpdate.catch(() => {}).then(() => call('set_source', { source: next })).then(() => {})
+    sourceUpdate = sourceUpdate.catch(() => {}).then(() => call('set_source', { source: next, ...approval })).then(() => {})
     await sourceUpdate
     if (generation !== sourceGeneration || !playerReady) return
     activeSource = next; context.source = next
@@ -1385,6 +1366,7 @@ function presence(visible: boolean) {
   return call('set_player_visible', { instance, visible }, 1800).catch(() => {})
 }
 async function suspend() {
+  sourceConfirmation.cancel()
   if (!pageActive) return flushVolume()
   pageActive = false
   await Promise.all([pause('已暂停，点击播放继续', true), presence(false), flushVolume()])
@@ -1475,6 +1457,8 @@ async function initPlayer(selection?: WaitingSelection) {
   await catalog
 }
 function closePlayer() {
+  ++sourceChoice
+  sourceConfirmation.cancel()
   account.hide()
   closeSourceMenu()
   const stopped = suspend()

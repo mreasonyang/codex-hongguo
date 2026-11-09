@@ -48,8 +48,7 @@ async function asset(episodeId, stream, name) {
 }
 try {
   await start()
-  assert.deepEqual((await call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo'])
-  await call('set_preferences', { enabledProviders: ['hongguo', 'bilibili'] })
+  assert.deepEqual((await call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili'])
   await call('set_source', { source: 'bilibili' })
   stage = 'homepage-discovery'
   report.homepageSeries = (await call('list_series')).items.length
@@ -113,10 +112,9 @@ try {
   stage = 'preview-rejection'; assert.equal(rejected.status, 'error'); assert.match(rejected.reason, /试看/)
   report.previewRejected = 'PASS'
   await call('set_source', { source: 'hongguo' })
-  await call('set_preferences', { enabledProviders: ['hongguo'] })
   const unavailable = await client.callTool({ name: 'prepare_playback', arguments: { panel, episodeId: first.id } })
   assert.equal(unavailable.isError, true)
-  report.disableRevokesCache = 'PASS'
+  report.switchRevokesPlayback = 'PASS'
   report.result = 'PASS'
   if (process.argv.includes('--keep')) report.reviewDataDirectory = root
 } catch (error) {

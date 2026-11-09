@@ -168,14 +168,12 @@ test('credential storage rejects symlinks and hard links and reports failed save
   await writeFile(join(other.root,'account'),'blocked')
   assert.throws(()=>other.auth.logout(),/暂未保存/)
 })
-test('app-only auth calls require an enabled provider, bind QR ownership and invalidate player grants on logout', async t => {
+test('app-only auth calls use default-available providers, bind QR ownership and invalidate player grants on logout', async t => {
   const f=await fixture(t), store=new Store(join(f.root,'host'))
   defer(t, ()=>store.close())
   const sources=new ProviderRegistry(f.root,{builtins:[builtins[0],{manifest:builtins[1].manifest,createProvider:()=>f.provider}]})
   const catalog=new Catalog(store,{sources}), service=new Service(store,catalog)
   const a=service.panel(service.open({threadId:'A'}).panel), b=service.panel(service.open({threadId:'B'}).panel)
-  await assert.rejects(service.call(a,'start_provider_login',{source:'bilibili'}),/片源插件不可用/)
-  await service.call(a,'set_preferences',{enabledProviders:['hongguo','bilibili']})
   const qr=await service.call(a,'start_provider_login',{source:'bilibili'})
   assert.equal((await service.call(b,'poll_provider_login',{source:'bilibili',loginId:qr.loginId})).status,'cancelled')
   f.options.code=0

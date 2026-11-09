@@ -12,6 +12,7 @@ import { Catalog } from '../src/server/catalog.mjs'
 import { ProviderRegistry } from '../src/server/providers/registry.mjs'
 import { createCoverPage } from '../src/ui/cover-page.ts'
 import { createSettings } from '../src/ui/settings.ts'
+import { createSourceConfirmation } from '../src/ui/source-confirmation.ts'
 
 class Element extends EventTarget {
   hidden = true; checked = false; value = '1'; dataset = {}; children = []; textContent = ''
@@ -45,8 +46,7 @@ export const fixture = {
   poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer, changeSource, list, history, refreshProviders,
   sourceState() { return { source: activeSource, cards: cards.map(row => row.id), watched: watched.map(row => row.seriesId) } },
   setProviders(items) { providers = items.filter(item => item.available); syncSourceButton() },
-  decoy, coverPage, settings,
-  providerInput(id) { return providerInputs.get(id) },
+  decoy, coverPage, settings, sourceConfirmation,
   unload() { loaded = false },
   selected() {
     coverPage.initialize('zh-CN');
@@ -86,7 +86,7 @@ function setup(t) {
   const api = {
     browser: false, connect: async () => {}, hostLocale: () => 'zh',
     call: (name, args = {}) => name === 'get_providers' && !service.catalog.sources
-      ? Promise.resolve({ items: store.preferences().enabledProviders.map(id => ({ id, name: id === 'hongguo' ? '红果' : id === 'demo' ? '示例片源' : id, available: true, enabled: true, configurable: true })) })
+      ? Promise.resolve({ items: ['hongguo', 'demo'].map(id => ({ id, name: id === 'hongguo' ? '红果' : '示例片源', available: true, nsfw: false })) })
       : service.call(panel, name, args),
   }
   const exports = {}, context = vm.createContext({
@@ -101,6 +101,7 @@ function setup(t) {
       }
       if (name === './api') return api
       if (name === './cover-page') return { createCoverPage }
+      if (name === './source-confirmation') return { createSourceConfirmation: options => createSourceConfirmation(options, document) }
       if (name === './settings') return { createSettings: options => createSettings(options, document) }
       if (name === './hover-decoy') {
         const exports = {}, decoyContext = vm.createContext({ module: { exports }, exports, document, window, setTimeout, clearTimeout })
@@ -120,7 +121,6 @@ function setup(t) {
   t.after(() => { ui.decoy.dispose(); ui.closePlayer() })
   ui.selected()
   ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'demo', name: '示例片源', available: true }])
-  store.setPreferences({ enabledProviders: ['hongguo', 'demo'] })
   let at = Date.now()
   return {
     store, peer, service, panel, video, document, window, ui, elements,
@@ -190,7 +190,6 @@ test('keyboard opening focuses the current provider and Escape returns to the so
 })
 test('additional providers use a checked menu and select through the existing source service', async t => {
   const f = setup(t)
-  f.store.setPreferences({ enabledProviders: ['hongguo', 'demo', 'local'] })
   f.service.catalog = { list: async () => ({ items: [] }) }
   f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'demo', name: '示例片源', available: true },
     { id: 'local', name: 'Local provider', available: true }])
@@ -209,7 +208,6 @@ test('additional providers use a checked menu and select through the existing so
 test('link-based providers import only on submit while Hongguo keeps debounced search', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const f = setup(t), requests = []
-  f.store.setPreferences({ enabledProviders: ['hongguo', 'bilibili'] })
   f.service.catalog = { list: async input => { requests.push(input); return { items: [] } } }
   f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true },
     { id: 'bilibili', name: '哔哩哔哩', available: true, queryMode: 'link', queryHint: '粘贴番剧链接或 ss/ep 编号' }])
@@ -237,35 +235,89 @@ test('a single available provider disables switching instead of opening an empty
   assert.equal(f.elements.get('sourceMenu').hidden, true)
   assert.equal(f.ui.sourceState().source, 'hongguo')
 })
-test('the settings form enables local provider explicitly, then disabling it returns to Hongguo', async t => {
+test('installed providers are available without any enable settings', async t => {
   const f = setup(t)
-  f.store.setPreferences({ enabledProviders: ['hongguo'] })
   const sources = new ProviderRegistry(f.store.root, { builtins: ['hongguo', 'demo'].map(id => ({
-    manifest: { apiVersion: 1, id, name: id === 'hongguo' ? '红果' : '示例片源', version: '1.0.0' },
+    manifest: { apiVersion: 1, id, name: id, version: '1.0.0', nsfw: false },
     createProvider: () => ({ id, async listSeries() { return { items: [], cursor: null } },
       async getSeries() {}, async listEpisodes() { return { items: [], cursor: null } }, async getCover() {}, async resolvePlayback() {} }),
   })) })
-  t.after(() => sources.dispose())
-  f.service.catalog = new Catalog(f.store, { sources })
+  t.after(() => sources.dispose()); f.service.catalog = new Catalog(f.store, { sources })
   await f.elements.get('prefs').onclick()
-  let rows = f.elements.get('providerSettings').children
-  assert.equal(rows[0].children[1].disabled, true)
-  assert.equal(rows[1].children[1].checked, false)
-  assert.equal(f.elements.get('source').disabled, true)
-  rows[1].children[1].checked = true
-  rows[1].children[1].onchange(); await flush()
-  assert.equal(f.elements.get('settings').hidden, false)
-  assert.equal(f.ui.providerInput('demo'), rows[1].children[1], 'saving must retain the focused Provider switch')
+  assert.equal(f.elements.has('providerSettings'), false)
+  assert.equal('enabledProviders' in f.store.preferences(), false)
   assert.equal(sources.get('demo').id, 'demo')
   assert.equal(f.elements.get('source').disabled, false)
+  await f.ui.settings.finish()
   await f.ui.changeSource('demo')
-  rows = f.elements.get('providerSettings').children
-  rows[1].children[1].checked = false
-  rows[1].children[1].onchange(); await flush()
-  assert.equal(f.elements.get('settings').hidden, false)
-  assert.throws(() => sources.get('demo'))
+  assert.equal(f.ui.sourceState().source, 'demo')
+  assert.equal(f.elements.get('sourceConfirmation').hidden, true)
+})
+async function nsfwPlayer(t) {
+  const f = setup(t); await f.poll()
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true, nsfw: false },
+    { id: 'demo', name: 'Sensitive fixture', available: true, nsfw: true },
+    { id: 'local', name: 'Safe fixture', available: true, nsfw: false }])
+  f.elements.get('sourceConfirmation').append(f.elements.get('sourceCancel'), f.elements.get('sourceConfirm'))
+  return f
+}
+test('cancelling NSFW selection leaves the source, playback, progress and default untouched', async t => {
+  const f = await nsfwPlayer(t); f.video.paused = false
+  const request = f.ui.changeSource('demo'); await flush()
+  assert.equal(f.elements.get('sourceConfirmation').hidden, false)
+  assert.equal(f.document.activeElement, f.elements.get('sourceCancel'))
+  assert.equal(f.ui.sourceState().source, 'hongguo'); assert.equal(f.ui.episodeId(), 'hg-11')
+  assert.equal(f.video.paused, false); assert.equal(f.store.preferences().defaultSource, 'hongguo')
+  f.elements.get('sourceCancel').onclick(); await request
+  assert.equal(f.elements.get('sourceConfirmation').hidden, true)
+  assert.equal(f.ui.sourceState().source, 'hongguo'); assert.equal(f.ui.episodeId(), 'hg-11')
+  assert.equal(f.video.paused, false); assert.equal(f.store.history().length, 0)
+})
+test('only explicit NSFW confirmation commits the switch and a later entry asks again', async t => {
+  const f = await nsfwPlayer(t), requests = [], call = f.service.call.bind(f.service)
+  f.service.call = (scope,name,args) => { if (name === 'set_source') requests.push(args); return call(scope,name,args) }
+  const switching = f.ui.changeSource('demo'); await flush()
+  assert.equal(requests.length, 0)
+  f.elements.get('sourceConfirm').onclick(); await switching
+  assert.equal(f.ui.sourceState().source, 'demo'); assert.equal(f.store.preferences().defaultSource, 'demo')
+  assert.equal(requests[0].confirmNsfw, true)
+  await f.ui.changeSource('hongguo')
+  assert.equal(f.elements.get('sourceConfirmation').hidden, true)
+  assert.equal(requests[1].confirmNsfw, undefined)
+  const again = f.ui.changeSource('demo'); await flush()
+  assert.equal(f.elements.get('sourceConfirmation').hidden, false)
+  f.elements.get('sourceCancel').onclick(); await again
   assert.equal(f.ui.sourceState().source, 'hongguo')
-  assert.equal(f.elements.get('source').disabled, true)
+})
+test('NSFW dialog traps keyboard focus and Escape cancels without switching', async t => {
+  const f = await nsfwPlayer(t), request = f.ui.changeSource('demo'); await flush()
+  const key = value => { const event = new Event('keydown',{cancelable:true}); Object.assign(event,{key:value}); f.document.dispatchEvent(event) }
+  key('Tab'); assert.equal(f.document.activeElement, f.elements.get('sourceConfirm'))
+  key('Tab'); assert.equal(f.document.activeElement, f.elements.get('sourceCancel'))
+  key('Escape'); await request
+  assert.equal(f.elements.get('sourceConfirmation').hidden, true)
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+})
+test('a safe source choice supersedes a pending NSFW decision and closing cancels it', async t => {
+  const f = await nsfwPlayer(t), old = f.ui.changeSource('demo'); await flush()
+  await f.ui.changeSource('local'); await old
+  f.elements.get('sourceConfirm').onclick(); await flush()
+  assert.equal(f.ui.sourceState().source, 'local')
+  const next = f.ui.changeSource('demo'); await flush()
+  await f.ui.closePlayer(); await next
+  f.elements.get('sourceConfirm').onclick(); await flush()
+  assert.equal(f.ui.sourceState().source, 'local')
+})
+test('covering a pending NSFW decision cancels it and returning cannot switch sources', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const f = await nsfwPlayer(t); await f.settings({ hoverDecoyEnabled: true }); await f.poll()
+  await enterPanel(t, f)
+  const request = f.ui.changeSource('demo'); await flush()
+  f.ui.decoy.conceal(); await request
+  f.elements.get('sourceConfirm').onclick(); await flush()
+  assert.equal(f.elements.get('sourceConfirmation').hidden, true)
+  assert.equal(f.ui.sourceState().source, 'hongguo')
 })
 
 test('switching providers saves progress, stops playback and discards the old catalog response', async t => {
@@ -1122,17 +1174,14 @@ async function accountPlayer(t) {
   assert.equal(f.elements.get('accountQrArea').hidden, false)
   return { ...f, authCalls }
 }
-for (const dismiss of ['close', 'Escape', 'outside', 'trigger', 'player-close', 'disable']) {
+for (const dismiss of ['close', 'Escape', 'outside', 'trigger', 'player-close']) {
   test(`Provider QR is cancelled by ${dismiss} through main Settings lifecycle`, async t => {
     const f = await accountPlayer(t)
-    const input = f.ui.providerInput('demo')
     for (let i = 0; i < 3; i++) await f.poll()
-    assert.equal(f.ui.providerInput('demo'), input, 'polling preserves the focused Provider control')
     assert.equal(f.elements.get('accountQrArea').hidden, false, 'polling does not restart a QR login')
     if (dismiss === 'close') f.elements.get('settingsClose').onclick()
     if (dismiss === 'trigger') await f.elements.get('prefs').onclick()
     if (dismiss === 'player-close') await f.ui.closePlayer()
-    if (dismiss === 'disable') { input.checked = false; input.onchange() }
     if (dismiss === 'Escape' || dismiss === 'outside') {
       const event = new Event(dismiss === 'Escape' ? 'keydown' : 'click', { cancelable: true })
       Object.assign(event, { key: 'Escape', composedPath: () => [] })
@@ -1143,10 +1192,10 @@ for (const dismiss of ['close', 'Escape', 'outside', 'trigger', 'player-close', 
     assert.equal(f.elements.get('providerAccount').hidden, true)
     assert.equal(f.elements.get('accountQrArea').hidden, true)
     assert.equal(f.elements.get('accountQr').getAttribute('src'), null)
-    assert.equal(f.elements.get('settings').hidden, dismiss !== 'disable')
+    assert.equal(f.elements.get('settings').hidden, true)
   })
 }
-test('a stale poll cannot undo a pending Provider edit and Close waits for its autosave', async t => {
+test('a stale poll cannot undo a pending setting edit while QR login is open and Close waits', async t => {
   const f = await accountPlayer(t), original = f.service.call.bind(f.service)
   let resolvePoll, resolveSave
   f.service.call = async (scope, name, args) => {
@@ -1158,14 +1207,14 @@ test('a stale poll cannot undo a pending Provider edit and Close waits for its a
     return original(scope, name, args)
   }
   const polling = f.ui.poll(); await flush()
-  const input = f.ui.providerInput('demo'); input.checked = false; input.onchange(); await flush()
+  const input = f.elements.get('defaultMuted'); input.checked = false; input.onchange(); await flush()
   const closing = f.ui.settings.finish(); await flush()
   assert.equal(input.disabled, true)
   assert.equal(f.elements.get('settings').hidden, false)
   resolvePoll(); await polling; await flush()
   assert.equal(input.checked, false)
   resolveSave(); assert.equal(await closing, true); await flush()
-  assert.deepEqual(f.peer.preferences().enabledProviders, ['hongguo'])
+  assert.equal(f.peer.preferences().defaultMuted, false)
   assert.equal(f.elements.get('settings').hidden, true)
 })
 test('switching Provider while covered cancels the old hover resume intent', async t => {

@@ -50,18 +50,17 @@ async function fixture(t, { payload = media, cookie = '', root } = {}) {
   return { root, controller, context, requests, provider }
 }
 
-test('Bilibili is discovered but does not start, load its SDK or write a profile by default', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'bilibili-disabled-'))
+test('Bilibili starts by default with NSFW false and keeps its SDK lazy', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'bilibili-default-'))
   defer(t, () => rm(root, { recursive: true, force: true }))
   const registry = new ProviderRegistry(root); await registry.ready; defer(t, () => registry.dispose())
-  assert.deepEqual(registry.list().filter(p => p.available).map(p => p.id), ['hongguo'])
-  assert.equal(registry.list().find(p => p.id === 'bilibili').code, 'DISABLED')
-  await assert.rejects(access(join(root, 'device/providers/bilibili')))
-  await registry.configure(['hongguo', 'bilibili'])
+  assert.deepEqual(registry.list().filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili'])
+  assert.equal(registry.list().find(p => p.id === 'bilibili').nsfw, false)
+  await access(join(root, 'device/providers/bilibili'))
   assert.equal(registry.get('bilibili').sdk, undefined)
-  await registry.configure(['hongguo'])
   assert.equal(registry.get('hongguo').id, 'hongguo')
 })
+
 test('only canonical season/episode links and ss/ep IDs are accepted', () => {
   assert.deepEqual(bangumiLink('ss2251'), { season_id: 'ss2251' })
   assert.deepEqual(bangumiLink(' https://www.bilibili.com/bangumi/play/ep50188/?t=1 '), { ep_id: 'ep50188' })
@@ -206,7 +205,6 @@ test('a newly imported title is visible across processes even while homepage and
 test('Bilibili uses normal selection, next-episode and isolated progress contracts', async t => {
   const { provider, root } = await fixture(t)
   const store = new Store(join(root, 'host')); defer(t, () => store.close())
-  store.setPreferences({ enabledProviders: ['hongguo', 'bilibili'] })
   const sources = new ProviderRegistry(root, { builtins: [builtins[0], { manifest: builtins[1].manifest,
     createProvider: () => provider }], enabled: ['hongguo', 'bilibili'] }); await sources.ready
   const catalog = new Catalog(store, { sources }); catalog.ffmpeg = false

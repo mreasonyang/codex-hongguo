@@ -24,7 +24,7 @@ await catalog.sources.ready
 const browser = new BrowserServer(service)
 service.pair = (scope) => browser.pair(scope)
 const server = new McpServer({ name: 'codex-hongguo', version: pkg.version })
-const uri = 'ui://hongguo/v32/player', waitingUri = 'ui://hongguo/v32/waiting',
+const uri = 'ui://hongguo/v33/player', waitingUri = 'ui://hongguo/v33/waiting',
   mimeType = 'text/html;profile=mcp-app'
 const ui = { visibility: ['app'] }
 // Both resources can become the player. hls.js attaches its in-memory MediaSource via a blob URL.

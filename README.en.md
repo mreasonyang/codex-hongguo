@@ -13,7 +13,7 @@
 
 Watch Hongguo short dramas in the right-hand panel of Codex Desktop, with browsing, search, resume and autoplay next. By default, a new task resumes the selected episode; finishing or interrupting the task pauses playback and saves your position. You can turn off either behavior independently in Settings. The plugin supports local-executor Codex Desktop conversations.
 
-Hongguo is the built-in source. Explicitly installed local sources can use the [Provider plugin API](docs/providers.md) (Chinese). Enable a plugin under Settings → Providers and save, then hover over the play mark at the top left to choose an enabled source. Select a provider inside the popover to switch. Recommendations, search, history and cache identities are separate for each source; switching saves your position and stops playback.
+Hongguo and Bilibili are available by default. Explicitly installed local sources use the [Provider plugin API](docs/providers.md) (Chinese) and start automatically. Hover over the play mark at the top left and select a source. Providers declaring `nsfw: true` require confirmation before switching; cancelling preserves the current source. Recommendations, search, history and cache identities remain separate; switching saves your position and stops playback.
 
 This is an independent, unofficial plugin with original icon artwork. The red fruit echoes the name Hongguo ("red fruit"), while the leaf and play button form the plugin's own mark.
 
@@ -142,7 +142,7 @@ Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn s
 | Area | Behavior & Scope |
 | --- | --- |
 | Host scope | Supports only Codex Desktop conversations running on the local executor; does not support cloud/remote executors or other host applications. |
-| Content source & streams | Includes Hongguo and Bilibili series; only Hongguo is enabled by default. Enable Bilibili in Settings, then sign in by QR code if needed. Hover over the source icon and choose Bilibili to browse recommendations or search by series name; ss/ep links remain supported. Standard AVC/AAC tracks play and seek on demand without downloading the whole episode first. Previews and DRM are rejected. See [Providers](docs/providers.md). |
+| Content source & streams | Includes Hongguo and Bilibili series; both are available by default. Choose Bilibili from the source menu, then sign in by QR code if needed. Hover over the source icon and choose Bilibili to browse recommendations or search by series name; ss/ep links remain supported. Standard AVC/AAC tracks play and seek on demand without downloading the whole episode first. Previews and DRM are rejected. See [Providers](docs/providers.md). |
 | Recommendations & search | Catalog browsing and search rely on the anonymous upstream SDK; the home view prioritizes unwatched shows in batches of up to 12 (recommendations and episode pages share a persistent 15-minute cache across chats, serve stale data while refreshing, and back off after failures) and falls back to configurable search keywords when recommendations are sparse. |
 | Anonymous rate-limit recovery | When an anonymous device is rejected or streams come back empty, the SDK performs bounded retries and device resets before surfacing the failure reason with a retry action. |
 | Progress persistence | Saves playback position locally every ~5 seconds while playing, as well as on pause, seek, episode change, or panel hide. |

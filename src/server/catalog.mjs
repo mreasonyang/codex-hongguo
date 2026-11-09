@@ -9,7 +9,7 @@ import { SourceRegistry } from './sources/registry.mjs'
 import { sourceId, qualify, parseId } from './sources/ids.mjs'
 import { decodeCursor, sourceCall } from './sources/contracts.mjs'
 export class Catalog {
-  constructor(store, { sources = new SourceRegistry(store.root, { enabled: store.preferences().enabledProviders }) } = {}) {
+  constructor(store, { sources = new SourceRegistry(store.root) } = {}) {
     this.store = store
     this.sources = sources
     this.ffmpeg = hasFfmpeg()
@@ -21,12 +21,7 @@ export class Catalog {
     void this.prepareMediaRuntime().catch(() => {})
   }
   async syncProviders() {
-    const enabled = this.store.preferences().enabledProviders, key = JSON.stringify(enabled)
-    if (key !== this.providerKey) {
-      this.providerKey = key
-      this.providerSync = this.sources.configure?.(enabled) ?? this.sources.ready
-    }
-    await this.providerSync
+    await this.sources.ready
   }
   prepareMediaRuntime() {
     this.preparingRuntime ??= ensureFfmpeg().then(() => { this.ffmpeg = true }).catch(error => {
@@ -35,7 +30,10 @@ export class Catalog {
     }).finally(() => { this.preparingRuntime = null })
     return this.preparingRuntime
   }
-  defaultSource() { return this.sources.fallback(this.store.preferences().defaultSource) }
+  defaultSource() {
+    const preferred = this.store.preferences().defaultSource
+    return this.sources.defaultSource?.(preferred) ?? this.sources.fallback(preferred)
+  }
   async list({ source = this.defaultSource(), query = '', cursor, preview } = {}) {
     if (!this.sources.loaded) await this.sources.ready
     source = sourceId(source)

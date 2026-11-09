@@ -133,13 +133,21 @@
         </div>
       </header>
 
+      <div id="sourceConfirmation" class="sourceConfirmation" role="alertdialog" aria-modal="true"
+        aria-labelledby="sourceConfirmationTitle" aria-describedby="sourceConfirmationDescription" hidden>
+        <section class="sourceConfirmationCard">
+          <h2 id="sourceConfirmationTitle">切换到 NSFW 片源？</h2>
+          <strong id="sourceConfirmationName"></strong>
+          <p id="sourceConfirmationDescription">该片源可能包含不适合工作场合的内容。确认后才会切换。</p>
+          <div class="sourceConfirmationActions">
+            <button id="sourceCancel" type="button" class="btn ghost">取消</button>
+            <button id="sourceConfirm" type="button" class="btn">确认切换</button>
+          </div>
+        </section>
+      </div>
+
       <form id="settings" class="sheet" hidden>
         <p class="settingsHint">以下设置对所有聊天生效</p>
-        <fieldset class="providerSettings">
-          <legend>片源 Provider</legend>
-          <div id="providerSettings"></div>
-          <p class="settingsHint">默认只启用红果，其他片源需手动开启</p>
-        </fieldset>
         <section id="providerAccount" class="providerAccount" aria-label="B 站账号" hidden>
           <div class="accountHeader">
             <span class="accountMark" aria-hidden="true">B</span>
