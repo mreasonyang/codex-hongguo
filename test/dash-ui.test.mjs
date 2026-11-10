@@ -6,7 +6,7 @@ import { transformSync } from 'esbuild'
 
 const code = transformSync(readFileSync(new URL('../src/ui/dash-stream.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code
 const flush = async () => { for (let i = 0; i < 150; i++) await Promise.resolve() }
-function fixture(t) {
+function fixture(t, duration = 1200) {
   const requested = [], revoked = [], failures = [], buffers = []
   let source, gate
   class Buffer extends EventTarget {
@@ -54,9 +54,9 @@ function fixture(t) {
   vm.runInContext(code, context)
   const video = Object.assign(new EventTarget(), { paused: true, currentTime: 0, src: '', plays: 0,
     play() { this.plays++; this.paused = false } })
-  const manifest = JSON.stringify({ version: 1, duration: 1200, tracks: ['video', 'audio'].map(name => ({
+  const manifest = JSON.stringify({ version: 1, duration, tracks: ['video', 'audio'].map(name => ({
     mime: name + '/mp4; codecs="' + (name === 'video' ? 'avc1.64001e' : 'mp4a.40.2') + '"',
-    initialization: name + '-init.mp4', segments: Array.from({ length: 240 }, (_, i) => ({
+    initialization: name + '-init.mp4', segments: Array.from({ length: duration / 5 }, (_, i) => ({
       asset: name + '-' + String(i).padStart(5, '0') + '.m4s', time: i * 5, duration: 5,
     })),
   })) })
@@ -78,6 +78,13 @@ test('deep resume reads initialization and nearby fragments, never the interveni
   const count = f.requested.length
   f.video.dispatchEvent(new Event('timeupdate')); await flush()
   assert.equal(f.requested.length, count, 'a covered/paused video does not keep downloading')
+})
+test('long videos pass the browser manifest checks and still buffer only nearby fragments', async t => {
+  const f = fixture(t, 40000); f.source.dispatchEvent(new Event('sourceopen')); await flush()
+  assert.equal(f.failures.length, 0)
+  assert.equal(f.source.duration, 40000)
+  assert.ok(f.requested.length <= 10)
+  assert.equal(f.video.plays, 0)
 })
 test('seeking fetches only the requested window, bounds buffered data, and does not finish at an intermediate buffer edge', async t => {
   const f = fixture(t); f.source.dispatchEvent(new Event('sourceopen')); await flush()

@@ -1,12 +1,13 @@
 import { call, displayMode, requestPlayerTab } from './api'
 import { tr } from './locale'
 
-export type WaitingPick = { id: string; title: string; episodeId?: string; kind?: 'resume' | 'next' }
+export type WaitingPick = { id: string; title: string; episodeId?: string; kind?: 'resume' | 'next'; contentType?: string; episodes?: number; label?: string }
 export type WaitingSelection = { turnId: string; pick: WaitingPick | null; play: boolean; playbackId?: number; reason?: 'turn-ended' }
 
 export function pickLabel(pick: WaitingPick) {
   if (!pick.episodeId) return pick.title
-  return tr(pick.kind === 'next' ? '看下一集' : '继续观看') + ' · ' + pick.title
+  return tr(pick.kind === 'next' ? (pick.contentType === 'video' ? '看下一 P' : '看下一集') : '继续观看') + ' · ' + pick.title +
+    (pick.contentType === 'video' && pick.kind !== 'next' && pick.label ? ' · ' + pick.label : '')
 }
 function whenVisible(element: HTMLElement, signal: AbortSignal): Promise<boolean> {
   if (signal.aborted) return Promise.resolve(false)

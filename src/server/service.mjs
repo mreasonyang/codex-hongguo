@@ -33,13 +33,15 @@ export const schemas = {
   list_series: z.object({
     source: source.optional(),
     preview: z.literal(true).optional(),
-    query: z.string().max(120).optional(),
+    query: z.string().max(500).optional(),
+    contentType: z.string().max(24).optional(), category: z.string().max(24).optional(),
     cursor,
   }),
+  set_content_preferences: z.object({ source, contentType: z.string().min(1).max(24), category: z.string().max(24).optional() }),
   get_cover: z.object({ seriesId: dramaId }),
   get_episodes: z.object({ seriesId: dramaId, cursor }),
   set_source: z.object({ source, remember: z.boolean().optional(), confirmNsfw: z.literal(true).optional() }),
-  get_history: z.object({ seriesId: dramaId.optional(), episodeId: episodeId.optional(), source: source.optional() }),
+  get_history: z.object({ seriesId: dramaId.optional(), episodeId: episodeId.optional(), source: source.optional(), contentType: z.string().max(24).optional() }),
   save_progress: z.object({
     seriesId: dramaId,
     episodeId,
@@ -114,10 +116,12 @@ export class Service {
     this.panels.get(initial.panel).waiting = { turnId, selected: null, taken: false }
     return initial
   }
-  async resumePick(source = 'hongguo') {
+  async resumePick(source = 'hongguo', context = {}) {
     for (const row of this.store.history(undefined, undefined, -1, source)) {
       if (!dramaId.safeParse(row.seriesId).success || !episodeId.safeParse(row.episodeId).success) continue
-      const show = { id: row.seriesId, title: row.title }
+      const type = this.catalog.sources?.get(source).contentTypeOfId?.(parseId(row.seriesId).id)
+      if (context.contentType && type && context.contentType !== type) continue
+      const show = { id: row.seriesId, title: row.title, ...(type ? { contentType: type, label: row.label } : {}) }
       if (row.positionMs < row.durationMs) return { ...show, episodeId: row.episodeId, kind: 'resume' }
       try {
         const next = await this.catalog.nextEpisode(row.seriesId, row.episodeId)
@@ -143,8 +147,9 @@ export class Service {
     const source = this.store.recommendationSource(sessionId, turnId, preferred)
     if (this.catalog.sources?.fallback && this.catalog.sources.fallback(source) !== source) return { items: [] }
     if (this.catalog.sources?.requiresConfirmation?.(source) && preferred !== source) return { items: [] }
+    const context = this.store.recommendationContext(sessionId, turnId, this.catalog.contentContext?.(source) ?? {})
     const [feed, resume] = await Promise.all([
-      this.catalog.waitingRecommendations(source).catch(() => []), this.resumePick(source),
+      this.catalog.waitingRecommendations(source, context).catch(() => []), this.resumePick(source, context),
     ])
     return { items: this.store.allocatePicks(sessionId, turnId, resume, feed, inView, eligible) }
   }
@@ -311,6 +316,13 @@ export class Service {
         }
         this.resetSource(scope, p.source)
         return { source: p.source }
+      case 'set_content_preferences': {
+        if (!this.store.persistent) throw new PlayerError('本机设置目录不可写', 503)
+        this.catalog.sources.get(p.source)
+        const choice = this.catalog.sources.contentContext(p.source, this.store.preferences(), p, false)
+        this.store.setPreferences({ contentPreferences: { [p.source]: choice } })
+        return this.preferences()
+      }
       case 'get_cover':
         return this.catalog.cover(p.seriesId)
       case 'get_episodes': {
@@ -321,8 +333,13 @@ export class Service {
         for (const ep of page.items) if (ep.playable && matchesSeries(p.seriesId, ep.id)) scope.allowed.add(ep.id)
         return page
       }
-      case 'get_history':
-        return { items: this.store.history(p.seriesId, p.episodeId, 30, p.source ?? scope.source) }
+      case 'get_history': {
+        const source = p.source ?? scope.source
+        const adapter = this.catalog.sources?.get(source)
+        const rows = this.store.history(p.seriesId, p.episodeId, p.contentType ? -1 : 30, source)
+        return { items: rows.filter(row => !p.contentType || !adapter?.contentTypeOfId ||
+          adapter.contentTypeOfId(parseId(row.seriesId).id) === p.contentType).slice(0, 30) }
+      }
       case 'remove_history':
         return this.store.removeHistory(p.seriesId)
       case 'read_panel_chunk':
@@ -335,7 +352,11 @@ export class Service {
         if (!matchesSeries(p.seriesId, p.episodeId)) throw new PlayerError('剧目与分集来源不匹配')
         if (!this.store.persistent) throw new PlayerError('本机进度目录不可写', 503)
         this.catalog.cache?.hold(p.episodeId)
-        return this.store.save(p)
+        const result = this.store.save(p)
+        if (result.saved) {
+          try { const ref = parseId(p.seriesId); this.catalog.sources?.get(ref.source).recordWatch?.(ref.id) } catch { /* Progress remains saved if optional interests cannot be updated. */ }
+        }
+        return result
       case 'preload_playback': {
         if (!scope.allowed?.has(p.episodeId))
           throw new PlayerError('请先选择可播放的分集', 403)

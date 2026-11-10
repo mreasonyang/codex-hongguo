@@ -4,7 +4,7 @@ import { createSettings } from '../src/ui/settings.ts'
 
 const settle = async () => { for (let i = 0; i < 80; i++) await Promise.resolve() }
 function deferred() { let resolve; return { promise: new Promise(done => { resolve = done }), resolve } }
-function fixture({ hoverDecoyEnabled = false, back } = {}) {
+function fixture({ hoverDecoyEnabled = false, back, modalOpen } = {}) {
   const elements = new Map(), document = Object.assign(new EventTarget(), { getElementById: id => {
     if (!elements.has(id)) elements.set(id, {
       hidden: true, disabled: false, checked: false, value: '', dataset: {}, attributes: {},
@@ -25,7 +25,7 @@ function fixture({ hoverDecoyEnabled = false, back } = {}) {
       requests.push(structuredClone(patch)); await beforeSave(patch)
       stored = { ...stored, ...patch }; return structuredClone(stored)
     },
-    applied: value => { current = value; applied++ }, edited() {}, translate: value => value, back,
+    applied: value => { current = value; applied++ }, edited() {}, translate: value => value, back, modalOpen,
   }, document)
   settings.open()
   return { settings, elements, requests, document,
@@ -55,6 +55,18 @@ test('switches save small patches automatically, preserve unrelated settings and
   assert.equal(await f.settings.finish(), true)
   assert.equal(f.elements.get('settings').hidden, true)
   assert.equal(f.requests.length, 1)
+})
+test('a source confirmation outside Settings does not dismiss the Settings sheet', async () => {
+  let modal = true
+  const f = fixture({ modalOpen: () => modal })
+  f.dispatch('click', ['sourceConfirmation'])
+  f.dispatch('keydown', [], { key: 'Escape' })
+  await settle()
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.requests.length, 0)
+  modal = false
+  f.dispatch('click', ['playerContent']); await settle()
+  assert.equal(f.elements.get('settings').hidden, true)
 })
 
 test('Escape returns from the account page before closing Settings; closing reveals invalid fields', async () => {

@@ -255,9 +255,15 @@ test('disabled/aborted providers cannot finish an SDK call', async t => {
 })
 test('media locators use the Bilibili domain policy, including backup URLs', async t => {
   const { provider } = await fixture(t, { payload: { ...media, dash: { ...media.dash,
-    video: [{ ...media.dash.video[0], base_url: 'https://127.0.0.1/private' }] } } })
+    video: [{ ...media.dash.video[0], base_url: 'https://127.0.0.1/private', backup_url: ['https://evil.test/video'] }] } } })
   await assert.rejects(provider.resolvePlayback('2251:50188'), /域名/)
   assert.throws(() => allowedURL('https://v.bilivideo.com.evil.test/video', host => host.endsWith('.bilivideo.com')))
+})
+test('policy-approved backup CDNs remain usable when the primary is a P2P mirror', async t => {
+  const { provider } = await fixture(t, { payload: { ...media, dash: { ...media.dash,
+    video: [{ ...media.dash.video[0], base_url: 'https://p2p.bilivideo.com:4483/video' }] } } })
+  const result = await provider.resolvePlayback('2251:50188')
+  assert.equal(result.candidates[0].video.url, 'https://backup.bilivideo.com/video.m4s')
 })
 test('generic dual-track preparation combines real AVC/AAC tracks and retries a failed CDN', async t => {
   await ensureFfmpeg()

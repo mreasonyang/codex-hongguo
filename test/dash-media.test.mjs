@@ -79,6 +79,19 @@ test('preparation reads only indexes; fragments and long-distance seeks fetch on
   await assert.rejects(f.media.chunk('episode', 'other-panel-stream', last.asset, 0))
   assert.equal(f.requested.length, 3)
 })
+test('long ordinary videos prepare from bounded indexes without a whole-file size or two-hour limit', async t => {
+  const f = await fixture(t), index = sidx({ refs: Array(2000).fill(1024 * 1024) })
+  f.descriptor.durationMs = 10000000
+  for (const track of [f.descriptor.candidates[0].video, f.descriptor.candidates[0].audio]) track.indexRange = '16-' + (15 + index.length)
+  f.descriptor.fetchMedia = async (_url, budget, _timeout, _redirects, range) => {
+    assert.equal(range.offset, 16); assert.equal(budget, index.length)
+    return { body: Readable.from([index]), limit: new PassThrough() }
+  }
+  const ready = await f.ready()
+  assert.equal(ready.durationMs, 10000000)
+  assert.equal(JSON.parse(ready.manifest).tracks[0].segments.length, 2000)
+  assert.equal(f.media.bytes, 0, 'indexes do not allocate a 2 GiB track cache')
+})
 test('changed account revisions revoke previously prepared fragments and pending reads', async t => {
   const f = await fixture(t), ready = await f.ready()
   f.changeRevision()

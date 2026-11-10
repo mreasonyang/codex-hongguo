@@ -13,6 +13,7 @@ import { ProviderRegistry } from '../src/server/providers/registry.mjs'
 import { createCoverPage } from '../src/ui/cover-page.ts'
 import { createSettings } from '../src/ui/settings.ts'
 import { createSourceConfirmation } from '../src/ui/source-confirmation.ts'
+import { createSourcePicker } from '../src/ui/source-picker.ts'
 
 class Element extends EventTarget {
   hidden = true; checked = false; value = '1'; dataset = {}; children = []; textContent = ''
@@ -43,10 +44,10 @@ class Video extends Element {
 // start and pause paths run unchanged against a real Service and SQLite store.
 const source = readFileSync(new URL('../src/ui/player.ts', import.meta.url), 'utf8') + `
 export const fixture = {
-  poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer, changeSource, list, history, refreshProviders,
+  poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer, changeSource, changeContent, contentChoice, list, history, refreshProviders, initPlayer, retryStartup,
   sourceState() { return { source: activeSource, cards: cards.map(row => row.id), watched: watched.map(row => row.seriesId) } },
   setProviders(items) { providers = items.filter(item => item.available); syncSourceButton() },
-  decoy, coverPage, settings, sourceConfirmation,
+  decoy, coverPage, settings, sourceConfirmation, sourcePicker,
   unload() { loaded = false },
   selected() {
     coverPage.initialize('zh-CN');
@@ -65,12 +66,13 @@ const accountCode = transformSync(readFileSync(new URL('../src/ui/provider-accou
 const decoyCode = transformSync(readFileSync(new URL('../src/ui/hover-decoy.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code
 const flush = async () => { for (let i = 0; i < 50; i++) await Promise.resolve() }
 
-function setup(t) {
+function setup(t, selected = true) {
   const root = mkdtempSync(join(tmpdir(), 'hongguo-playback-ui-'))
   const store = new Store(root), peer = new Store(root)
   t.after(() => { store.close(); peer.close(); rmSync(root, { recursive: true, force: true }) })
   const service = new Service(store, {}), other = new Service(peer, {})
-  const panel = service.panel(service.open({ threadId: 'A' }).panel)
+  let panelKey = service.open({ threadId: 'A' }).panel
+  const panel = service.panel(panelKey)
   const otherPanel = other.panel(other.open({ threadId: 'B' }).panel)
   const video = new Video(), elements = new Map()
   const document = Object.assign(new EventTarget(), {
@@ -85,13 +87,17 @@ function setup(t) {
   const window = Object.assign(new EventTarget(), { innerWidth: 900, innerHeight: 700, setInterval: () => 1, clearInterval() {}, scrollTo() {} })
   const api = {
     browser: false, connect: async () => {}, hostLocale: () => 'zh',
+    reopenPanel: async () => {
+      const initial = service.open({ threadId: 'A' }); panelKey = initial.panel
+      return { identified: initial.identified, source: initial.source }
+    },
     call: (name, args = {}) => name === 'get_providers' && !service.catalog.sources
       ? Promise.resolve({ items: ['hongguo', 'demo'].map(id => ({ id, name: id === 'hongguo' ? '红果' : '示例片源', available: true, nsfw: false })) })
-      : service.call(panel, name, args),
+      : Promise.resolve().then(() => service.call(service.panel(panelKey), name, args)),
   }
   const exports = {}, context = vm.createContext({
     module: { exports }, exports, document, window, navigator: {}, crypto: webcrypto,
-    AbortController, DOMException, setTimeout, clearTimeout,
+    AbortController, DOMException, Error, setTimeout, clearTimeout,
     require(name) {
       if (name === './provider-account') {
         const exports = {}, scope = vm.createContext({ module: { exports }, exports, document, Blob, URL, setTimeout, clearTimeout,
@@ -102,13 +108,14 @@ function setup(t) {
       if (name === './api') return api
       if (name === './cover-page') return { createCoverPage }
       if (name === './source-confirmation') return { createSourceConfirmation: options => createSourceConfirmation(options, document) }
+      if (name === './source-picker') return { createSourcePicker: options => createSourcePicker(options, document) }
       if (name === './settings') return { createSettings: options => createSettings(options, document) }
       if (name === './hover-decoy') {
         const exports = {}, decoyContext = vm.createContext({ module: { exports }, exports, document, window, setTimeout, clearTimeout })
         vm.runInContext(decoyCode, decoyContext)
         return decoyContext.module.exports
       }
-      if (name === './locale') return { tr: value => value }
+      if (name === './locale') return { tr: value => value, initLocale() {} }
       if (name === './playback-turn') return turnHelpers
       if (name === './media-startup') return mediaHelpers
       if (name === './panel-stream') return { panelStream(video) { queueMicrotask(()=>video.dispatchEvent(new Event('loadedmetadata'))); return ()=>{} } }
@@ -119,11 +126,11 @@ function setup(t) {
   vm.runInContext(code, context)
   const ui = context.module.exports.fixture
   t.after(() => { ui.decoy.dispose(); ui.closePlayer() })
-  ui.selected()
+  if (selected) ui.selected()
   ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'demo', name: '示例片源', available: true }])
   let at = Date.now()
   return {
-    store, peer, service, panel, video, document, window, ui, elements,
+    store, peer, service, panel, video, document, window, ui, elements, api,
     event(turn, kind = 'UserPromptSubmit', session = 'A') {
       peer.event({ session_id: session, turn_id: turn, hook_event_name: kind }, ++at)
     },
@@ -133,6 +140,96 @@ function setup(t) {
 }
 const turnHelpers = await import('../src/ui/playback-turn.ts')
 const mediaHelpers = await import('../src/ui/media-startup.ts')
+
+test('expired startup panels expose recovery above the cover, and reconnect creates a working panel', async t => {
+  const f = setup(t, false)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  f.service.panels.clear() // A server restart loses its in-memory panels.
+  await f.ui.initPlayer()
+  const error = f.elements.get('startupError'), retry = f.elements.get('startupRetry')
+  assert.equal(error.hidden, false)
+  assert.equal(f.elements.get('startupErrorMessage').textContent, '此页面已失效，请重新连接。')
+  assert.equal(f.document.documentElement.dataset.decoyReady, undefined)
+  assert.equal(f.elements.get('playerContent').inert, true, 'failed startup must not expose unconfigured content')
+  await f.ui.retryStartup()
+  assert.equal(error.hidden, true)
+  assert.equal(retry.disabled, false)
+  assert.equal(f.service.panels.size, 1)
+  assert.equal(f.document.documentElement.dataset.decoyReady, 'true')
+  assert.equal(f.elements.get('playerContent').inert, false)
+  f.ui.settings.open()
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.elements.get('settingsSourceOptions').children.length, 2)
+  assert.equal(f.store.preferences().defaultSource, 'hongguo')
+})
+
+test('reconnect failure stays actionable without exposing backend details, with one request at a time', async t => {
+  const f = setup(t, false)
+  f.service.panels.clear()
+  await f.ui.initPlayer()
+  let reject, attempts = 0
+  f.api.reopenPanel = () => { attempts++; return new Promise((_, no) => { reject = no }) }
+  const retry = f.ui.retryStartup()
+  await flush()
+  assert.equal(f.elements.get('startupRetry').disabled, true)
+  await f.ui.retryStartup()
+  assert.equal(attempts, 1)
+  reject(Error('synthetic internal detail'))
+  await retry
+  assert.equal(f.elements.get('startupError').hidden, false)
+  assert.equal(f.elements.get('startupRetry').disabled, false)
+  assert.equal(f.elements.get('startupErrorMessage').textContent, '连接失败，请重新连接后重试。')
+  assert.equal(f.elements.get('playerContent').inert, true)
+})
+
+test('reconnecting preserves saved privacy and sound settings and does not reveal a covered player', async t => {
+  const f = setup(t, false)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  await f.settings({ hoverDecoyEnabled: true, defaultMuted: false, volume: 0.25 })
+  const before = f.store.preferences()
+  f.service.panels.clear()
+  await f.ui.initPlayer()
+  await f.ui.retryStartup()
+  assert.equal(f.elements.get('startupError').hidden, true)
+  assert.equal(f.ui.decoy.covered, true)
+  assert.equal(f.elements.get('playerContent').inert, true)
+  assert.deepEqual(f.store.preferences(), before)
+})
+
+test('provider initialization failure also exposes recovery rather than leaving a covered dead end', async t => {
+  const f = setup(t, false), call = f.api.call
+  f.api.call = (name, args) => name === 'get_providers' ? Promise.reject(Error('synthetic provider failure')) : call(name, args)
+  await f.ui.initPlayer()
+  assert.equal(f.elements.get('startupError').hidden, false)
+  assert.equal(f.elements.get('startupErrorMessage').textContent, '连接失败，请重新连接后重试。')
+  assert.equal(f.elements.get('playerContent').inert, true)
+  f.ui.decoy.configure({ hoverDecoyEnabled: false })
+  assert.equal(f.elements.get('playerContent').inert, true, 'hover configuration must not unlock controls behind recovery')
+  assert.equal(f.video.plays, 0)
+})
+
+test('closing during reconnect prevents a late response from reopening the player', async t => {
+  const f = setup(t, false)
+  f.service.panels.clear()
+  await f.ui.initPlayer()
+  let resolve
+  f.api.reopenPanel = () => new Promise(yes => { resolve = yes })
+  const retry = f.ui.retryStartup()
+  await flush()
+  await f.ui.closePlayer()
+  resolve({ identified: true, source: 'hongguo' })
+  await retry
+  assert.equal(f.document.documentElement.dataset.decoyReady, undefined)
+  assert.equal(f.elements.get('playerContent').inert, true)
+  assert.equal(f.video.plays, 0)
+})
+
+test('startup recovery is outside covered content and follows the cover at the same top layer', () => {
+  const html = readFileSync(new URL('../src/ui/player.html', import.meta.url), 'utf8')
+  const css = readFileSync(new URL('../src/ui/style.css', import.meta.url), 'utf8')
+  assert.match(html, /<\/main>\s*<section id="decoy"[^>]*><\/section>\s*<section id="startupError"[^>]*role="alert"/)
+  assert.match(css, /\.startupError:not\(\[hidden\]\)\s*\{[^}]*position: fixed;[^}]*z-index: 2147483647;/)
+})
 
 test('hovering or clicking the source mark opens a menu; only choosing a provider switches sources', async t => {
   const f = setup(t)
@@ -177,6 +274,54 @@ test('leaving the source popover closes it, while crossing into it cancels dismi
   control.onpointerleave(); t.mock.timers.tick(160)
   assert.equal(menu.hidden, true)
   assert.equal(f.ui.sourceState().source, 'hongguo')
+})
+function chooseSettingsSource(f, id) {
+  const combo = f.elements.get('settingsSource')
+  if (combo.getAttribute('aria-expanded') !== 'true') combo.onclick()
+  return f.elements.get('settingsSourceOptions').children.find(item => item.id === 'settingsSource-' + id).onclick()
+}
+test('Settings source picker switches immediately, remembers the choice and tracks the top-left entry', async t => {
+  const f = setup(t)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  f.ui.settings.open()
+  const select = f.elements.get('settingsSource')
+  const options = f.elements.get('settingsSourceOptions')
+  assert.equal(select.dataset.value, 'hongguo')
+  assert.deepEqual(options.children.map(o => o.textContent), ['红果短剧', '示例片源'])
+  const option = options.children[0]
+  f.ui.settings.sync(); f.ui.settings.sync()
+  assert.equal(options.children[0], option, 'polling must not recreate the panel menu')
+  await chooseSettingsSource(f, 'demo')
+  assert.equal(f.store.preferences().defaultSource, 'demo')
+  assert.equal(select.dataset.value, 'demo')
+  assert.equal(f.elements.get('sourceName').textContent, '示例片源')
+  assert.equal(f.elements.get('settings').hidden, false)
+  await f.ui.changeSource('hongguo')
+  assert.equal(select.dataset.value, 'hongguo')
+  assert.equal(select.getAttribute('aria-disabled'), 'false')
+})
+test('Settings source selection preserves the current value when the service rejects a switch', async t => {
+  const f = setup(t), call = f.service.call.bind(f.service)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  f.service.call = (scope, name, args) => name === 'set_source' ? Promise.reject(Error('Synthetic failure')) : call(scope, name, args)
+  f.ui.settings.open()
+  const select = f.elements.get('settingsSource')
+  await chooseSettingsSource(f, 'demo')
+  assert.equal(select.dataset.value, 'hongguo')
+  assert.equal(f.store.preferences().defaultSource, 'hongguo')
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(select.getAttribute('aria-disabled'), 'false')
+})
+test('Settings disables source selection when only one source is available and ignores reselecting the current source', async t => {
+  const f = setup(t); f.video.paused = false
+  f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'unavailable', name: 'Unavailable', available: false }])
+  const select = f.elements.get('settingsSource')
+  assert.equal(f.elements.get('settingsSourceOptions').children.length, 1)
+  assert.equal(select.getAttribute('aria-disabled'), 'true')
+  await chooseSettingsSource(f, 'hongguo')
+  assert.equal(f.video.paused, false)
+  assert.equal(f.ui.episodeId(), 'hg-11')
 })
 test('keyboard opening focuses the current provider and Escape returns to the source button', t => {
   const f = setup(t), control = f.elements.get('source'), menu = f.elements.get('sourceMenu')
@@ -262,6 +407,30 @@ async function nsfwPlayer(t) {
   f.elements.get('sourceConfirmation').append(f.elements.get('sourceCancel'), f.elements.get('sourceConfirm'))
   return f
 }
+test('Settings NSFW selection keeps playback and Settings open until explicit confirmation', async t => {
+  const f = await nsfwPlayer(t); f.video.paused = false; f.ui.settings.open()
+  const select = f.elements.get('settingsSource')
+  select.focus()
+  assert.match(f.elements.get('settingsSourceOptions').children[1].textContent, /NSFW/)
+  const first = chooseSettingsSource(f, 'demo'); await flush()
+  assert.equal(select.dataset.value, 'hongguo'); assert.equal(select.getAttribute('aria-disabled'), 'false')
+  assert.equal(f.video.paused, false)
+  assert.equal(f.elements.get('settings').hidden, false)
+  f.elements.get('sourceCancel').onclick(); await first
+  assert.equal(select.dataset.value, 'hongguo'); assert.equal(select.getAttribute('aria-disabled'), 'false')
+  assert.equal(f.document.activeElement, select)
+  assert.equal(f.video.paused, false)
+  const escape = new Event('keydown', { cancelable: true }); Object.assign(escape, { key: 'Escape' })
+  const second = chooseSettingsSource(f, 'demo'); await flush()
+  f.document.dispatchEvent(escape); await second
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(select.dataset.value, 'hongguo')
+  assert.equal(f.video.paused, false)
+  const third = chooseSettingsSource(f, 'demo'); await flush()
+  f.elements.get('sourceConfirm').onclick(); await third
+  assert.equal(select.dataset.value, 'demo'); assert.equal(f.store.preferences().defaultSource, 'demo')
+  assert.equal(f.elements.get('settings').hidden, false)
+})
 test('cancelling NSFW selection leaves the source, playback, progress and default untouched', async t => {
   const f = await nsfwPlayer(t); f.video.paused = false
   const request = f.ui.changeSource('demo'); await flush()
@@ -433,6 +602,94 @@ async function hoveringPlayer(t, playing = true) {
   if (playing) await f.ui.start()
   return f
 }
+test('focusing and opening the source popup under the hover cover never conceals or pauses; polling preserves its highlight', async t => {
+  const f = await hoveringPlayer(t)
+  await f.elements.get('prefs').onclick()
+  const combo = f.elements.get('settingsSource'), menu = f.elements.get('settingsSourceOptions')
+  const plays = f.video.plays
+  combo.focus(); combo.onclick()
+  assert.equal(f.document.activeElement, combo)
+  menu.children[1].onpointermove()
+  for (let round = 0; round < 5; round++) {
+    await f.poll(); t.mock.timers.tick(1000); await flush()
+    assert.equal(f.ui.decoy.covered, false)
+    assert.equal(f.video.paused, false)
+    assert.equal(f.video.plays, plays)
+    assert.equal(f.elements.get('settings').hidden, false)
+    assert.equal(combo.getAttribute('aria-expanded'), 'true')
+    assert.equal(combo.getAttribute('aria-activedescendant'), 'settingsSource-demo')
+    assert.equal(f.document.activeElement, combo)
+  }
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+})
+test('Escape cancels the source popup before dismissing Settings and does not commit the highlighted provider', async t => {
+  const f = await hoveringPlayer(t)
+  f.ui.settings.open()
+  const combo = f.elements.get('settingsSource')
+  combo.onclick()
+  combo.onkeydown({ key: 'End', preventDefault() {} })
+  const escape = () => f.document.dispatchEvent(Object.assign(new Event('keydown', { cancelable: true }), { key: 'Escape' }))
+  escape(); await flush()
+  assert.equal(f.ui.sourcePicker.expanded, false)
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+  assert.equal(f.video.paused, false)
+  escape(); await flush()
+  assert.equal(f.elements.get('settings').hidden, true)
+})
+test('source popup keyboard navigation survives polling and commits only on Enter', async t => {
+  const f = await hoveringPlayer(t, false)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  f.ui.settings.open()
+  const combo = f.elements.get('settingsSource')
+  combo.onkeydown({ key: 'ArrowDown', preventDefault() {} })
+  combo.onkeydown({ key: 'End', preventDefault() {} })
+  await f.poll()
+  assert.equal(combo.dataset.value, 'hongguo')
+  assert.equal(combo.getAttribute('aria-activedescendant'), 'settingsSource-demo')
+  await combo.onkeydown({ key: 'Enter', preventDefault() {} })
+  assert.equal(f.ui.sourceState().source, 'demo')
+  assert.equal(f.store.preferences().defaultSource, 'demo')
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.ui.decoy.covered, false)
+})
+for (const event of ['blur', 'mouseleave']) test(`an open source popup cannot suppress a genuine ${event} privacy boundary`, async t => {
+  const f = await hoveringPlayer(t)
+  f.ui.settings.open(); f.elements.get('settingsSource').onclick()
+  assert.equal(f.ui.sourcePicker.expanded, true)
+  ;(event === 'blur' ? f.window : f.document).dispatchEvent(new Event(event))
+  assert.equal(f.ui.decoy.covered, true)
+  assert.equal(f.ui.sourcePicker.expanded, false)
+  assert.equal(f.video.paused, true)
+  assert.equal(f.elements.get('settings').hidden, false)
+  await enterPanel(t, f)
+  assert.equal(f.ui.decoy.covered, false)
+  assert.equal(f.elements.get('settings').hidden, false)
+})
+test('first exit after choosing a source and dismissing Settings still shows the cover', async t => {
+  const f = await hoveringPlayer(t, false)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  f.ui.settings.open(); await chooseSettingsSource(f, 'demo')
+  await f.ui.settings.finish()
+  f.document.dispatchEvent(Object.assign(new Event('mouseleave'), { clientX: 40, clientY: 80, relatedTarget: null }))
+  assert.equal(f.ui.decoy.covered, true)
+  await enterPanel(t, f)
+  assert.equal(f.ui.decoy.covered, false)
+  assert.equal(f.ui.sourceState().source, 'demo')
+  assert.equal(f.elements.get('settings').hidden, true)
+})
+test('source popup fits above a low control and remains valid when providers change during a poll', t => {
+  const f = setup(t), combo = f.elements.get('settingsSource'), menu = f.elements.get('settingsSourceOptions')
+  f.document.defaultView = f.window; f.window.innerHeight = 260
+  combo.getBoundingClientRect = () => ({ top: 220, bottom: 256 })
+  combo.onclick(); menu.children[1].onpointermove()
+  assert.equal(menu.dataset.side, 'above')
+  assert.ok(parseFloat(menu.style.maxHeight) <= 212)
+  f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'local', name: 'Local source', available: true }])
+  assert.equal(combo.getAttribute('aria-expanded'), 'true')
+  assert.equal(combo.getAttribute('aria-activedescendant'), 'settingsSource-hongguo')
+  assert.deepEqual(menu.children.map(item => item.id), ['settingsSource-hongguo', 'settingsSource-local'])
+})
 test('selecting a cover style keeps Settings open and preserves playback and unrelated preferences', async t => {
   const f = await hoveringPlayer(t)
   const host = f.elements.get('decoy'), page = host.children[0]
@@ -1174,6 +1431,55 @@ async function accountPlayer(t) {
   assert.equal(f.elements.get('accountQrArea').hidden, false)
   return { ...f, authCalls }
 }
+async function contentPlayer(t, single = false) {
+  const f = setup(t), listing = []
+  const types = [{ id: 'bangumi', name: '番剧' }, { id: 'video', name: '视频', queryHint: '搜索视频',
+    categories: [{ id: '', name: '推荐' }, { id: 'all', name: '热门' }, { id: '36', name: '知识' }] }]
+  const sources = new ProviderRegistry(f.store.root, { builtins: ['hongguo', 'demo'].map(id => ({
+    manifest: { apiVersion: 1, id, name: id, version: '1.0.0', ...(id === 'demo' ? { contentTypes: types } : {}) },
+    createProvider: () => ({ id, recommendationTerms: [],
+      contentTypeOfId: value => value === 'v' ? 'video' : 'bangumi',
+      async listSeries(options) { listing.push(options); return { items: [{ id: options.contentType === 'video' ? 'v' : 's',
+        title: '测试内容', contentType: options.contentType || 'bangumi', episodes: single ? 1 : 2 }], cursor: null } },
+      async getSeries() {}, async getCover() {}, async resolvePlayback() {},
+      async listEpisodes(value) { return { series: { id: value, title: '视频标题', contentType: value === 'v' ? 'video' : 'bangumi', author: '测试 UP' },
+        items: Array.from({ length: single ? 1 : 2 }, (_, i) => ({ id: value + (i + 1), number: i + 1, label: i ? '构图实践' : '曝光基础', playable: true })) } },
+    }),
+  })) })
+  t.after(() => sources.dispose()); await sources.ready
+  f.service.catalog = new Catalog(f.store, { sources })
+  f.ui.setProviders(sources.list()); await f.ui.changeSource('demo')
+  return { ...f, listing }
+}
+test('content tabs persist video/category choices and restore Hongguo chrome when switching back', async t => {
+  const f = await contentPlayer(t)
+  assert.equal(f.elements.get('contentTypes').hidden, false)
+  assert.equal(f.elements.get('contentCategories').hidden, true)
+  await f.ui.changeContent('video', '36')
+  assert.equal(f.store.preferences().contentPreferences.demo.contentType, 'video')
+  assert.equal(f.store.preferences().contentPreferences.demo.category, '36')
+  assert.equal(f.elements.get('query').placeholder, '搜索视频')
+  assert.equal(f.elements.get('contentCategories').hidden, false)
+  assert.ok(f.listing.some(options => options.contentType === 'video' && options.category === '36'))
+  await f.ui.changeSource('hongguo')
+  assert.equal(f.elements.get('contentTypes').hidden, true)
+  assert.equal(f.elements.get('contentCategories').hidden, true)
+  assert.equal(f.elements.get('query').placeholder, '搜索剧名')
+})
+test('multi-P shows original chapter titles and single videos hide the episode selector', async t => {
+  const f = await contentPlayer(t)
+  await f.ui.changeContent('video', 'all')
+  await f.ui.select({ id: 'p.demo.s.dg', title: '视频', contentType: 'video' })
+  assert.equal(f.elements.get('episodeHeading').textContent, '分 P')
+  assert.equal(f.elements.get('episodeCount').textContent, '2 P')
+  assert.deepEqual(f.elements.get('episodes').children.map(b => b.textContent), ['P1 · 曝光基础', 'P2 · 构图实践'])
+  assert.equal(f.elements.get('episodesPane').hidden, false)
+  assert.equal(f.elements.get('next').getAttribute('aria-label'), '下一 P')
+  const single = await contentPlayer(t, true)
+  await single.ui.changeContent('video', 'all')
+  await single.ui.select({ id: 'p.demo.s.dg', title: '单视频', contentType: 'video' })
+  assert.equal(single.elements.get('episodesPane').hidden, true)
+})
 test('a login-required playback failure offers a direct route to the source account page', async t => {
   const f = await accountPlayer(t)
   await f.ui.settings.finish()

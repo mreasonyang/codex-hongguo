@@ -6,13 +6,13 @@ export function createHoverDecoy({ changed }: Options) {
   const root = document.documentElement
   const content = document.getElementById('playerContent')!
   const layer = document.getElementById('decoy')!
-  let enabled = root.dataset.hoverDecoy === 'on', inside = false, covered = enabled, configured = false
+  let enabled = root.dataset.hoverDecoy === 'on', inside = false, covered = enabled, configured = false, unavailable = false
   let timer: ReturnType<typeof setTimeout> | undefined
   const paint = () => {
     root.dataset.hoverDecoy = enabled ? 'on' : 'off'
     root.dataset.decoyCovered = covered ? 'true' : 'false'
-    content.inert = covered || !configured
-    content.setAttribute('aria-hidden', String(covered))
+    content.inert = covered || !configured || unavailable
+    content.setAttribute('aria-hidden', String(content.inert))
     layer.setAttribute('aria-hidden', String(!covered))
   }
   function setCovered(next: boolean) {
@@ -57,6 +57,7 @@ export function createHoverDecoy({ changed }: Options) {
   return {
     get covered() { return covered },
     get enabled() { return enabled },
+    setUnavailable(value: boolean) { unavailable = value; paint() },
     configure(settings: Settings) {
       const nextEnabled = !!settings.hoverDecoyEnabled
       if (nextEnabled !== enabled) {

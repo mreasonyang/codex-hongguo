@@ -149,6 +149,19 @@
       <form id="settings" class="sheet" hidden>
         <div id="settingsMain" class="settingsMain">
         <p class="settingsHint">以下设置对所有聊天生效，修改后自动保存</p>
+        <section class="settingsGroup" aria-labelledby="sourceSettingsTitle">
+          <h2 id="sourceSettingsTitle" class="settingsGroupTitle">视频源</h2>
+          <div id="settingsSourcePicker" class="coverStylePicker settingsSourcePicker">
+            <div id="settingsSource" class="coverStyleControl" role="combobox" tabindex="0"
+              aria-haspopup="listbox" aria-expanded="false" aria-controls="settingsSourceOptions"
+              aria-labelledby="sourceSettingsTitle">
+              <span id="settingsSourceValue"></span>
+              <svg class="i" aria-hidden="true"><use href="#i-down" /></svg>
+            </div>
+            <div id="settingsSourceOptions" class="coverStyleOptions" role="listbox" aria-labelledby="sourceSettingsTitle" hidden></div>
+          </div>
+          <p class="settingsHint">也可以从左上角快捷切换</p>
+        </section>
         <section class="settingsGroup" aria-labelledby="playbackSettingsTitle">
         <h2 id="playbackSettingsTitle" class="settingsGroupTitle">播放设置</h2>
         <label class="switchRow">
@@ -280,12 +293,14 @@
             <span>换一批</span>
           </button>
         </div>
+        <div id="contentTypes" class="contentTypes" role="tablist" aria-label="内容类型" hidden></div>
+        <div id="contentCategories" class="contentCategories" role="group" aria-label="视频分区" hidden></div>
         <form id="search" role="search">
           <svg class="i" aria-hidden="true"><use href="#i-search" /></svg>
           <input
             id="query"
             type="search"
-            maxlength="120"
+            maxlength="500"
             placeholder="搜索剧名"
             aria-label="搜索剧名"
             autocomplete="off"
@@ -401,9 +416,9 @@
               </label>
             </div>
           </div>
-          <div class="episodesPane">
+          <div class="episodesPane" id="episodesPane">
             <div class="paneHead">
-              <h3>选集</h3>
+              <h3 id="episodeHeading">选集</h3>
               <span id="episodeCount"></span>
             </div>
             <div id="groups" role="group" aria-label="分集范围"></div>
@@ -414,6 +429,13 @@
       </section>
     </main>
     <section id="decoy" aria-label="工作空间" aria-hidden="true"></section>
+    <section id="startupError" class="startupError" role="alert" aria-labelledby="startupErrorTitle" hidden>
+      <div class="startupErrorCard">
+        <h2 id="startupErrorTitle">连接暂不可用</h2>
+        <p id="startupErrorMessage"></p>
+        <button id="startupRetry" class="btn" type="button">重新连接</button>
+      </div>
+    </section>
     </div>
     <script nonce="__NONCE__">
       /*SCRIPT*/

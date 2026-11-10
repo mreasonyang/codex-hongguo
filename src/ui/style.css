@@ -124,6 +124,11 @@ html[data-surface='player'][data-hover-decoy='on']:not([data-decoy-covered='fals
   visibility: hidden;
 }
 html[data-surface='waiting'] #playerRoot { display: none; }
+/* Connection recovery must remain visible without exposing the covered player. */
+.startupError:not([hidden]) { position: fixed; inset: 0; z-index: 2147483647; display: grid; place-items: center; overflow: auto; padding: 24px; background: var(--bg); }
+.startupErrorCard { width: 100%; max-width: 320px; text-align: center; }
+.startupErrorCard h2 { margin: 0 0 12px; font-size: 16px; }
+.startupErrorCard p { color: var(--text-2); line-height: 1.6; margin: 0 0 20px; }
 .coverPage { --cover-space: 20px; max-width: var(--cover-width); min-height: 100%; margin: 0 auto; padding: 0 28px 40px; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 .coverPage[data-density='compact'] { --cover-space: 14px; }
 .coverTopbar { min-height: 62px; display: flex; align-items: center; gap: 20px; border-bottom: 1px solid var(--line-2); }
@@ -706,6 +711,7 @@ h1 {
 .settingsMain { gap: 16px; }
 .settingsGroup + .settingsGroup { padding-top: 12px; border-top: 1px solid var(--line); }
 .settingsGroupTitle { margin: 0; font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); }
+.settingsSourcePicker { width: 100%; }
 .settingsHint {
   margin: 0;
   font-size: var(--fs-sm);
@@ -1761,3 +1767,14 @@ h1 {
     animation: none !important;
   }
 }
+/* Source-specific content controls share the player's typography and theme. */
+.contentTypes { display: flex; gap: 20px; border-bottom: 1px solid var(--line); margin: 0 0 16px; }
+.contentTypes button { border: 0; border-radius: 0; background: none; padding: 9px 2px; color: var(--text-2); border-bottom: 2px solid transparent; }
+.contentTypes button[aria-selected="true"] { color: var(--text); border-bottom-color: currentColor; font-weight: 600; }
+.contentCategories { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 14px; }
+.contentCategories button { padding: 5px 11px; border-radius: 999px; font-size: 12px; }
+.contentCategories button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+.videoCard .cover { aspect-ratio: 16 / 10; }
+.feature.videoCard .cover { width: 42%; max-width: 260px; }
+.episodeList.videoParts { display: flex; flex-direction: column; gap: 6px; }
+.videoParts button { text-align: start; white-space: normal; line-height: 1.5; padding: 9px 11px; }

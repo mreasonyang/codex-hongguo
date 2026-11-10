@@ -13,9 +13,9 @@ export function callerId(meta = {}) {
 }
 function rankedTitles(rows) {
   const titles = new Map()
-  for (const { id, title } of rows) {
+  for (const { id, title, contentType, episodes } of rows) {
     if (seriesPattern.test(id) && typeof title === 'string' && title.trim() && !titles.has(id))
-      titles.set(id, { id, title })
+      titles.set(id, { id, title, ...(contentType ? { contentType } : {}), ...(episodes ? { episodes } : {}) })
     if (titles.size === 48) break
   }
   return [...titles.values()]
@@ -40,6 +40,10 @@ export class Store {
         id INTEGER PRIMARY KEY CHECK(id=1), items TEXT NOT NULL, updated_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS source_recommendation_feed (
         source TEXT PRIMARY KEY, items TEXT NOT NULL, updated_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS content_recommendation_feed (
+        source TEXT NOT NULL, context TEXT NOT NULL, items TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(source,context));
+      CREATE TABLE IF NOT EXISTS recommendation_context (
+        session_id TEXT NOT NULL, turn_id TEXT NOT NULL, context TEXT NOT NULL, PRIMARY KEY(session_id,turn_id));
       CREATE TABLE IF NOT EXISTS recommendation_source (
         session_id TEXT NOT NULL, turn_id TEXT NOT NULL, source TEXT NOT NULL, PRIMARY KEY(session_id,turn_id));
       CREATE TABLE IF NOT EXISTS catalog_cache (
@@ -91,7 +95,7 @@ export class Store {
     const defaults = {
       autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
       defaultMuted: true, volume: 0.7, hoverDecoyEnabled: false, coverStyle: 'random',
-      searchTerms: ['总裁', '重生', '逆袭'], defaultSource: 'hongguo',
+      searchTerms: ['总裁', '重生', '逆袭'], defaultSource: 'hongguo', contentPreferences: {},
     }
     const settings = row ? { ...defaults, ...JSON.parse(row.body) } : defaults
     delete settings.enabledProviders
@@ -107,12 +111,13 @@ export class Store {
   setPreferences(settings) {
     return this.transaction(() => {
       const previous = this.preferences()
-      const updated = { ...previous, ...settings }
+      const updated = { ...previous, ...settings, contentPreferences: { ...previous.contentPreferences, ...settings.contentPreferences } }
       delete updated.enabledProviders
       this.db.prepare('INSERT OR REPLACE INTO player_preferences VALUES(1,?)').run(JSON.stringify(updated))
       if (JSON.stringify(previous.searchTerms) !== JSON.stringify(updated.searchTerms)) {
         this.db.exec('DELETE FROM recommendation_feed')
         this.db.exec('DELETE FROM source_recommendation_feed')
+        this.db.exec('DELETE FROM content_recommendation_feed')
         this.db.exec("DELETE FROM catalog_cache WHERE key LIKE 'feed:%'")
       }
       return updated
@@ -191,10 +196,10 @@ export class Store {
       'UPDATE visible_player SET seen_at=? WHERE session_id=? AND instance=? AND seen_at<?',
     ).run(Date.now(), sessionId, instance, Date.now() - 1800)
   }
-  waitingFeed(includeExpired = false, source = 'hongguo') {
+  waitingFeed(includeExpired = false, source = 'hongguo', context = '') {
     sourceId(source)
     // The legacy Hongguo table remains canonical while older processes are alive.
-    const row = source === 'hongguo'
+    const row = context ? this.db.prepare('SELECT items, updated_at FROM content_recommendation_feed WHERE source=? AND context=?').get(source, context) : source === 'hongguo'
       ? this.db.prepare('SELECT items, updated_at FROM recommendation_feed WHERE id=1').get()
       : this.db.prepare('SELECT items, updated_at FROM source_recommendation_feed WHERE source=?').get(source)
     if (row && !includeExpired && row.updated_at <= Date.now() - 15 * 60000) return []
@@ -228,7 +233,7 @@ export class Store {
       const saved = this.db.prepare(`UPDATE catalog_cache SET value=?,updated_at=?,retry_at=0,failures=0,
         lease_owner=NULL,lease_until=0,touched_at=? WHERE key=? AND lease_owner=? AND lease_until>?`)
         .run(JSON.stringify(value), now, now, key, owner, now).changes === 1
-      if (saved && feed) this.saveWaitingFeed(value.titles, now, feed === true ? 'hongguo' : feed)
+      if (saved && feed) this.saveWaitingFeed(value.titles, now, typeof feed === 'object' ? feed.source : feed === true ? 'hongguo' : feed, typeof feed === 'object' ? feed.context : '')
       if (saved) this.pruneCatalogCache(key, now)
       return saved
     })
@@ -250,13 +255,14 @@ export class Store {
       SELECT key FROM catalog_cache WHERE key<>? AND lease_until<=? ORDER BY touched_at DESC,key LIMIT -1 OFFSET 127)`)
       .run(keep, now)
   }
-  saveWaitingFeed(rows, now = Date.now(), source = 'hongguo') {
+  saveWaitingFeed(rows, now = Date.now(), source = 'hongguo', context = '') {
     sourceId(source)
     const items = rankedTitles(rows).filter(row => belongsTo(row.id, source))
     if (items.length) {
       const json = JSON.stringify(items)
-      this.db.prepare('INSERT OR REPLACE INTO source_recommendation_feed VALUES(?,?,?)').run(source, json, now)
-      if (source === 'hongguo') this.db.prepare('INSERT OR REPLACE INTO recommendation_feed VALUES(1,?,?)').run(json, now)
+      if (context) this.db.prepare('INSERT OR REPLACE INTO content_recommendation_feed VALUES(?,?,?,?)').run(source, context, json, now)
+      else this.db.prepare('INSERT OR REPLACE INTO source_recommendation_feed VALUES(?,?,?)').run(source, json, now)
+      if (!context && source === 'hongguo') this.db.prepare('INSERT OR REPLACE INTO recommendation_feed VALUES(1,?,?)').run(json, now)
     }
     return items
   }
@@ -264,6 +270,10 @@ export class Store {
     sourceId(preferred)
     this.db.prepare('INSERT OR IGNORE INTO recommendation_source VALUES(?,?,?)').run(sessionId, turnId, preferred)
     return this.db.prepare('SELECT source FROM recommendation_source WHERE session_id=? AND turn_id=?').get(sessionId, turnId).source
+  }
+  recommendationContext(sessionId, turnId, context = {}) {
+    this.db.prepare('INSERT OR IGNORE INTO recommendation_context VALUES(?,?,?)').run(sessionId, turnId, JSON.stringify(context))
+    return JSON.parse(this.db.prepare('SELECT context FROM recommendation_context WHERE session_id=? AND turn_id=?').get(sessionId, turnId).context)
   }
   turnPicks(sessionId, turnId) {
     const row = this.db.prepare('SELECT items FROM turn_picks WHERE session_id=? AND turn_id=?').get(sessionId, turnId)
@@ -282,11 +292,11 @@ export class Store {
         if (!this.activeTurn(row.session_id, row.turn_id)) continue
         for (const pick of JSON.parse(row.items)) if (!pick.episodeId) reserved.add(pick.id)
       }
-      const fresh = this.db.prepare(`SELECT c.value->>'id' AS id, c.value->>'title' AS title
+      const fresh = this.db.prepare(`SELECT c.value->>'id' AS id, c.value->>'title' AS title, c.value->>'contentType' AS contentType, c.value->>'episodes' AS episodes
         FROM json_each(?) c LEFT JOIN pick_exposure e ON e.series_id=c.value->>'id'
         WHERE NOT EXISTS (SELECT 1 FROM watch_progress w WHERE w.series_id=c.value->>'id' AND
           (w.position_ms>0 OR (w.series_id,w.episode_id) IN (SELECT series_id,episode_id FROM watch_restart)))
-        ORDER BY e.last_shown, c.key`).all(JSON.stringify(rankedTitles(feed))).map(({ id, title }) => ({ id, title }))
+        ORDER BY e.last_shown, c.key`).all(JSON.stringify(rankedTitles(feed))).map(({ id, title, contentType, episodes }) => ({ id, title, ...(contentType ? { contentType } : {}), ...(episodes ? { episodes } : {}) }))
       fresh.sort((a, b) => Number(reserved.has(a.id)) - Number(reserved.has(b.id)))
       const items = resume ? [resume, ...fresh.filter(item => item.id !== resume.id).slice(0, 2)] : fresh.slice(0, 3)
       if (items.length) this.db.prepare('INSERT INTO turn_picks(session_id,turn_id,items,reserved_at) VALUES(?,?,?,?)')

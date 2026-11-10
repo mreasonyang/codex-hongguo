@@ -36,7 +36,7 @@ export function sidxSegments(bytes, offset, durationMs) {
       let time = readTime() / scale
       let position = offset + box + size + readTime()
       const count = bytes.readUInt16BE(p + 2); p += 4
-      if (!count || count > 7200 || p + count * 12 !== box + size) throw invalid()
+      if (!count || count > 32768 || p + count * 12 !== box + size) throw invalid()
       const result = []
       for (let i = 0; i < count; i++, p += 12) {
         const reference = bytes.readUInt32BE(p), length = reference & 0x7fffffff
@@ -46,7 +46,7 @@ export function sidxSegments(bytes, offset, durationMs) {
         result.push({ offset: position, length, time, duration })
         position += length; time += duration
       }
-      if (position - result[0].offset > 256 * MB || Math.abs(time - durationMs / 1000) > 2) throw invalid()
+      if (position - result[0].offset > 32768 * MB || Math.abs(time - durationMs / 1000) > 2) throw invalid()
       return result
     }
   } catch { throw invalid() }
@@ -125,7 +125,7 @@ export class DashMedia {
     this.valid(e)
     const candidates = descriptor.candidates?.filter(row => row.kind === 'tracks' && row.video?.indexRange && row.audio?.indexRange)
     if (!candidates?.length) { e.fallback = true; return }
-    if (!(descriptor.durationMs > 0 && descriptor.durationMs <= 7200000)) throw invalid()
+    if (!(descriptor.durationMs > 0 && descriptor.durationMs <= 86400000)) throw invalid()
     e.durationMs = descriptor.durationMs; e.fetch = descriptor.fetchMedia; e.phase = 'index'
     let failure
     for (const candidate of candidates.slice(0, 2)) {
@@ -141,7 +141,7 @@ export class DashMedia {
         }))
         this.valid(e)
         if (tracks.reduce((sum, track) => sum + track.initialization.length +
-          track.segments.reduce((n, segment) => n + segment.length, 0), 0) > 256 * MB)
+          track.segments.reduce((n, segment) => n + segment.length, 0), 0) > 32768 * MB)
           throw new PlayerError('素材超过大小限制')
         const manifest = { version: 1, duration: e.durationMs / 1000, tracks: tracks.map(({ name, track, initialization, segments, init }) => {
           e.assets.set(init, { track, range: initialization })
