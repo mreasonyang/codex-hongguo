@@ -1,0 +1,13 @@
+{
+  "name": "@kyun.si/codex-hongguo",
+  "version": "0.0.37",
+  "channel": "latest",
+  "sourceCommit": "8e6c61a0a26eb2c1cfad2f2e0ab6e1837c1fdd9f",
+  "releaseTag": "v0.0.37",
+  "sha256": "42c2bd6ebbdcaa12fa5af9a5ad2dbb7078557cc979b5682383847da26768271b",
+  "integrity": "sha512-fdGENbBqQFY/gNTOY4on28le/xdfBSaxtbQTekrj9IDAY88h9vsm0mExLwYZEg3EIWMqAiQM0GGfg/0kFnpbOg==",
+  "publicationMethod": "GitHub Actions OIDC",
+  "registryConfirmed": true,
+  "confirmedAt": "2026-11-10T05:54:55.743Z",
+  "url": "https://www.npmjs.com/package/@kyun.si/codex-hongguo/v/0.0.37"
+}
