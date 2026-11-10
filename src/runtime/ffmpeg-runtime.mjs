@@ -108,7 +108,7 @@ async function download(artifact, destination, fetchImpl) {
   }
 }
 async function downloadAttempt(artifact, destination, fetchImpl, signal) {
-  const allowed = new Set(['github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com', 'evermeet.cx', 'www.osxexperts.net'])
+  const allowed = new Set(['github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com'])
   let url = new URL(artifact.url), response
   for (let redirects = 0; redirects <= 6; redirects++) {
     if (url.protocol !== 'https:' || url.username || url.password || url.port || !allowed.has(url.hostname)) throw failure('download-url')

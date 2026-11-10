@@ -1,6 +1,6 @@
 {
   "name": "@kyun.si/codex-hongguo",
-  "version": "0.0.37",
+  "version": "0.0.38-beta.9",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -29,7 +29,6 @@
     "hls.js": "1.7.4",
     "m3u8-parser": "7.2.1",
     "mpd-parser": "1.4.1",
-    "openhongguo": "0.2.0",
     "qrcode-generator": "2.0.4",
     "xz-decompress": "0.2.3",
     "zod": "4.6.7"

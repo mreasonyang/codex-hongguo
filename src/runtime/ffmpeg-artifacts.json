@@ -1,23 +1,23 @@
 {
   "darwin-arm64": {
-    "version": "9.0.2",
-    "url": "https://www.osxexperts.net/ffmpeg902arm.zip",
-    "format": "zip",
+    "archiveBytes": 11033302,
+    "archiveSha256": "f0b782cea398b28312b41c06f8e6b85dfb44c7c966de0f8ff7fc77cb0c8008eb",
+    "binaryBytes": 23214368,
+    "binarySha256": "b5c3eaf7fb542597e4aed5f1591f6ba83e03709eb3ebe58c497a2cbfaa0050d1",
     "entry": "ffmpeg",
-    "archiveBytes": 22665869,
-    "archiveSha256": "07e00300593799005b060c03a99fe648b1edda0f30c36b0c1adafe8e3247e586",
-    "binaryBytes": 52160568,
-    "binarySha256": "762f16b2913b8d3b8fdb8092df12b691053b035b13ae9b88205513c55cb8e71e"
+    "format": "zip",
+    "url": "https://github.com/mreasonyang/codex-hongguo/releases/download/ffmpeg-macos-9.0.2-r1/ffmpeg-9.0.2-macos-r1-darwin-arm64.zip",
+    "version": "9.0.2-macos-r1"
   },
   "darwin-x64": {
-    "version": "9.0.2",
-    "url": "https://evermeet.cx/ffmpeg/ffmpeg-9.0.2.zip",
-    "format": "zip",
+    "archiveBytes": 12272793,
+    "archiveSha256": "6e234a7c7271657339f12a462945be2bc24e11913d0ba92d7795e58d7a50bbbf",
+    "binaryBytes": 28093792,
+    "binarySha256": "8d07b4c23021d57425abb0dda4494a8d859709ee60c27d04dcc84022facbe2a9",
     "entry": "ffmpeg",
-    "archiveBytes": 26198325,
-    "archiveSha256": "4acc0be580f9b2788029eb7bd4d645ff87968911b0a62aeeb3940d42d54558d5",
-    "binaryBytes": 80827688,
-    "binarySha256": "a45b462cf91ed89148ae218c4577e30896485d7a6792c3673bcf5f823fa01b63"
+    "format": "zip",
+    "url": "https://github.com/mreasonyang/codex-hongguo/releases/download/ffmpeg-macos-9.0.2-r1/ffmpeg-9.0.2-macos-r1-darwin-x64.zip",
+    "version": "9.0.2-macos-r1"
   },
   "linux-x64": {
     "archiveBytes": 49975964,

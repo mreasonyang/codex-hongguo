@@ -275,6 +275,11 @@ export class Catalog {
       void this.prepareMediaRuntime().catch(() => {})
       return { status: 'preparing' }
     }
+    if (adapter.rangedFilePlayback) {
+      this.panelMedia ??= new PanelMedia(this.store.root)
+      return this.panelMedia.file.prepare(id, () => this.sources.resolvePlayback(id),
+        () => this.sources.forId(id, 'episode').adapter.auth?.revision?.() ?? '', retry, preload)
+    }
     this.cache ??= new MediaCache(this.store, (ep) => this.sources.resolvePlayback(ep), {
       revision: ep => this.sources.forId(ep, 'episode').adapter.auth?.revision?.() ?? '',
     })

@@ -3,6 +3,7 @@ import { tr } from './locale'
 
 export type WaitingPick = { id: string; title: string; episodeId?: string; kind?: 'resume' | 'next'; contentType?: string; episodes?: number; label?: string }
 export type WaitingSelection = { turnId: string; pick: WaitingPick | null; play: boolean; playbackId?: number; reason?: 'turn-ended' }
+type WaitingStatus = { visible: boolean; excludeNsfwRecommendations?: boolean }
 
 export function pickLabel(pick: WaitingPick) {
   if (!pick.episodeId) return pick.title
@@ -67,6 +68,7 @@ export function waitingCard(openPlayer: (selection: WaitingSelection) => void, c
   const dismiss = document.getElementById('waitingDismiss')!
   let ready = false, expanded = false, choosing = false, dismissed = false, allowed = true, checking = false
   let render = 0, lastMode: string | undefined
+  let excludeNsfwRecommendations = true
   let showing: AbortController | undefined
   let activation: Promise<WaitingSelection> | undefined
   let timer: ReturnType<typeof setInterval> | undefined
@@ -116,9 +118,10 @@ export function waitingCard(openPlayer: (selection: WaitingSelection) => void, c
       }
     }
     if (dismissed) { hide(); return }
-    const state = await call<{ visible: boolean }>('get_waiting_status')
+    const state = await call<WaitingStatus>('get_waiting_status')
     if (generation !== render) return
     allowed = state.visible
+    excludeNsfwRecommendations = state.excludeNsfwRecommendations !== false
     if (!allowed) { hide(); return }
     status.textContent = ''
     await showWaitingPicks(card, titles, work.signal, undefined, items => {
@@ -160,10 +163,13 @@ export function waitingCard(openPlayer: (selection: WaitingSelection) => void, c
     if (!ready || expanded || choosing || dismissed || document.hidden || checking) return
     checking = true
     try {
-      const state = await call<{ visible: boolean }>('get_waiting_status')
+      const state = await call<WaitingStatus>('get_waiting_status')
       if (!ready || expanded || choosing || dismissed) return
-      if (state.visible !== allowed) {
+      const exclusionChanged = excludeNsfwRecommendations !== (state.excludeNsfwRecommendations !== false)
+      if (state.visible !== allowed || exclusionChanged) {
         allowed = state.visible
+        excludeNsfwRecommendations = state.excludeNsfwRecommendations !== false
+        if (exclusionChanged) hide()
         if (allowed) await refresh(true)
         else hide()
       }

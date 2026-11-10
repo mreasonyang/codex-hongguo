@@ -683,6 +683,8 @@ h1 {
 .sourceDot[data-source='hongguo'] { background: var(--brand); }
 .sourceDot[data-source='bilibili'] { background: #fb7299; }
 .sourceButton[data-source='bilibili'] .mark { background: #fb7299; }
+.sourceDot[data-source='huangguo'] { background: #d99925; }
+.sourceButton[data-source='huangguo'] .mark { background: #d99925; }
 .sourceMenu .i { width: 13px; height: 13px; color: var(--text-2); }
 .sourceConfirmation { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: rgb(0 0 0 / .28); }
 .sourceConfirmationCard { box-sizing: border-box; width: min(100%, 360px); padding: 20px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--raised); box-shadow: var(--_shadow); }

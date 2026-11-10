@@ -37,7 +37,7 @@ type Progress = {
 }
 type Prepared =
   | { status: 'preparing' | 'error'; reason?: string; phase?: string }
-  | ({ status: 'ready'; codec?: string; durationMs?: number; format?: 'dash' } & ({ stream: string; manifest: string } | { src: string }))
+  | ({ status: 'ready'; codec?: string; durationMs?: number; format?: 'dash' | 'hls' } & ({ stream: string; manifest: string } | { src: string }))
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 const video = document.querySelector('video')!,
   seek = el<HTMLInputElement>('seek')
@@ -217,7 +217,7 @@ function showSourceMenu(focus = false) {
       b.setAttribute('aria-checked', String(provider.id === activeSource))
       const dot = document.createElement('span'), name = document.createElement('span')
       dot.className = 'sourceDot'; dot.dataset.source = provider.id; dot.setAttribute('aria-hidden', 'true')
-      name.className = 'sourceLabel'; name.textContent = tr(provider.name)
+      name.className = 'sourceLabel'; name.textContent = tr(provider.name) + (provider.nsfw ? ' · NSFW' : '')
       b.append(dot, name)
       if (provider.id === activeSource) b.append(icon('check'))
       return b
@@ -238,7 +238,7 @@ let lastSave = 0,
   saved = Promise.resolve()
 
 let prefs: Preferences = {
-  autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
+  autoPrompt: true, excludeNsfwRecommendations: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
   defaultMuted: true, volume: 0.7, hoverDecoyEnabled: false, coverStyle: 'random',
   searchTerms: ['总裁', '重生', '逆袭'], defaultSource: 'hongguo',
 }
@@ -280,12 +280,13 @@ const settings = createSettings({
   applied: updated => {
     ++preferencesRevision
     const termsChanged = JSON.stringify(prefs.searchTerms) !== JSON.stringify(updated.searchTerms)
+    const exclusionChanged = prefs.excludeNsfwRecommendations !== updated.excludeNsfwRecommendations
     syncDefaultMute(updated)
     prefs = updated
     configureDecoy()
     autoNext.checked = prefs.autoplayNext
     if (!autoNext.checked) cancelNextPreload()
-    renderPicks()
+    renderPicks(exclusionChanged)
     if (termsChanged && !series) void list().catch(error => notice(explain(error)))
   },
   translate: tr,
@@ -746,7 +747,7 @@ function drawCards() {
     }
   })()
 }
-function renderPicks() {
+function renderPicks(force = false) {
   const show =
     prefs.autoPrompt &&
     !!current?.turnId &&
@@ -756,10 +757,11 @@ function renderPicks() {
     cards.length > 0 &&
     dismissedTurn !== current.turnId
   const turnId = show ? current!.turnId : null
-  if (turnId === promptTurn) return
+  if (turnId === promptTurn && !force) return
   promptTurn = turnId
   promptRender?.abort()
   const card = el('prompt'), titles = el('picks')
+  titles.replaceChildren()
   if (!turnId) { card.hidden = true; return }
   const work = promptRender = new AbortController()
   void showWaitingPicks(card, titles, work.signal, turnId, items => {
@@ -992,13 +994,14 @@ async function readTurnState() {
     authRevision = state.authRevision
     if (state.preferences && revision === preferencesRevision) {
       const promptChanged = prefs.autoPrompt !== state.preferences.autoPrompt
+      const exclusionChanged = prefs.excludeNsfwRecommendations !== state.preferences.excludeNsfwRecommendations
       const contentChanged = JSON.stringify(prefs.contentPreferences?.[activeSource]) !== JSON.stringify(state.preferences.contentPreferences?.[activeSource])
       syncDefaultMute(state.preferences)
       prefs = state.preferences
       configureDecoy()
       autoNext.checked = prefs.autoplayNext
       if (!autoNext.checked) cancelNextPreload()
-      if (promptChanged) renderPicks()
+      if (promptChanged || exclusionChanged) renderPicks(exclusionChanged)
       if (contentChanged) {
         syncSourceButton()
         if (!series && !switchingSource) { cards = []; void Promise.all([list(false, ''), history()]).catch(() => {}) }
@@ -1091,7 +1094,7 @@ async function start(recommendationTurn?: string, automatic = false) {
       if ('stream' in result && result.format !== 'dash' && result.durationMs && pos > 0 && !result.manifest.includes('#EXT-X-ENDLIST') &&
           playlistDuration(result.manifest) < pos + 3) throw Error('分集续播位置准备超时，请重试')
       const media = result
-      if (browser ? !('src' in media) && media.format !== 'dash' : !('stream' in media)) throw Error('本集播放地址已失效，请重试')
+      if (browser ? !('src' in media) && !('stream' in media) : !('stream' in media)) throw Error('本集播放地址已失效，请重试')
       release()
       mediaDuration = Number.isFinite(media.durationMs) && media.durationMs! > 0 ? media.durationMs! / 1000 : 0
       const load = new AbortController()

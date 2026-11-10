@@ -1,0 +1,32 @@
+{
+  "checkedAt": "2026-11-10T14:48:25.408Z",
+  "cause": "upstream-replaced-versioned-archive-and-executable",
+  "distributorPage": "https://www.osxexperts.net/",
+  "platform": "darwin-arm64",
+  "old": {
+    "archiveBytes": 22665869,
+    "archiveSha256": "07e00300593799005b060c03a99fe648b1edda0f30c36b0c1adafe8e3247e586",
+    "binaryBytes": 52160568,
+    "binarySha256": "762f16b2913b8d3b8fdb8092df12b691053b035b13ae9b88205513c55cb8e71e",
+    "minimumMacOS": "12.0"
+  },
+  "current": {
+    "archiveBytes": 28344375,
+    "archiveSha256": "4597f0f3a397cc0027bfd03dc4dd9c3066be15943cc788370846b4305d178bcb",
+    "binaryBytes": 64304008,
+    "binarySha256": "6deb2860c3dc0c08e0f96bab119196c024103046fa3cc7ef72e3a77797d8553c",
+    "minimumMacOS": "13.0"
+  },
+  "checks": {
+    "http200": true,
+    "fullResponse": true,
+    "archiveMatchesRefreshedPin": true,
+    "binaryMatchesPublishedVendorSha256": true,
+    "machoArm64": true,
+    "originalCodeSignatureValid": true,
+    "version902": true,
+    "h264AacDecodePassed": true,
+    "gplEnabled": true,
+    "nonfreeEnabled": false
+  }
+}

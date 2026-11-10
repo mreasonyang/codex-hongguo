@@ -1,0 +1,29 @@
+{
+  "status": "partial",
+  "sourceCommit": "64e8a032b241a09e59eb27c85797529113ff6fd6",
+  "version": "0.0.37",
+  "packageBuilt": true,
+  "fullFreshInstallPassed": false,
+  "freshInstallFailure": {
+    "component": "existing-ffmpeg-runtime",
+    "stage": "archive-size"
+  },
+  "artifacts": [
+    {
+      "file": "kyun.si-codex-hongguo-0.0.37.tgz",
+      "bytes": 5856799,
+      "sha256": "29df40ea17ac9280fc3a11d8b363f5e9fabe7d0a3cb41116f66237f36c42e14a"
+    },
+    {
+      "file": "codex-hongguo-0.0.37.zip",
+      "bytes": 6221654,
+      "sha256": "f6eceaf9d8a2ef0c7878bd4bf6d5adde5fdada07dd630dd22696b09d204086a8"
+    }
+  ],
+  "offlineLicenseIncluded": true,
+  "npmLicenseIncluded": true,
+  "npmNoticeIncluded": true,
+  "sourceIncluded": true,
+  "serverSha256": "cd870cbaba44297df447292e6d4a4ca3971488c80662f08c37a9442e22e4a8a3",
+  "matchesLiveVerifiedServer": true
+}

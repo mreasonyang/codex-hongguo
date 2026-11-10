@@ -3,9 +3,11 @@ import { pathToFileURL } from 'node:url'
 import { projectRoot } from '../paths.mjs'
 import { sourceCall, encodeCursor, decodeCursor, filePlayback } from './contracts.mjs'
 import { cdn, responseBytes } from './network.mjs'
+import { PlayerError } from '../errors.mjs'
 
 export class HongguoSource {
   id = 'hongguo'
+  rangedFilePlayback = true
   constructor(root) { this.root = root; this.fetchMedia = cdn }
   async sdkCall(method, ...args) {
     this.client ??= import(pathToFileURL(join(projectRoot, 'dist/vendor/openhongguo/index.js')).href)
@@ -41,6 +43,21 @@ export class HongguoSource {
     return { bytes: await responseBytes(body, 3 * 1024 * 1024) }
   }
   resolvePlayback(id, { signal } = {}) {
-    return sourceCall(async () => ({ ...filePlayback(await this.sdkCall('resolvePlayback', id)), fetchMedia: this.fetchMedia }), signal)
+    return sourceCall(async () => {
+      const compatible = result => (result.playback?.streams || []).some(s => s.url && !/bytevc2/i.test(s.codec || ''))
+      let result = await this.sdkCall('resolvePlayback', id)
+      // The service can issue a ByteVC2-only model even though this player uses
+      // standard codecs. Refresh once without explicitly resetting the device.
+      if (!compatible(result) && result.playback?.streams?.some(s => /bytevc2/i.test(s.codec || ''))) {
+        if (signal?.aborted) throw new PlayerError('请求已取消', 499)
+        result = await this.sdkCall('resolvePlayback', id)
+        if (!compatible(result)) {
+          const error = new PlayerError('该集暂未提供兼容编码，请稍后重试', 503)
+          error.code = 'UNSUPPORTED_CODEC'
+          throw error
+        }
+      }
+      return { ...filePlayback(result), fetchMedia: this.fetchMedia }
+    }, signal)
   }
 }

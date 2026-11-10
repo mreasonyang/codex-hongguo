@@ -26,7 +26,7 @@ npx "@kyun.si/codex-hongguo@latest" uninstall
 
 ## 运行环境与包内容
 
-npm 包的 `os` 为 darwin/linux/win32，Windows 需要 x64 或 ARM64 Node；ARM64 系统需要 Windows 11 和插件 >=0.0.30。Windows PowerShell 使用 `npx.cmd "@kyun.si/codex-hongguo@latest" setup`，详见 [Windows 支持](windows-support.md)。三平台的自动化安装验证与桌面播放观察分别记录。需要外部 Node.js >=22.16（含 npm）和 Codex CLI。播放组件由安装器自动下载到用户缓存，校验固定的归档和可执行文件 SHA-256 后使用；不需要全局安装 FFmpeg。macOS 使用原始发行者的组件，Windows/Linux 使用本项目独立发布的精简组件。包内提供 JavaScript 依赖、播放器、SDK/WASM、播放组件清单和许可说明。
+npm 包的 `os` 为 darwin/linux/win32，Windows 需要 x64 或 ARM64 Node；ARM64 系统需要 Windows 11 和插件 >=0.0.30。Windows PowerShell 使用 `npx.cmd "@kyun.si/codex-hongguo@latest" setup`，详见 [Windows 支持](windows-support.md)。三平台的自动化安装验证与桌面播放观察分别记录。需要外部 Node.js >=22.16（含 npm）和 Codex CLI。播放组件由安装器自动下载到用户缓存，校验固定的归档和可执行文件 SHA-256 后使用；不需要全局安装 FFmpeg。macOS 使用本项目从固定官方源码构建的组件，Windows/Linux 使用本项目独立发布的 BtbN 精简组件。包内提供 JavaScript 依赖、播放器、SDK/WASM、播放组件清单和许可说明。
 
 MCP 使用同名的 `bin/run-node` / Windows `bin/run-node.exe` 入口，Hooks 按平台调用同一启动器。两者都检查 Node 版本及 `node:sqlite`；POSIX 保留 PATH、Homebrew、Volta、nvm、mise、fnm 查找，Windows 支持 PATH、常见 Node、Volta、nvm-windows 和 Scoop 位置。源码构建需 Go >=1.25，发行包使用者无需安装 Go。FFmpeg/Codex 通过 `src/runtime/executables.mjs` 查找，显式覆盖项见 [CONTRIBUTING](../CONTRIBUTING.md#运行环境与诊断)。覆盖值必须在实际宿主子进程的环境中可见。
 
@@ -54,6 +54,14 @@ Windows/Linux 精简组件由 `.github/workflows/ffmpeg-components.yml` 单独�
 Windows/Linux x64 通过实际 H.264/AAC、HEVC 转 H.264、JPEG 封面和 framehash 检查后才发布。
 ARM64 校验源归档、架构和可执行文件字节一致性；这些回执不代表 ARM64 实机播放验收。
 组件使用独立的 `ffmpeg-*` 预发布标签，不推进 npm 正式通道或正式市场索引。
+
+macOS 组件由 `.github/workflows/ffmpeg-macos.yml` 在 Apple Silicon 和 Intel runner 分别从源码构建。
+`third_party/ffmpeg/macos-build.json` 固定 FFmpeg 官方发布归档及 VideoLAN x264 的完整修订、大小和 SHA-256。
+编译关闭可选库自动探测和网络协议，静态链接 x264；成品只允许依赖 macOS 系统库，无需用户安装 Homebrew。
+两个架构均通过 H.264/AAC、HEVC 解码和转 H.264、JPEG、framehash、HLS/fMP4、CENC、链接库与签名完整性检查后才发布。
+独立的 `ffmpeg-macos-*` 预发布同时提供完整源码归档、构建脚本、参数、工具链和验收回执；发布后不覆盖原有组件。
+组件更新需显式检查上游安全修复、更新源码固定值、运行构建并发布新标签，再将发布回读的固定值写入运行时清单。
+`libx265` 编码不属于插件播放路径，macOS 构建不包含它；原生 HEVC 解码和转码为 H.264 保留。
 
 精简组件的 `cacheKey` 保持原缓存目录。升级复用旧回执时，必须匹配本插件所有者、回执版本和固定的可执行文件哈希，
 并重新校验实际文件；内存中的校验缓存也绑定该可执行文件身份。
