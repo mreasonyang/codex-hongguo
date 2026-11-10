@@ -2,14 +2,6 @@ name: macOS FFmpeg from source
 on:
   push:
     tags: ['ffmpeg-macos-*']
-    branches: ['feat/huangguo-nsfw']
-    paths:
-      - 'scripts/build-macos-ffmpeg.py'
-      - 'scripts/repack-ffmpeg.py'
-      - 'third_party/ffmpeg/macos-build.json'
-      - 'test/macos_ffmpeg_test.py'
-      - 'test/fixtures/**'
-      - '.github/workflows/ffmpeg-macos.yml'
 permissions:
   contents: read
 concurrency:

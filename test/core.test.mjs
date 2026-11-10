@@ -724,13 +724,8 @@ for (const video of ['hevc', 'h264']) {
     if (!hasFfmpeg()) return t.skip('FFmpeg unavailable')
     const { dir, store } = setup(t)
     const source = join(dir, 'source.mp4')
-    let fixtureVideo = ['-c:v', 'copy']
-    if (video === 'hevc') {
-      const encoders = spawnSync(ffmpeg, ['-hide_banner', '-encoders'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
-      if (!/\blibx265\b/.test(encoders.stdout)) return t.skip('libx265 unavailable to generate the HEVC fixture')
-      fixtureVideo = ['-c:v', 'libx265', '-preset', 'ultrafast', '-x265-params', 'pools=1:frame-threads=1', '-tag:v', 'hvc1']
-    }
-    await runFfmpeg(['-i', avcFixture, '-t', '1', ...fixtureVideo, '-c:a', 'alac', source])
+    const fixture = video === 'hevc' ? join(projectRoot, 'test/fixtures/hevc-aac.mp4') : avcFixture
+    await runFfmpeg(['-i', fixture, '-t', '1', '-c:v', 'copy', '-c:a', 'alac', source])
     // A legacy row may carry only the container label. Read the actual first video and audio tracks.
     const catalog = cachedCatalog(t, store, source, 'MP4')
     const run = t.mock.fn(runFfmpeg)

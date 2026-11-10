@@ -14,7 +14,7 @@ async function fixture(t) {
   const directory = await realpath(await mkdtemp(join(tmpdir(), "红果 media '$ ")))
   t.after(() => rm(directory, { recursive: true, force: true }))
   const binary = Buffer.from('fixture-native-executable'), archive = zipSync({ ffmpeg: binary, '../../escape': Buffer.from('not extracted') })
-  const artifact = { version: 'test', url: 'https://www.osxexperts.net/fixture.zip', format: 'zip', entry: 'ffmpeg', archiveBytes: archive.length, archiveSha256: sha(archive), binaryBytes: binary.length, binarySha256: sha(binary) }
+  const artifact = { version: 'test', url: 'https://github.com/mreasonyang/codex-hongguo/releases/download/fixture/ffmpeg.zip', format: 'zip', entry: 'ffmpeg', archiveBytes: archive.length, archiveSha256: sha(archive), binaryBytes: binary.length, binarySha256: sha(binary) }
   const options = { env: { HONGGUO_RUNTIME_DIR: directory }, platform: process.platform, arch: process.arch, artifacts: { [process.platform + '-' + process.arch]: artifact }, probe: () => true }
   return { directory, binary, archive, artifact, options }
 }
@@ -163,6 +163,9 @@ test('download failures stay fixed and retryable, HTTPS redirects are constraine
   const options = { ...f.options, fetchImpl: async () => { throw Error('SYNTHETIC_PRIVATE_DOWNLOAD_DETAIL') } }
   await assert.rejects(ensureFfmpeg(options), error => /自动准备失败/.test(error.message) && !error.message.includes('SYNTHETIC'))
   await assert.rejects(ensureFfmpeg({ ...options, fetchImpl: async () => new Response(null, { status: 302, headers: { location: 'http://127.0.0.1/private' } }) }), /自动准备失败/)
+  for (const host of ['www.osxexperts.net', 'evermeet.cx']) {
+    await assert.rejects(ensureFfmpeg({ ...options, fetchImpl: async () => new Response(null, { status: 302, headers: { location: 'https://' + host + '/ffmpeg.zip' } }) }), error => error.code === 'download-url')
+  }
   await assert.rejects(ensureFfmpeg({ ...options, arch: 'unsupported' }), /系统架构/)
   await ensureFfmpeg({ ...options, fetchImpl: async () => new Response(f.archive) })
 })
