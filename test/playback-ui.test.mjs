@@ -433,6 +433,8 @@ test('Settings NSFW selection keeps playback and Settings open until explicit co
 })
 test('cancelling NSFW selection leaves the source, playback, progress and default untouched', async t => {
   const f = await nsfwPlayer(t); f.video.paused = false
+  f.elements.get('source').onclick()
+  assert.match(f.elements.get('sourceMenu').children[1].children[1].textContent, /NSFW/)
   const request = f.ui.changeSource('demo'); await flush()
   assert.equal(f.elements.get('sourceConfirmation').hidden, false)
   assert.equal(f.document.activeElement, f.elements.get('sourceCancel'))

@@ -157,7 +157,7 @@ test('local providers load through the same contract, retain opaque IDs and disp
   await install(directory, 'local')
   const registry = new ProviderRegistry(root, { directory }); await registry.ready
   const provider = registry.get('local')
-  assert.equal(registry.list().filter(p => p.available).length, 3)
+  assert.equal(registry.list().filter(p => p.available).length, 4)
   assert.equal(registry.get('hongguo').id, 'hongguo')
   const store = new Store(join(root, 'data')); defer(t, () => store.close())
   const catalog = new Catalog(store, { sources: registry }); catalog.ffmpeg = true
@@ -186,7 +186,7 @@ test('invalid, duplicate, disabled, escaping and broken plugins leave Hongguo op
   const linked = await install(directory, 'linked')
   await rm(join(linked, 'index.mjs')); await symlink(join(directory, 'broken/index.mjs'), join(linked, 'index.mjs'))
   const registry = new ProviderRegistry(root, { directory }); await registry.ready
-  assert.deepEqual(registry.list().filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili'])
+  assert.deepEqual(registry.list().filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'huangguo'])
   assert.equal(registry.get('hongguo') instanceof HongguoSource, true)
   assert.ok(!JSON.stringify(registry.list()).includes('private diagnostic'))
   assert.ok(!JSON.stringify(registry.list()).includes(root))
@@ -210,7 +210,7 @@ test('removed sources cannot reopen through saved defaults or stale recommendati
   assert.equal((await service.call(scope, 'get_preferences', {})).defaultSource, 'hongguo')
   assert.equal((await service.call(scope, 'set_preferences', { volume: 0.42 })).defaultSource, 'hongguo')
   scope.source = 'removed'; scope.selection = { seriesId: 'hh-1' }; scope.waiting = { selected: { id: 'hh-1' } }
-  assert.deepEqual((await service.call(scope, 'get_providers', {})).items.map(row => row.id), ['hongguo', 'bilibili'])
+  assert.deepEqual((await service.call(scope, 'get_providers', {})).items.map(row => row.id), ['hongguo', 'bilibili', 'huangguo'])
   assert.equal(scope.source, 'hongguo'); assert.equal(scope.selection, undefined); assert.equal(scope.waiting.selected, null)
   await assert.rejects(service.call(scope, 'set_source', { source: 'removed' }))
   store.db.prepare('INSERT INTO turn_picks VALUES(?,?,?,?,?)').run('A', 'old', JSON.stringify([{ id: 'hh-1', title: 'Removed' }]), null, 1)

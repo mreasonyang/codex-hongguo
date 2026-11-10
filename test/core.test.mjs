@@ -282,14 +282,14 @@ test('compiled MCP starts all installed providers and persists source selection 
     } }
   }
   const first = await start()
-  assert.deepEqual((await first.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'demo'])
+  assert.deepEqual((await first.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'huangguo', 'demo'])
   await first.client.close()
   const second = await start()
-  assert.deepEqual((await second.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'demo'])
+  assert.deepEqual((await second.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'huangguo', 'demo'])
   await second.call('set_source', { source: 'demo' })
   await second.client.close()
   const third = await start()
-  assert.deepEqual((await third.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'demo'])
+  assert.deepEqual((await third.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'huangguo', 'demo'])
   assert.equal((await third.call('get_preferences')).defaultSource, 'demo')
 })
 test('compiled plugin exposes a model-visible waiting widget and keeps player controls app-only', async (t) => {
@@ -320,7 +320,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   })
   assert.equal(data.isError, true)
   const resources = (await client.listResources()).resources
-  const playerUri = 'ui://hongguo/v38/player', waitingUri = 'ui://hongguo/v38/waiting'
+  const playerUri = 'ui://hongguo/v39/player', waitingUri = 'ui://hongguo/v39/waiting'
   assert.equal(tools.find(t => t.name === 'show_waiting_picks')._meta.ui.resourceUri, waitingUri)
   assert.equal(tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri, playerUri)
   assert.deepEqual(resources.map(r => r.uri).sort(), [playerUri, waitingUri])
@@ -336,6 +336,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
     'ui://hongguo/v35/player', 'ui://hongguo/v35/waiting',
     'ui://hongguo/v36/player', 'ui://hongguo/v36/waiting',
     'ui://hongguo/v37/player', 'ui://hongguo/v37/waiting',
+    'ui://hongguo/v38/player', 'ui://hongguo/v38/waiting',
     ...Array.from({ length: 16 }, (_, i) => [`ui://hongguo/v${i + 18}/player`, `ui://hongguo/v${i + 18}/waiting`]).flat()]) {
     const read = (await client.readResource({ uri })).contents[0]
     assert.equal(read.uri, uri)

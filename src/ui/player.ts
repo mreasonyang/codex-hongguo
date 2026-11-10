@@ -217,7 +217,7 @@ function showSourceMenu(focus = false) {
       b.setAttribute('aria-checked', String(provider.id === activeSource))
       const dot = document.createElement('span'), name = document.createElement('span')
       dot.className = 'sourceDot'; dot.dataset.source = provider.id; dot.setAttribute('aria-hidden', 'true')
-      name.className = 'sourceLabel'; name.textContent = tr(provider.name)
+      name.className = 'sourceLabel'; name.textContent = tr(provider.name) + (provider.nsfw ? ' · NSFW' : '')
       b.append(dot, name)
       if (provider.id === activeSource) b.append(icon('check'))
       return b

@@ -9,6 +9,12 @@ Third-party components retain their respective licenses. In particular,
 combination is permitted by section 13 of GPLv3 and AGPLv3, and the AGPLv3
 network-interaction requirements apply to the combination.
 
+The Huangguo provider contains adapted GPLv3 code from gybeyond1/Veyra,
+pinned to a83dfd9a29b23d439da4f853d104568696cd401c. It retains GPLv3;
+source paths, attribution and local changes are documented in
+third_party/veyra/NOTICE.md (licenses/veyra/NOTICE.md in distributions).
+The same section 13 combination and source obligations apply.
+
 Earlier MIT releases retain their original grants. The MIT notice for portions
 previously released under MIT is preserved in third_party/legacy-project/LICENSE.MIT
 in the source tree and licenses/legacy-project/LICENSE.MIT in distribution packages.
