@@ -1,0 +1,20 @@
+{
+  "componentTag": "ffmpeg-macos-9.0.2-r1",
+  "version": "9.0.2",
+  "minimumMacOS": "12.0",
+  "sources": {
+    "ffmpeg": {
+      "url": "https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz",
+      "filename": "ffmpeg-9.0.2.tar.xz",
+      "bytes": 12040788,
+      "sha256": "8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e"
+    },
+    "x264": {
+      "url": "https://code.videolan.org/videolan/x264/-/archive/b35605ace3ddf7c1a5d67a2eb553f034aef41d55/x264-b35605ace3ddf7c1a5d67a2eb553f034aef41d55.tar.gz",
+      "filename": "x264-b35605ace3ddf7c1a5d67a2eb553f034aef41d55.tar.gz",
+      "commit": "b35605ace3ddf7c1a5d67a2eb553f034aef41d55",
+      "bytes": 1040327,
+      "sha256": "cd71a7515b0e9a012e1ac9b1f8415bebcaf6fc97d4db32286642ac4c0fbe24f9"
+    }
+  }
+}
