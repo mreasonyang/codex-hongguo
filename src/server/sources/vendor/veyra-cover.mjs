@@ -1,7 +1,8 @@
 /*! SPDX-License-Identifier: GPL-3.0-only
  * Cover decoding adapted from gybeyond1/Veyra desktop/src/main/huangguo.ts
  * Commit: a83dfd9a29b23d439da4f853d104568696cd401c
- * Local changes: recognize WebP/AVIF/HEIC and remove valid PKCS7 padding.
+ * Local changes: recognize WebP/AVIF/HEIC, remove valid PKCS7 padding,
+ * and restore the site's JPEG quantization-table header.
  * See third_party/veyra/NOTICE.md and LICENSE.
  */
 import { createDecipheriv } from 'node:crypto'
@@ -27,5 +28,9 @@ export function decodeCover(buffer) {
     } catch { return null }
   }
   if (data.length > 12 && data.subarray(0, 7).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x14]))) data[6] = 0x1a
+  // One site variant changes DQT table 0 to invalid table 14. Its SOF still
+  // references table 0. Match this exact two-table header; valid JPEGs stay intact.
+  if (data.length > 136 && data[71] === 1 &&
+      data.subarray(0, 7).equals(Buffer.from([0xff, 0xd8, 0xff, 0xdb, 0, 0x84, 0x0e]))) data[6] = 0
   return isImage(data) ? data : null
 }

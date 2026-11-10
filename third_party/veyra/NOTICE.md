@@ -26,7 +26,8 @@ The site models and JSON API/playback mapping remain derived from Veyra.
 Cover decoding in src/server/sources/vendor/veyra-cover.mjs is adapted from
 desktop/src/main/huangguo.ts at the same revision (Git blob
 b7b410c69d3102b047d6ff3f7a5b243b4cfaeb73). Local changes add WebP/AVIF/HEIC
-recognition and remove valid PKCS7 padding. Site PNG-header repair is retained.
+recognition and remove valid PKCS7 padding. Site PNG-header repair is retained;
+the matching JPEG variant restores its modified DQT table identifier (14 to 0).
 
 The adapter in src/server/sources/huangguo.mjs supplies bounded anonymous
 transport, namespaced identifiers, pagination, cover decoding and HLS playback.

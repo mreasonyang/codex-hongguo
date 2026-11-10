@@ -12,6 +12,8 @@ import { Catalog } from '../src/server/catalog.mjs'
 import { Service } from '../src/server/service.mjs'
 import { qualify } from '../src/server/sources/ids.mjs'
 import { Readable } from 'node:stream'
+import { ensureFfmpeg } from '../src/runtime/ffmpeg-runtime.mjs'
+import { runFfmpeg } from '../src/server/media.mjs'
 
 const row = { id: 'series_1', title: 'Fixture series', cover: 'https://pic.drleao.cn/cover.jpg', total_episodes: 2 }
 const detail = { ...row, episodes: [{ ep_num: 2, title: 'Second' }, { ep_num: 1, title: 'First' }] }
@@ -144,6 +146,38 @@ test('Veyra cover decoder handles plain/encrypted images and repairs the site PN
   const cipher = createCipheriv('aes-128-cbc', Buffer.from('f5d965df75336270'), Buffer.from('97b60374abc2fbe1'))
   assert.deepEqual(decodeCover(Buffer.concat([cipher.update(damaged), cipher.final()])), plain)
   assert.equal(decodeCover(Buffer.from('bad image')), null)
+})
+
+test('the altered JPEG cover header is restored before real thumbnail decoding, including encrypted covers', async () => {
+  await ensureFfmpeg()
+  const encoded = await runFfmpeg(['-f', 'lavfi', '-i', 'color=c=blue:s=32x48', '-frames:v', '1',
+    '-pix_fmt', 'yuvj420p', '-f', 'image2pipe', '-c:v', 'mjpeg', 'pipe:1'], null, true)
+  const parts = []; let table
+  for (let p = 2; p + 4 <= encoded.length;) {
+    assert.equal(encoded[p], 255)
+    const marker = encoded[p + 1], length = encoded.readUInt16BE(p + 2)
+    if (marker === 0xda) { parts.push(encoded.subarray(p)); break }
+    if (marker === 0xdb) table = Buffer.from(encoded.subarray(p + 4, p + 2 + length))
+    else if (marker !== 0xfe && !(marker >= 0xe0 && marker <= 0xef)) parts.push(encoded.subarray(p, p + 2 + length))
+    p += 2 + length
+  }
+  assert.equal(table.length, 65); assert.equal(table[0], 0)
+  const second = Buffer.from(table); second[0] = 1
+  const valid = Buffer.concat([Buffer.from([255, 216, 255, 219, 0, 132]), table, second, ...parts])
+  const damaged = Buffer.from(valid); damaged[6] = 14
+  const convert = bytes => runFfmpeg(['-protocol_whitelist', 'pipe', '-i', 'pipe:0', '-vf',
+    'scale=240:320:force_original_aspect_ratio=decrease', '-frames:v', '1', '-f', 'image2pipe', '-c:v', 'mjpeg', 'pipe:1'], bytes, true)
+  await assert.rejects(convert(damaged), /无法处理/)
+  assert.deepEqual(decodeCover(damaged), valid)
+  assert.equal(damaged[6], 14, 'repair must not mutate the caller buffer')
+  assert.ok((await convert(decodeCover(damaged))).length > 0)
+  const cipher = createCipheriv('aes-128-cbc', Buffer.from('f5d965df75336270'), Buffer.from('97b60374abc2fbe1'))
+  const encrypted = Buffer.concat([cipher.update(damaged), cipher.final()])
+  assert.deepEqual(decodeCover(encrypted), valid)
+  assert.deepEqual(decodeCover(valid), valid)
+  const otherVariant = Buffer.from(damaged); otherVariant[71] = 2
+  assert.deepEqual(decodeCover(otherVariant), otherVariant, 'other headers must not be blindly rewritten')
+  assert.equal(decodeCover(damaged.subarray(0, 100))[6], 14)
 })
 
 test('the real provider remains behind NSFW confirmation and scopes its catalog, history and playback grants', async t => {
