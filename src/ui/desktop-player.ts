@@ -13,6 +13,7 @@ export function createDesktopPlayer(options:Options) {
   const slot=document.getElementById('desktopSlot')
   const hint=document.getElementById('desktopHint')
   const recover=document.getElementById('desktopReturn')
+  const gestureHint=document.getElementById('desktopDragHint')
   let state:WindowState={supported:false,generation:0,phase:'docked'}
   let enabled=false, disposed=false, refreshing:Promise<void>|undefined, moving=false, restoring=-1
   let anchor:{x:number;y:number;hostX:number;hostY:number}|undefined
@@ -29,11 +30,13 @@ export function createDesktopPlayer(options:Options) {
     anchor={x:e.screenX-e.clientX,y:e.screenY-e.clientY,hostX:window.screenX,hostY:window.screenY}
   }
   function render() {
-    if(button){button.hidden=!state.supported||browser;button.disabled=moving||state.phase!=='docked';button.title=tr('移到桌面');button.setAttribute('aria-label',tr('移到桌面'))}
-    handle?.classList.toggle('canDetach',state.supported&&!browser)
+    const ready=!!options.snapshot()
+    if(button){button.hidden=!state.supported||browser;button.disabled=moving||state.phase!=='docked'||!ready;button.title=tr('移到桌面');button.setAttribute('aria-label',tr('移到桌面'))}
+    handle?.classList.toggle('canDetach',state.supported&&!browser&&ready)
     document.documentElement.classList.toggle('desktopDetached',state.phase!=='docked')
     if(slot)slot.hidden=state.phase==='docked'
-    if(hint){hint.textContent=tr(state.error || (state.phase==='docking'?'正在返回播放器…':'拖回这里恢复播放'));hint.hidden=!state.error&&state.phase!=='docking'}
+    if(hint){hint.textContent=tr(state.error || (state.phase==='docking'?'正在返回播放器…':'拖回这里恢复播放'));hint.hidden=state.phase==='docked'}
+    if(gestureHint&&state.phase!=='docked')gestureHint.hidden=true
     if(recover)recover.hidden=state.phase!=='detached' && state.phase!=='detaching'
   }
   async function apply(next:WindowState) {
@@ -97,7 +100,10 @@ export function createDesktopPlayer(options:Options) {
   function pointerMove(e:PointerEvent) {
     if(!gesture||e.pointerId!==gesture.id){calibrate(e);return}
     const g=gesture;g.point={x:e.screenX,y:e.screenY}
-    if(!g.active && Math.hypot(e.clientX-g.x,e.clientY-g.y)>24){
+    const distance=Math.hypot(e.clientX-g.x,e.clientY-g.y)
+    if(distance>6){document.documentElement.classList.add('desktopDragging');if(gestureHint)gestureHint.hidden=state.phase!=='docked'}
+    const outside=e.clientX < -12 || e.clientY < -12 || e.clientX > window.innerWidth+12 || e.clientY > window.innerHeight+12
+    if(!g.active && distance>24 && outside){
       g.active=true;document.documentElement.classList.add('desktopDragging');void detach(g)
     }
   }
@@ -105,6 +111,7 @@ export function createDesktopPlayer(options:Options) {
     if(!gesture||e.pointerId!==gesture.id)return
     const g=gesture;g.ended=true;g.canceled=e.type==='pointercancel';g.point={x:e.screenX,y:e.screenY}
     document.documentElement.classList.remove('desktopDragging')
+    if(gestureHint)gestureHint.hidden=true
     try{document.body.releasePointerCapture(e.pointerId)}catch{}
     if(g.active && !moving)void finishGesture(g)
     gesture=undefined
@@ -112,6 +119,7 @@ export function createDesktopPlayer(options:Options) {
   function cancel(e:KeyboardEvent) {
     if(e.key!=='Escape'||!gesture)return
     const g=gesture;g.canceled=true;g.ended=true;gesture=undefined;document.documentElement.classList.remove('desktopDragging')
+    if(gestureHint)gestureHint.hidden=true
     if(!moving)void finishGesture(g)
   }
   function dragOver(e:DragEvent) {
@@ -129,7 +137,7 @@ export function createDesktopPlayer(options:Options) {
   button?.addEventListener('click',onClick);handle?.addEventListener('pointerdown',pointerDown)
   document.addEventListener('pointermove',pointerMove);document.addEventListener('pointerup',pointerEnd);document.addEventListener('pointercancel',pointerEnd)
   document.addEventListener('keydown',cancel);slot?.addEventListener('dragover',dragOver);slot?.addEventListener('drop',drop)
-  slot?.addEventListener('dragleave',()=>{slot.classList.remove('dragOver');if(hint&&!state.error)hint.hidden=true})
+  slot?.addEventListener('dragleave',()=>{slot.classList.remove('dragOver')})
   recover?.addEventListener('click',onRecover)
   return {
     external,

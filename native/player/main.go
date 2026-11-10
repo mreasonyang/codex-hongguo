@@ -410,7 +410,7 @@ func (p *Player) view(c *ui.Context) {
 		ui.Row(c).Height(48).WidthPercent(100).Padding(12).Gap(10).AlignItems(ui.Center).Children(func() {
 			title := p.tr("拖回侧栏", "Drag back to sidebar")
 			if !p.covered {
-				title = s.Title
+				title = "⠿  " + s.Title
 			}
 			ui.Box(c).Grow(1).Height(40).DragData(transfer.TextData("hongguo-player:"+p.scene.ID), transfer.DragOptions{
 				Operations: transfer.Move, Hotspot: image.Point{X: 40, Y: 20}, Done: func(r transfer.Result) {
@@ -424,7 +424,7 @@ func (p *Player) view(c *ui.Context) {
 				ui.Column(c).Gap(2).Children(func() {
 					ui.Text(c, title).Ellipsis("…").Bold()
 					if !p.covered {
-						ui.Text(c, s.Label).FontSize(11)
+						ui.Text(c, s.Label+" · "+p.tr("拖回侧栏", "Drag back to sidebar")).FontSize(11)
 					}
 				})
 			})

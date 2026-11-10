@@ -78,6 +78,13 @@
         <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
         <path d="M12 4.5v15" />
       </symbol>
+      <symbol id="i-popout" viewBox="0 0 24 24">
+        <path d="M13.5 4.5h6v6M19.5 4.5l-9 9" />
+        <path d="M10 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V14" />
+      </symbol>
+      <symbol id="i-grip" viewBox="0 0 16 24">
+        <path d="M5 5h.01M11 5h.01M5 12h.01M11 12h.01M5 19h.01M11 19h.01" stroke-width="3" stroke-linecap="round" />
+      </symbol>
       <symbol id="i-copy" viewBox="0 0 24 24">
         <rect x="8.5" y="8.5" width="11" height="11" rx="2" />
         <path d="M15.5 8.5v-2a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" />
@@ -109,6 +116,7 @@
       <span id="waitingMessage" role="status"></span>
     </section>
     <div id="playerRoot">
+    <div id="desktopDragHint" class="desktopDragHint" role="status" hidden>拖出侧栏，移到桌面 · Esc 取消</div>
     <section id="desktopSlot" class="desktopSlot" aria-label="播放器回收区" hidden>
       <p id="desktopHint" aria-live="polite" hidden>拖回这里恢复播放</p>
       <button id="desktopReturn" class="btn ghost" type="button">返回面板</button>
@@ -333,11 +341,13 @@
             <svg class="i" aria-hidden="true"><use href="#i-back" /></svg>
           </button>
           <div class="ctx" id="desktopHandle" title="拖动播放器到桌面">
+            <svg class="i desktopGrip" aria-hidden="true"><use href="#i-grip" /></svg>
             <h2 id="title">选择一部短剧</h2>
-            <span id="subtitle"></span>
+            <span class="desktopMeta"><span id="subtitle"></span><span class="desktopCue">拖到桌面</span></span>
           </div>
-          <button id="detach" class="icon" type="button" title="移到桌面" aria-label="移到桌面" hidden>
-            <svg class="i" aria-hidden="true"><use href="#i-split" /></svg>
+          <button id="detach" class="link" type="button" title="移到桌面" aria-label="移到桌面" hidden>
+            <svg class="i" aria-hidden="true"><use href="#i-popout" /></svg>
+            <span>独立窗口</span>
           </button>
           <button id="pair" class="link" type="button" title="在同窗分屏播放" hidden>
             <svg class="i" aria-hidden="true"><use href="#i-split" /></svg>

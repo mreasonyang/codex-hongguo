@@ -1779,10 +1779,14 @@ h1 {
 .episodeList.videoParts { display: flex; flex-direction: column; gap: 6px; }
 .videoParts button { text-align: start; white-space: normal; line-height: 1.5; padding: 9px 11px; }
 /* A detached player leaves a real drop target in its original sidebar. */
-.desktopSlot { min-height: min(70vh, 620px); display:flex; flex-direction:column; justify-content:center; align-items:center; gap:16px; color:var(--muted); }
+.desktopSlot { min-height: min(70vh, 620px); display:flex; flex-direction:column; justify-content:center; align-items:center; gap:16px; color:var(--text-2); }
 .desktopSlot.dragOver { outline:2px dashed currentColor; outline-offset:-14px; }
-.desktopSlot #desktopReturn { opacity:0; transition:opacity 120ms; }
-.desktopSlot:hover #desktopReturn,.desktopSlot:focus-within #desktopReturn { opacity:1; }
 .desktopDetached #playerContent,.desktopDetached #decoy,.desktopDetached #waitingCard { display:none !important; }
-.canDetach { cursor:grab; user-select:none; touch-action:none; }
+.desktopGrip,.desktopCue { display:none; }
+.canDetach { position:relative; padding-left:20px; cursor:grab; user-select:none; touch-action:none; }
+.canDetach .desktopGrip { display:block; position:absolute; left:0; top:50%; transform:translateY(-50%); width:13px; height:20px; opacity:.55; }
+.desktopMeta { display:flex; align-items:center; gap:8px; min-width:0; }
+.canDetach .desktopCue { display:inline; white-space:nowrap; opacity:.6; font-size:10px; }
+.desktopMeta #subtitle { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.desktopDragHint { position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:100; pointer-events:none; padding:9px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--text); box-shadow:0 4px 20px #0002; white-space:nowrap; font-size:12px; }
 .desktopDragging,.desktopDragging * { cursor:grabbing !important; user-select:none !important; }

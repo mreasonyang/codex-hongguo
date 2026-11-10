@@ -65,3 +65,25 @@ test('Escape during asynchronous preparation keeps the original renderer and avo
   await flush();f.event(f.document,'keydown',{key:'Escape'});prepared({status:'ready'});await flush()
   assert.equal(detaches,0);assert.equal(f.counts.freeze,0);assert.equal(f.ui.external(),false)
 })
+test('dragging inside the sidebar only shows a cue; detachment starts after crossing its edge',async()=>{
+  let prepares=0,detaches=0
+  const f=setup(async name=>{
+    if(name==='get_window_state')return docked
+    if(name==='prepare_desktop_player'){prepares++;return{status:'ready'}}
+    if(name==='detach_player'){detaches++;return{...docked,revision:2,generation:1,phase:'detaching',snapshot}}
+    throw Error('Unexpected call')
+  })
+  await f.ui.start()
+  const pointer={pointerId:1,button:0,clientX:100,clientY:100,screenX:100,screenY:100}
+  f.event(f.elements.get('desktopHandle'),'pointerdown',pointer)
+  f.event(f.document,'pointermove',{...pointer,clientX:350,screenX:350});await flush()
+  assert.equal(prepares,0);assert.equal(f.ui.external(),false)
+  assert.equal(f.elements.get('desktopDragHint').hidden,false)
+  f.event(f.document,'pointerup',{...pointer,clientX:350,screenX:350})
+  assert.equal(f.elements.get('desktopDragHint').hidden,true)
+  f.event(f.elements.get('desktopHandle'),'pointerdown',pointer)
+  f.event(f.document,'pointermove',{...pointer,clientX:411,screenX:411});await flush()
+  assert.equal(prepares,0,'releasing near the edge must not pop out a window')
+  f.event(f.document,'pointermove',{...pointer,clientX:413,screenX:413});await flush()
+  assert.equal(prepares,1);assert.equal(detaches,1);assert.equal(f.ui.external(),true)
+})

@@ -1,5 +1,6 @@
 // The catalog supplies show names and episode titles. Translate player chrome only.
 const en: Record<string, string> = {
+  独立窗口:'Desktop window',拖到桌面:'Drag to desktop','拖出侧栏，移到桌面 · Esc 取消':'Drag outside the sidebar to detach · Esc to cancel',
   移到桌面:'Move to desktop',拖动播放器到桌面:'Drag player to desktop',播放器回收区:'Player docking area',
   拖回这里恢复播放:'Drag here to return the player',返回面板:'Return to sidebar','正在返回播放器…':'Returning the player…',
   播放器尚未准备好返回:'The player is not ready to return','播放位置恢复超时，请重试':'Restoring playback position timed out. Try again.',
