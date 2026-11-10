@@ -18,7 +18,7 @@ const root = join(tmp, '本地 市场'),
 const npmMarket = join(tmp, 'npm 市场')
 const version = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version
 const channel = releaseChannel(version)
-const playerUri = 'ui://hongguo/v38/player', waitingUri = 'ui://hongguo/v38/waiting'
+const playerUri = 'ui://hongguo/v41/player', waitingUri = 'ui://hongguo/v41/waiting'
 const commands = Object.fromEntries(['npm', 'codex', 'openssl'].map(name => [name, findExecutable(name)]))
 const env = {
   HOME: tmp,
@@ -310,13 +310,14 @@ try {
       await new Promise(resolve => setTimeout(resolve, 500))
     } while (Date.now() < deadline)
     assert.equal(prepared?.status, 'ready', '真实分集准备超时')
-    const segment = prepared.manifest.match(/seg\d{5}\.m4s/)?.[0]
+    const segment = prepared.manifest.match(/seg\d{5}\.(?:m4s|ts)/)?.[0]
     assert.ok(segment, '分集缺少可播放分段')
     const buffers = []
-    for (const asset of ['init.mp4', segment]) {
+    const initialization = /#EXT-X-MAP:URI="(init\.mp4)"/.exec(prepared.manifest)?.[1]
+    for (const asset of [initialization, segment].filter(Boolean)) {
       let offset = 0, size
       do {
-        const reply = await hostCall('read_panel_chunk', { panel: opened._meta.panel, episodeId, stream: prepared.stream, asset, offset })
+        const reply = await hostCall('read_panel_chunk', { panel: opened._meta.panel, episodeId, stream: prepared.stream, asset, offset }, offset === 0 ? 45000 : 15000)
         assert.ok(!reply.isError, '分集分段读取失败')
         const chunk = reply._meta?.data
         const bytes = Buffer.from(chunk.bytes, 'base64')
@@ -324,7 +325,7 @@ try {
         buffers.push(bytes); offset += bytes.length; size = chunk.size
       } while (offset < size)
     }
-    const fragment = join(tmp, 'first-fragment.mp4')
+    const fragment = join(tmp, segment.endsWith('.ts') ? 'first-fragment.ts' : 'first-fragment.mp4')
     await writeFile(fragment, Buffer.concat(buffers))
     const decoded = spawnSync(commands.ffmpeg, ['-v', 'error', '-i', fragment, '-f', 'null', '-'], { stdio: 'ignore', timeout: 20000 })
     assert.equal(decoded.status, 0, '真实 npm 安装副本的音视频分段无法解码')

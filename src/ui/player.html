@@ -226,6 +226,14 @@
           <span>当前回合进行时显示推荐</span>
           <input type="checkbox" id="autoPrompt" class="switch" />
         </label>
+        <div class="switchRow">
+          <span class="settingLabel">
+            <label for="excludeNsfwRecommendations">始终排除 NSFW 片源</label>
+            <button id="excludeNsfwRecommendationsHelp" type="button" class="settingHelp" aria-label="NSFW 推荐说明" aria-describedby="excludeNsfwRecommendationsTip"><svg class="i" aria-hidden="true"><use href="#i-info" /></svg></button>
+          </span>
+          <input type="checkbox" id="excludeNsfwRecommendations" class="switch" aria-describedby="excludeNsfwRecommendationsTip" />
+          <span id="excludeNsfwRecommendationsTip" class="settingTip" role="tooltip" hidden>推荐中不展示 NSFW 片源（含续播）；手动浏览不受影响。关闭后仍需确认切换片源。</span>
+        </div>
         <div class="field">
           <span class="settingLabel">
             <label for="terms">推荐补充关键词</label>

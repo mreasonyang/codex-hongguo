@@ -6,6 +6,7 @@ import { runFfmpeg } from './media.mjs'
 import { PlayerError } from './errors.mjs'
 import { mp4DurationMs } from './mp4-duration.mjs'
 import { DashMedia } from './dash-media.mjs'
+import { FileMedia } from './file-media.mjs'
 
 const idle = 10 * 60_000
 const chunkSize = 192 * 1024
@@ -53,6 +54,7 @@ export class PanelMedia {
     this.run = run
     this.entries = new Map()
     this.remote = new DashMedia(root)
+    this.file = new FileMedia(root)
     mkdirSync(this.root, { recursive: true, mode: 0o700 })
     for (const item of readdirSync(this.root, { withFileTypes: true })) {
       const dir = join(this.root, item.name)
@@ -71,6 +73,7 @@ export class PanelMedia {
   }
   sweep() {
     this.remote.sweep()
+    this.file.sweep()
     for (const e of this.entries.values()) if (!e.pending && Date.now() - e.used > idle) this.drop(e)
   }
   touch(e) {
@@ -130,6 +133,7 @@ export class PanelMedia {
     }
   }
   manifest(id, stream) {
+    if (this.file.owns(id, stream)) return this.file.manifest(id, stream)
     if (this.remote.owns(id, stream)) return this.remote.manifest(id, stream)
     const e = this.entries.get(id)
     if (!e || e.stream !== stream || e.error || !e.manifest)
@@ -168,6 +172,7 @@ export class PanelMedia {
     e.manifest = manifest
   }
   async chunk(id, stream, asset, offset) {
+    if (this.file.owns(id, stream)) return this.file.chunk(id, stream, asset, offset)
     if (this.remote.owns(id, stream)) return this.remote.chunk(id, stream, asset, offset)
     const e = this.entries.get(id)
     if (!e || e.stream !== stream || e.error || !e.manifest || !assetName.test(asset))
@@ -186,19 +191,23 @@ export class PanelMedia {
     }
   }
   pin(id, viewer) {
+    this.file.pin(id, viewer)
     this.remote.pin(id, viewer)
     this.entries.get(id)?.viewers.add(viewer)
   }
   unpin(id, viewer) {
+    this.file.unpin(id, viewer)
     this.remote.unpin(id, viewer)
     this.entries.get(id)?.viewers.delete(viewer)
   }
   close() {
     clearInterval(this.timer)
     this.remote.close()
+    this.file.close()
     for (const e of this.entries.values()) {
       if (e.pending) e.job.finally(() => this.drop(e))
       else this.drop(e)
     }
   }
+  owns(id, stream) { return this.remote.owns(id, stream) || this.file.owns(id, stream) }
 }

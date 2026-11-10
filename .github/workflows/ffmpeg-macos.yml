@@ -1,0 +1,68 @@
+name: macOS FFmpeg from source
+on:
+  push:
+    tags: ['ffmpeg-macos-*']
+permissions:
+  contents: read
+concurrency:
+  group: ffmpeg-macos-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            platform: darwin-arm64
+          - os: macos-15-intel
+            platform: darwin-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install build tools only
+        run: brew install pkgconf nasm
+      - name: Test source extraction and platform checks
+        run: python -m unittest discover -s test -p '*ffmpeg_test.py'
+      - name: Build pinned sources and qualify native binary
+        run: python scripts/build-macos-ffmpeg.py build --platform ${{ matrix.platform }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-component-${{ matrix.platform }}
+          if-no-files-found: error
+          path: release/ffmpeg-macos/
+  collect:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: macos-component-*
+          merge-multiple: true
+          path: release/ffmpeg-macos/
+      - name: Verify binaries, native receipts and complete sources
+        run: python scripts/build-macos-ffmpeg.py collect
+      - name: Publish independent component prerelease
+        if: startsWith(github.ref, 'refs/tags/ffmpeg-macos-')
+        run: python scripts/build-macos-ffmpeg.py publish
+        env:
+          COMPONENT_TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-component-qualification
+          if-no-files-found: error
+          path: release/ffmpeg-macos/

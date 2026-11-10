@@ -88,7 +88,12 @@ jobs:
         run: npm install --global @openai/codex@0.157.1
       - name: Install Linux media tools
         if: runner.os == 'Linux'
-        run: sudo apt-get update -qq && sudo apt-get install -y openssl
+        run: |
+          if ! openssl version >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y openssl
+          fi
+          openssl version
       - name: Install macOS media tools
         if: runner.os == 'macOS'
         run: brew install openssl@3

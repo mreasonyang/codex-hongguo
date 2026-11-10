@@ -3,6 +3,7 @@ import { resolve, join, sep, isAbsolute } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { HongguoSource } from '../sources/hongguo.mjs'
 import { BilibiliSource } from '../sources/bilibili.mjs'
+import { HuangguoSource, huangguoManifest } from '../sources/huangguo.mjs'
 import { sourceId, parseId } from '../sources/ids.mjs'
 import { sourceCall } from '../sources/contracts.mjs'
 import { boundedResponse, responseBytes, mediaFetcher } from '../sources/network.mjs'
@@ -21,6 +22,7 @@ export const builtins = [
     queryMode: 'search', queryHint: '搜索番名，也可粘贴番剧链接', emptyMessage: '暂时没有找到番剧，请换个关键词试试',
     network: { api: ['api.bilibili.com', 'passport.bilibili.com', 'passport.biligame.com'], media: ['*.bilivideo.com', '*.bilivideo.cn', '*.bilivideo.net', '*.hdslb.com'] } },
     createProvider: ctx => new BilibiliSource(ctx, { cookie: process.env.HONGGUO_BILIBILI_COOKIE || '' }) },
+  { manifest: huangguoManifest, createProvider: ctx => new HuangguoSource(ctx) },
 ]
 function validate(manifest) {
   if (!manifest || manifest.apiVersion !== 1 || sourceId(manifest.id) !== manifest.id ||

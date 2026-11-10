@@ -66,6 +66,9 @@ test('panel startup distinguishes policy, missing metadata, source and decode fa
 // Episode selection, cache lookup, panel streaming and browser grants use the normal service.
 function cachedCatalog(t, store, source = avcFixture, codec = 'h264') {
   const catalog = new Catalog(store)
+  // Exercise the legacy local-file path; Hongguo's range path has separate
+  // encrypted-file and service authorization coverage.
+  catalog.sources.get('hongguo').rangedFilePlayback = false
   t.mock.method(catalog.sources.get('hongguo'), 'sdkCall', async (method, id) => {
     assert.equal(method, 'listEpisodes')
     assert.equal(id, '10')
@@ -282,14 +285,14 @@ test('compiled MCP starts all installed providers and persists source selection 
     } }
   }
   const first = await start()
-  assert.deepEqual((await first.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'demo'])
+  assert.deepEqual((await first.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'huangguo', 'demo'])
   await first.client.close()
   const second = await start()
-  assert.deepEqual((await second.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'demo'])
+  assert.deepEqual((await second.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'huangguo', 'demo'])
   await second.call('set_source', { source: 'demo' })
   await second.client.close()
   const third = await start()
-  assert.deepEqual((await third.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'demo'])
+  assert.deepEqual((await third.call('get_providers')).items.filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'huangguo', 'demo'])
   assert.equal((await third.call('get_preferences')).defaultSource, 'demo')
 })
 test('compiled plugin exposes a model-visible waiting widget and keeps player controls app-only', async (t) => {
@@ -320,7 +323,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   })
   assert.equal(data.isError, true)
   const resources = (await client.listResources()).resources
-  const playerUri = 'ui://hongguo/v38/player', waitingUri = 'ui://hongguo/v38/waiting'
+  const playerUri = 'ui://hongguo/v41/player', waitingUri = 'ui://hongguo/v41/waiting'
   assert.equal(tools.find(t => t.name === 'show_waiting_picks')._meta.ui.resourceUri, waitingUri)
   assert.equal(tools.find(t => t.name === 'open_drama_panel')._meta.ui.resourceUri, playerUri)
   assert.deepEqual(resources.map(r => r.uri).sort(), [playerUri, waitingUri])
@@ -336,6 +339,7 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
     'ui://hongguo/v35/player', 'ui://hongguo/v35/waiting',
     'ui://hongguo/v36/player', 'ui://hongguo/v36/waiting',
     'ui://hongguo/v37/player', 'ui://hongguo/v37/waiting',
+    'ui://hongguo/v38/player', 'ui://hongguo/v38/waiting',
     ...Array.from({ length: 16 }, (_, i) => [`ui://hongguo/v${i + 18}/player`, `ui://hongguo/v${i + 18}/waiting`]).flat()]) {
     const read = (await client.readResource({ uri })).contents[0]
     assert.equal(read.uri, uri)
@@ -723,13 +727,8 @@ for (const video of ['hevc', 'h264']) {
     if (!hasFfmpeg()) return t.skip('FFmpeg unavailable')
     const { dir, store } = setup(t)
     const source = join(dir, 'source.mp4')
-    let fixtureVideo = ['-c:v', 'copy']
-    if (video === 'hevc') {
-      const encoders = spawnSync(ffmpeg, ['-hide_banner', '-encoders'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
-      if (!/\blibx265\b/.test(encoders.stdout)) return t.skip('libx265 unavailable to generate the HEVC fixture')
-      fixtureVideo = ['-c:v', 'libx265', '-preset', 'ultrafast', '-x265-params', 'pools=1:frame-threads=1', '-tag:v', 'hvc1']
-    }
-    await runFfmpeg(['-i', avcFixture, '-t', '1', ...fixtureVideo, '-c:a', 'alac', source])
+    const fixture = video === 'hevc' ? join(projectRoot, 'test/fixtures/hevc-aac.mp4') : avcFixture
+    await runFfmpeg(['-i', fixture, '-t', '1', '-c:v', 'copy', '-c:a', 'alac', source])
     // A legacy row may carry only the container label. Read the actual first video and audio tracks.
     const catalog = cachedCatalog(t, store, source, 'MP4')
     const run = t.mock.fn(runFfmpeg)

@@ -1,7 +1,7 @@
 name: FFmpeg components
 on:
   push:
-    tags: ['ffmpeg-*']
+    tags: ['ffmpeg-*', '!ffmpeg-macos-*']
 permissions:
   contents: read
 concurrency:

@@ -54,7 +54,7 @@ test('Bilibili is available by default with NSFW false while its SDK and library
   const root = await mkdtemp(join(tmpdir(), 'bilibili-default-'))
   defer(t, () => rm(root, { recursive: true, force: true }))
   const registry = new ProviderRegistry(root); await registry.ready; defer(t, () => registry.dispose())
-  assert.deepEqual(registry.list().filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili'])
+  assert.deepEqual(registry.list().filter(p => p.available).map(p => p.id), ['hongguo', 'bilibili', 'huangguo'])
   assert.equal(registry.list().find(p => p.id === 'bilibili').nsfw, false)
   await assert.rejects(access(join(root, 'device/providers/bilibili')))
   assert.equal(registry.get('bilibili').sdk, undefined)

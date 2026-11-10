@@ -1,4 +1,4 @@
-const fields = ['autoPlayOnStart', 'defaultMuted', 'hoverDecoyEnabled', 'coverStyle', 'terms'] as const
+const fields = ['autoPlayOnStart', 'defaultMuted', 'hoverDecoyEnabled', 'coverStyle', 'terms', 'excludeNsfwRecommendations'] as const
 
 /** Help stays inside the iframe; it never opens a native popup or changes settings. */
 export function createSettingsHelp(doc: Document = document) {

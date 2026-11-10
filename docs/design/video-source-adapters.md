@@ -1,6 +1,6 @@
 # 视频源适配层与 Provider 插件
 
-当前实现内置红果和基于 amagi 的 Bilibili 番剧 Provider，默认开放全部已安装且可用片源，初始选中红果。新增来源通过显式安装的本地 Provider 扩展，详细接口见 [Provider 插件](../providers.md)。
+当前实现内置红果、基于 amagi 的 Bilibili 和基于 Veyra 的黄果 NSFW Provider，默认开放全部已安装且可用片源，初始选中红果。新增来源通过显式安装的本地 Provider 扩展，详细接口见 [Provider 插件](../providers.md)。
 
 ## 依赖方向
 
@@ -10,6 +10,8 @@ flowchart TD
   S --> C[Catalog：片库、历史与缓存编排]
   C --> R[ProviderRegistry：发现、默认启动和路由]
   R --> H[HongguoSource / openhongguo]
+  R --> B[BilibiliSource / amagi]
+  R --> G[HuangguoSource / Veyra / NSFW]
   R --> P[显式安装的本地 Provider]
   C --> M[通用媒体处理与缓存]
   M --> R
@@ -31,4 +33,4 @@ flowchart TD
 
 `npm test` 覆盖红果兼容、独立本地示例插件、配置启停和进程重启、跨来源隔离、切源竞态、历史与缓存、通用媒体及回合联动。真实红果安装和媒体验证使用 `npm run verify:install -- --playback`。
 
-旧双源实现的验证快照保留在 `docs/audits/` 供追溯，不能代表当前支持范围；对应站点驱动、vendored SDK 和专用取流脚本已经移除。
+旧双源实现的验证快照保留在 `docs/audits/` 供追溯，不能代表当前支持范围；旧 dsh-hongguo 站点驱动与 SDK 已移除。当前黄果采用固定版本的 Veyra 模块，验证使用 `node scripts/verify-huangguo.mjs --live --playback`。

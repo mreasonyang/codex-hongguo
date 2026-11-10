@@ -1,0 +1,20 @@
+{
+  "status": "pass",
+  "checkedAt": "2026-11-10T14:50:01.981Z",
+  "platform": "darwin",
+  "arch": "arm64",
+  "upstreamCommit": "a83dfd9a29b23d439da4f853d104568696cd401c",
+  "serverSha256": "eac24bf5fc58714c1fdd3fc58932356acf87f0bea201f374118cb75d77fd05a1",
+  "fullEpisodeDecoded": true,
+  "installedAppPlaybackObserved": false,
+  "confirmationRequired": true,
+  "catalogItems": 16,
+  "searchItems": 16,
+  "coverDecoded": true,
+  "episodeCount": 21,
+  "durationMs": 207935,
+  "assets": 42,
+  "chunkCalls": 378,
+  "mediaBytes": 70208756,
+  "historyIsolated": true
+}

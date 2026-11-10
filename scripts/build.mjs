@@ -1,8 +1,9 @@
 import { build } from 'esbuild'
-import { readFile, writeFile, mkdir, cp } from 'node:fs/promises'
+import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 await import('./build-launcher.mjs')
 await import('./prepare-amagi-source.mjs')
+await import('./build-openhongguo.mjs')
 execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit'], { stdio: 'inherit' })
 await Promise.all([
   build({
@@ -18,7 +19,6 @@ await Promise.all([
     minify: true,
     legalComments: 'eof',
   }),
-  cp('node_modules/openhongguo', 'dist/vendor/openhongguo', { recursive: true }),
   build({ entryPoints: ['src/runtime/amagi-entry.mjs'], bundle: true, platform: 'node', format: 'esm',
     target: 'node22.16', outfile: 'dist/vendor/amagi/index.mjs', minify: true, legalComments: 'eof',
     banner: { js: "import {createRequire as __cr} from 'node:module';const require=__cr(import.meta.url);" } }),
