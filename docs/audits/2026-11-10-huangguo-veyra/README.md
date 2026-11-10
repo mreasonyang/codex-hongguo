@@ -27,4 +27,6 @@ node scripts/verify-huangguo.mjs --live --playback
 
 额外的全新隔离安装检查未通过：现有 FFmpeg 组件下载在 `archive-size` 校验阶段失败，未完成后续新装资格检查；独立运行原有 runtime 下载器也复现同一阶段。该检查不修改用户的已安装插件。本次没有改动 FFmpeg 下载器或其制品清单。
 
+后续已确认 OSXExperts 原地替换了同名 Apple Silicon 构件，并更新固定大小及摘要。修复后的空缓存全新安装、真实分集解码及完整卸载均通过，见 [FFmpeg 修复与新候选验收](../2026-11-10-ffmpeg-arm64-refresh/README.md)。本页的 `64e8a03` 包和失败记录保留为修复前快照。
+
 这次真实验证覆盖本机编译后的 MCP 服务，不代表用户已安装插件或 Codex 主窗口的画面、声音及自然 Stop/Interrupt 验收。未执行公开发布或替换用户安装。
