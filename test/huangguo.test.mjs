@@ -11,6 +11,7 @@ import { Store } from '../src/server/store.mjs'
 import { Catalog } from '../src/server/catalog.mjs'
 import { Service } from '../src/server/service.mjs'
 import { qualify } from '../src/server/sources/ids.mjs'
+import { Readable } from 'node:stream'
 
 const row = { id: 'series_1', title: 'Fixture series', cover: 'https://pic.drleao.cn/cover.jpg', total_episodes: 2 }
 const detail = { ...row, episodes: [{ ep_num: 2, title: 'Second' }, { ep_num: 1, title: 'First' }] }
@@ -163,4 +164,33 @@ test('the real provider remains behind NSFW confirmation and scopes its catalog,
   assert.equal(JSON.stringify(list).includes('https://'), false)
   assert.equal(JSON.stringify(episodes).includes('https://'), false)
   assert.equal(service.open({ threadId: 'other' }).source, 'hongguo')
+})
+
+test('Huangguo playback prepares a long HLS index and grants only the requested panel fragment', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'huangguo-stream-')), f = fixture(t), requested = []
+  f.context.mediaFetcher = () => async url => {
+    requested.push(String(url))
+    const text = String(url).includes('.m3u8') ? ['#EXTM3U', '#EXT-X-TARGETDURATION:5',
+      ...Array.from({ length: 200 }, (_, i) => '#EXTINF:5,\npart-' + i + '.ts'), '#EXT-X-ENDLIST'].join('\n') : 'fixture segment'
+    return { body: Readable.from([Buffer.from(text)]), url: String(url) }
+  }
+  const sources = new ProviderRegistry(root, { directory: '', builtins: [builtins.find(plugin => plugin.manifest.id === 'hongguo'),
+    { manifest: huangguoManifest, createProvider: () => f.provider }] })
+  const store = new Store(root), catalog = new Catalog(store, { sources }), service = new Service(store, catalog)
+  t.after(async () => { catalog.panelMedia?.close(); await sources.dispose(); store.close(); await rm(root, { recursive: true, force: true }) })
+  const scope = service.panel(service.open({ threadId: 'hls-panel' }).panel)
+  await service.call(scope, 'set_source', { source: 'huangguo', confirmNsfw: true })
+  const seriesId = qualify('huangguo', 'series_1'), episodeId = qualify('huangguo', 'series_1:1', 'episode')
+  await service.call(scope, 'get_episodes', { seriesId })
+  await service.call(scope, 'prepare_playback', { episodeId }, true)
+  await catalog.panelMedia.remote.entries.get(episodeId).job
+  const ready = await service.call(scope, 'prepare_playback', { episodeId }, true)
+  assert.equal(ready.format, 'hls'); assert.equal(ready.durationMs, 1000000)
+  assert.equal(catalog.cache, undefined, 'a long HLS video must bypass the whole-episode 256 MiB cache')
+  assert.equal(requested.length, 1, 'preparation must fetch only the playlist')
+  const chunk = await service.call(scope, 'read_panel_chunk', { episodeId, stream: ready.stream, asset: 'seg00150.ts', offset: 0 }, true)
+  assert.equal(Buffer.from(chunk.bytes, 'base64').toString(), 'fixture segment')
+  assert.equal(requested.length, 2)
+  await service.call(scope, 'set_source', { source: 'huangguo' })
+  await assert.rejects(service.call(scope, 'read_panel_chunk', { episodeId, stream: ready.stream, asset: 'seg00150.ts', offset: 0 }, true), /准备当前分集/)
 })

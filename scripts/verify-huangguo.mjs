@@ -72,12 +72,12 @@ try {
       manifest = (await rpc('read_panel_manifest', { episodeId: episode.id, stream: prepared.stream })).manifest
     }
     if (!manifest.includes('#EXT-X-ENDLIST') || /https?:|EXT-X-KEY/.test(manifest)) throw failed('MANIFEST_INVALID')
-    const assets = ['init.mp4', ...manifest.split(/\r?\n/).filter(line => line && !line.startsWith('#'))]
+    const assets = [...(prepared.format === 'hls' ? [] : ['init.mp4']), ...manifest.split(/\r?\n/).filter(line => line && !line.startsWith('#'))]
     const buffers = []
     let bytes = 0, chunks = 0
     stage = 'mcp-chunks'
     for (const asset of assets) {
-      if (!/^(?:init\.mp4|seg\d{5}\.m4s)$/.test(asset)) throw failed('ASSET_INVALID')
+      if (!/^(?:init\.mp4|seg\d{5}\.(?:m4s|ts))$/.test(asset)) throw failed('ASSET_INVALID')
       let offset = 0, size
       do {
         const part = await rpc('read_panel_chunk', { episodeId: episode.id, stream: prepared.stream, asset, offset })

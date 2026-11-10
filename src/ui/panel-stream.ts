@@ -17,7 +17,7 @@ export function panelStream(
   manifest: string,
   fail: (reason: string) => void,
   ended: () => void,
-  options?: { format?: 'dash'; startPosition?: number },
+  options?: { format?: 'dash' | 'hls'; startPosition?: number },
 ) {
   if (options?.format === 'dash') return dashStream(video, episodeId, stream, manifest, fail, ended, options.startPosition)
   if (!Hls.isSupported()) throw Error('当前面板不支持分段解码，可使用同窗分屏')
@@ -76,7 +76,7 @@ export function panelStream(
   const hls = new Hls({
     loader: PanelLoader,
     enableWorker: false,
-    startPosition: 0,
+    startPosition: options?.format === 'hls' ? options.startPosition || 0 : 0,
     maxBufferLength: 16,
     maxMaxBufferLength: 24,
     backBufferLength: 12,

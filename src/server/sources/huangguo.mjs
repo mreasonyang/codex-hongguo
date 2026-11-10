@@ -26,6 +26,7 @@ function pageNumber(value, initial) {
 
 export class HuangguoSource {
   id = 'huangguo'
+  progressivePlayback = true
   // Feed this source's own catalog; never supplement it with Hongguo search terms.
   recommendationTerms = []
   constructor(context) {

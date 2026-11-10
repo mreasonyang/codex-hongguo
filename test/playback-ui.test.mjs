@@ -1560,19 +1560,30 @@ test('switching Provider while covered cancels the old hover resume intent', asy
   assert.equal(f.video.plays, played)
 })
 
-test('an on-demand stream resumes deep progress without waiting for a growing HLS playlist', async t => {
+for (const format of ['dash', 'hls']) test('an on-demand ' + format + ' stream resumes deep progress without a whole download', async t => {
   const f = setup(t)
   f.event('dash'); await f.poll()
   f.ui.unload(); f.video.currentTime = 0; f.video.duration = 1200
   f.panel.allowed = new Set(['hg-11'])
   let preparations = 0
-  f.service.catalog = { prepare: () => { preparations++; return { status: 'ready', format: 'dash',
-    stream: 'dash-test', manifest: '{}', durationMs: 1200000 } }, panelMedia: { pin() {}, unpin() {} } }
+  f.service.catalog = { prepare: () => { preparations++; return { status: 'ready', format,
+    stream: 'remote-test', manifest: format === 'dash' ? '{}' : '#EXTM3U\n#EXTINF:1200,\nseg00000.ts\n#EXT-X-ENDLIST\n',
+    durationMs: 1200000 } }, panelMedia: { pin() {}, unpin() {} } }
   f.store.save({ seriesId: 'hg-1', episodeId: 'hg-11', title: 'Test', label: '1', positionMs: 600000, durationMs: 1200000 })
   await f.ui.start(); await flush()
   assert.equal(preparations, 1)
   assert.equal(f.video.currentTime, 600)
   assert.equal(f.video.paused, false)
+})
+test('the browser player accepts an on-demand HLS stream without a full MP4 source', async t => {
+  const f = setup(t)
+  f.event('hls-browser'); await f.poll(); f.api.browser = true
+  f.ui.unload(); f.panel.allowed = new Set(['hg-11'])
+  f.service.catalog = { prepare: () => ({ status: 'ready', format: 'hls', stream: 'hls-test',
+    manifest: '#EXTM3U\n#EXTINF:60,\nseg00000.ts\n#EXT-X-ENDLIST\n', durationMs: 60000 }), panelMedia: { pin() {}, unpin() {} } }
+  await f.ui.start(); await flush()
+  assert.equal(f.video.paused, false)
+  assert.equal(f.elements.get('notice').textContent, '正在播放')
 })
 for (const terminal of ['Stop', 'Interrupt']) test(`on-demand preparation cannot defeat the cover or a covered ${terminal}`, async t => {
   const f = await hoveringPlayer(t, false)

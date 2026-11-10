@@ -37,7 +37,7 @@ type Progress = {
 }
 type Prepared =
   | { status: 'preparing' | 'error'; reason?: string; phase?: string }
-  | ({ status: 'ready'; codec?: string; durationMs?: number; format?: 'dash' } & ({ stream: string; manifest: string } | { src: string }))
+  | ({ status: 'ready'; codec?: string; durationMs?: number; format?: 'dash' | 'hls' } & ({ stream: string; manifest: string } | { src: string }))
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 const video = document.querySelector('video')!,
   seek = el<HTMLInputElement>('seek')
@@ -1091,7 +1091,7 @@ async function start(recommendationTurn?: string, automatic = false) {
       if ('stream' in result && result.format !== 'dash' && result.durationMs && pos > 0 && !result.manifest.includes('#EXT-X-ENDLIST') &&
           playlistDuration(result.manifest) < pos + 3) throw Error('分集续播位置准备超时，请重试')
       const media = result
-      if (browser ? !('src' in media) && media.format !== 'dash' : !('stream' in media)) throw Error('本集播放地址已失效，请重试')
+      if (browser ? !('src' in media) && !('stream' in media) : !('stream' in media)) throw Error('本集播放地址已失效，请重试')
       release()
       mediaDuration = Number.isFinite(media.durationMs) && media.durationMs! > 0 ? media.durationMs! / 1000 : 0
       const load = new AbortController()
