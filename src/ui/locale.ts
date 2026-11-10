@@ -1,5 +1,7 @@
 // The catalog supplies show names and episode titles. Translate player chrome only.
 const en: Record<string, string> = {
+  '长按 3 秒拖拽':'Hold 3s to drag','继续按住，满 3 秒后可拖拽':'Keep holding for 3 seconds to drag',
+  '已可拖拽，拖出侧栏移到桌面 · Esc 取消':'Ready to drag outside the sidebar · Esc to cancel',
   独立窗口:'Desktop window',拖到桌面:'Drag to desktop','拖出侧栏，移到桌面 · Esc 取消':'Drag outside the sidebar to detach · Esc to cancel',
   移到桌面:'Move to desktop',拖动播放器到桌面:'Drag player to desktop',播放器回收区:'Player docking area',
   拖回这里恢复播放:'Drag here to return the player',返回面板:'Return to sidebar','正在返回播放器…':'Returning the player…',

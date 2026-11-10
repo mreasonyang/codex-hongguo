@@ -17,7 +17,9 @@ export function createDesktopPlayer(options:Options) {
   let state:WindowState={supported:false,generation:0,phase:'docked'}
   let enabled=false, disposed=false, refreshing:Promise<void>|undefined, moving=false, restoring=-1
   let anchor:{x:number;y:number;hostX:number;hostY:number}|undefined
-  let gesture:{id:number;x:number;y:number;point:Point;active:boolean;ended:boolean;canceled:boolean}|undefined
+  let gesture:{id:number;x:number;y:number;point:Point;episodeId:string;armed:boolean;active:boolean;ended:boolean;canceled:boolean}|undefined
+  let holdTimer:ReturnType<typeof setTimeout>|undefined, feedbackTimer:ReturnType<typeof setTimeout>|undefined
+  let ignoreClickUntil=0
   let moveTicket=0
   const external=()=>state.phase!=='docked' || moving
   function viewport() {
@@ -50,7 +52,7 @@ export function createDesktopPlayer(options:Options) {
         await options.restore(next.snapshot)
         if(disposed||state.generation!==generation)return
         const confirmed=await call<WindowState>('confirm_player_docked',{instance:options.instance,generation})
-        if(state.generation===generation){state=confirmed;moving=false;render();if(next.error)options.notice(next.error)}
+        if(state.generation===generation){state=confirmed;moving=false;resetGesture();render();if(next.error)options.notice(next.error)}
       } catch(error) { await options.freeze().catch(()=>{});restoring=-1;options.notice(error instanceof Error?error.message:'返回面板失败，请重试') }
     }
   }
@@ -91,16 +93,53 @@ export function createDesktopPlayer(options:Options) {
       options.notice(error instanceof Error?error.message:'独立窗口暂不可用')
     } finally {moving=false;render()}
   }
-  function pointerDown(e:PointerEvent) {
-    if(!state.supported||browser||e.button!==0||state.phase!=='docked'||!options.snapshot())return
+  function clearHold() {
+    clearTimeout(holdTimer);clearTimeout(feedbackTimer);holdTimer=feedbackTimer=undefined
+    document.documentElement.classList.remove('desktopHolding')
+  }
+  function resetGesture() {
+    const g=gesture;gesture=undefined;clearHold()
+    document.documentElement.classList.remove('desktopDragging')
+    if(gestureHint)gestureHint.hidden=true
+    if(g)try{document.body.releasePointerCapture(g.id)}catch{}
+  }
+  function arm(g:NonNullable<typeof gesture>) {
+    if(gesture!==g||!enabled||disposed||state.phase!=='docked'||document.hidden||options.snapshot()?.episodeId!==g.episodeId){resetGesture();return}
+    clearHold();g.armed=true
+    window.getSelection?.()?.removeAllRanges()
+    try{document.body.setPointerCapture(g.id)}catch{}
+    document.documentElement.classList.add('desktopDragging')
+    if(gestureHint){gestureHint.textContent=tr('已可拖拽，拖出侧栏移到桌面 · Esc 取消');gestureHint.hidden=false}
+  }
+  function begin(e:PointerEvent,quick:boolean) {
+    ignoreClickUntil=0
+    if(!enabled||disposed||moving||!state.supported||browser||e.button!==0||state.phase!=='docked')return
+    const selected=options.snapshot();if(!selected)return
+    resetGesture()
     calibrate(e)
-    gesture={id:e.pointerId,x:e.clientX,y:e.clientY,point:{x:e.screenX,y:e.screenY},active:false,ended:false,canceled:false}
-    try{document.body.setPointerCapture(e.pointerId)}catch{}
+    const g=gesture={id:e.pointerId,x:e.clientX,y:e.clientY,point:{x:e.screenX,y:e.screenY},episodeId:selected.episodeId,armed:quick,active:false,ended:false,canceled:false}
+    if(quick){try{document.body.setPointerCapture(g.id)}catch{};return}
+    // Leave ordinary clicks, scrubbing and scrolling alone until the hold completes.
+    feedbackTimer=setTimeout(()=>{
+      if(gesture!==g)return
+      document.documentElement.classList.add('desktopHolding')
+      if(gestureHint){gestureHint.textContent=tr('继续按住，满 3 秒后可拖拽');gestureHint.hidden=false}
+    },400)
+    holdTimer=setTimeout(()=>arm(g),3000)
+  }
+  const pointerDown=(e:PointerEvent)=>begin(e,true)
+  function pageDown(e:PointerEvent) {
+    if(handle?.contains(e.target as Node))return
+    begin(e,false)
   }
   function pointerMove(e:PointerEvent) {
     if(!gesture||e.pointerId!==gesture.id){calibrate(e);return}
     const g=gesture;g.point={x:e.screenX,y:e.screenY}
+    if(e.buttons!==undefined && !(e.buttons&1)) {
+      g.ended=true;resetGesture();if(g.active&&!moving)void finishGesture(g);return
+    }
     const distance=Math.hypot(e.clientX-g.x,e.clientY-g.y)
+    if(!g.armed){if(distance>8)resetGesture();return}
     if(distance>6){document.documentElement.classList.add('desktopDragging');if(gestureHint)gestureHint.hidden=state.phase!=='docked'}
     const outside=e.clientX < -12 || e.clientY < -12 || e.clientX > window.innerWidth+12 || e.clientY > window.innerHeight+12
     if(!g.active && distance>24 && outside){
@@ -110,18 +149,26 @@ export function createDesktopPlayer(options:Options) {
   function pointerEnd(e:PointerEvent) {
     if(!gesture||e.pointerId!==gesture.id)return
     const g=gesture;g.ended=true;g.canceled=e.type==='pointercancel';g.point={x:e.screenX,y:e.screenY}
-    document.documentElement.classList.remove('desktopDragging')
-    if(gestureHint)gestureHint.hidden=true
-    try{document.body.releasePointerCapture(e.pointerId)}catch{}
+    if(g.armed)ignoreClickUntil=Date.now()+500
+    resetGesture()
     if(g.active && !moving)void finishGesture(g)
-    gesture=undefined
   }
   function cancel(e:KeyboardEvent) {
     if(e.key!=='Escape'||!gesture)return
-    const g=gesture;g.canceled=true;g.ended=true;gesture=undefined;document.documentElement.classList.remove('desktopDragging')
-    if(gestureHint)gestureHint.hidden=true
+    const g=gesture;g.canceled=true;g.ended=true
+    if(g.armed)ignoreClickUntil=Date.now()+500
+    resetGesture()
     if(!moving)void finishGesture(g)
   }
+  function interruptPending() { if(gesture&&!gesture.active){gesture.canceled=true;resetGesture()} }
+  function visibility() { if(document.hidden)interruptPending() }
+  function clickCapture(e:MouseEvent) {
+    if(e.detail===0)return // Keyboard and accessibility activation remain available.
+    if((gesture?.armed&&state.phase==='docked')||Date.now()<ignoreClickUntil){ignoreClickUntil=0;e.preventDefault();e.stopImmediatePropagation()}
+  }
+  function contextMenu(e:Event) { if(gesture){e.preventDefault()} }
+  function selectStart(e:Event) { if(gesture?.armed)e.preventDefault() }
+  function dragStart(e:Event) { if(gesture?.armed)e.preventDefault();else interruptPending() }
   function dragOver(e:DragEvent) {
     if(state.phase!=='detached'||!e.dataTransfer?.types.includes('text/plain'))return
     e.preventDefault();e.dataTransfer.dropEffect='move';slot?.classList.add('dragOver');if(hint)hint.hidden=false
@@ -135,7 +182,11 @@ export function createDesktopPlayer(options:Options) {
   const onClick=()=>{void detach()}
   const onRecover=()=>{void call<WindowState>('dock_player',{instance:options.instance,generation:state.generation}).then(apply).catch(()=>{})}
   button?.addEventListener('click',onClick);handle?.addEventListener('pointerdown',pointerDown)
-  document.addEventListener('pointermove',pointerMove);document.addEventListener('pointerup',pointerEnd);document.addEventListener('pointercancel',pointerEnd)
+  document.addEventListener('pointerdown',pageDown,true)
+  document.addEventListener('pointermove',pointerMove,true);document.addEventListener('pointerup',pointerEnd,true);document.addEventListener('pointercancel',pointerEnd,true)
+  document.addEventListener('click',clickCapture,true);document.addEventListener('contextmenu',contextMenu,true)
+  document.addEventListener('selectstart',selectStart,true);document.addEventListener('dragstart',dragStart,true)
+  document.addEventListener('scroll',interruptPending,true);document.addEventListener('visibilitychange',visibility);window.addEventListener('blur',interruptPending)
   document.addEventListener('keydown',cancel);slot?.addEventListener('dragover',dragOver);slot?.addEventListener('drop',drop)
   slot?.addEventListener('dragleave',()=>{slot.classList.remove('dragOver')})
   recover?.addEventListener('click',onRecover)
@@ -143,8 +194,14 @@ export function createDesktopPlayer(options:Options) {
     external,
     async start(){enabled=true;await refresh(true)},
     refresh,
-    suspend(){enabled=false;if(anchor)void call('get_window_state',{instance:options.instance,viewport:{...viewport()!,visible:false}}).catch(()=>{})},
+    suspend(){enabled=false;interruptPending();if(anchor)void call('get_window_state',{instance:options.instance,viewport:{...viewport()!,visible:false}}).catch(()=>{})},
     resume(){enabled=true;void refresh()},
-    dispose(){disposed=true;enabled=false;moveTicket++;document.removeEventListener('pointermove',pointerMove);document.removeEventListener('pointerup',pointerEnd);document.removeEventListener('pointercancel',pointerEnd);document.removeEventListener('keydown',cancel)},
+    dispose(){
+      disposed=true;enabled=false;moveTicket++;if(gesture)gesture.canceled=true;resetGesture()
+      button?.removeEventListener('click',onClick);handle?.removeEventListener('pointerdown',pointerDown);recover?.removeEventListener('click',onRecover)
+      document.removeEventListener('pointerdown',pageDown,true);document.removeEventListener('pointermove',pointerMove,true);document.removeEventListener('pointerup',pointerEnd,true);document.removeEventListener('pointercancel',pointerEnd,true);document.removeEventListener('keydown',cancel)
+      document.removeEventListener('click',clickCapture,true);document.removeEventListener('contextmenu',contextMenu,true);document.removeEventListener('selectstart',selectStart,true);document.removeEventListener('dragstart',dragStart,true)
+      document.removeEventListener('scroll',interruptPending,true);document.removeEventListener('visibilitychange',visibility);window.removeEventListener('blur',interruptPending)
+    },
   }
 }

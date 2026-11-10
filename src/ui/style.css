@@ -1790,3 +1790,6 @@ h1 {
 .desktopMeta #subtitle { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .desktopDragHint { position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:100; pointer-events:none; padding:9px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--text); box-shadow:0 4px 20px #0002; white-space:nowrap; font-size:12px; }
 .desktopDragging,.desktopDragging * { cursor:grabbing !important; user-select:none !important; }
+.desktopHolding .desktopDragHint { overflow:hidden; }
+.desktopHolding .desktopDragHint::after { content:''; position:absolute; left:0; right:0; bottom:0; height:3px; background:var(--ring); transform-origin:left; animation:desktopHold 2600ms linear both; }
+@keyframes desktopHold { from { transform:scaleX(0); } to { transform:scaleX(1); } }
