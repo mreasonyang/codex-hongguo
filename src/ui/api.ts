@@ -14,6 +14,7 @@ export type Preferences = {
   defaultSource: SourceId
   contentPreferences?: Record<string, { contentType: string; category?: string }>
   autoPrompt: boolean
+  excludeNsfwRecommendations: boolean
   autoplayNext: boolean
   autoPauseOnFinish: boolean
   autoPlayOnStart: boolean

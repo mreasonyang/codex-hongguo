@@ -72,6 +72,7 @@ export const schemas = {
   logout_provider: z.object({ source }),
   set_preferences: z.object({
     autoPrompt: z.boolean().optional(),
+    excludeNsfwRecommendations: z.boolean().optional(),
     searchTerms: z.array(z.string().trim().min(1).max(30)).min(1).max(6).optional(),
     autoplayNext: z.boolean().optional(),
     autoPauseOnFinish: z.boolean().optional(),
@@ -133,25 +134,31 @@ export class Service {
     }
     return null
   }
+  recommendationAllowed(source, preferred) {
+    if (this.catalog.sources?.fallback && this.catalog.sources.fallback(source) !== source) return false
+    return !this.catalog.sources?.requiresConfirmation?.(source) ||
+      (this.store.preferences().excludeNsfwRecommendations === false && preferred === source)
+  }
   async waitingPicks(sessionId, turnId, inView, eligible, preferred) {
     if (!eligible()) return { items: [] }
     const pinned = this.store.turnPicks(sessionId, turnId)
     const available = pick => {
       try {
         const source = parseId(pick.id).source
-        return (!this.catalog.sources?.fallback || this.catalog.sources.fallback(source) === source) &&
-          (!this.catalog.sources?.requiresConfirmation?.(source) || preferred === source)
+        return this.recommendationAllowed(source, preferred)
       } catch { return false }
     }
     if (pinned.length) return { items: pinned.filter(available) }
     const source = this.store.recommendationSource(sessionId, turnId, preferred)
-    if (this.catalog.sources?.fallback && this.catalog.sources.fallback(source) !== source) return { items: [] }
-    if (this.catalog.sources?.requiresConfirmation?.(source) && preferred !== source) return { items: [] }
+    if (!this.recommendationAllowed(source, preferred)) return { items: [] }
     const context = this.store.recommendationContext(sessionId, turnId, this.catalog.contentContext?.(source) ?? {})
     const [feed, resume] = await Promise.all([
       this.catalog.waitingRecommendations(source, context).catch(() => []), this.resumePick(source, context),
     ])
-    return { items: this.store.allocatePicks(sessionId, turnId, resume, feed, inView, eligible) }
+    // Settings can change in another panel while the feed is in flight.
+    if (!this.recommendationAllowed(source, preferred)) return { items: [] }
+    return { items: this.store.allocatePicks(sessionId, turnId, resume && available(resume) ? resume : null,
+      feed.filter(available), inView, eligible).filter(available) }
   }
   panel(key, meta) {
     const scope = this.panels.get(key)
@@ -196,7 +203,8 @@ export class Service {
       case 'browse_waiting_catalog': {
         const card = scope.waiting
         if (browser || !card) throw new PlayerError('请从本轮推荐中选剧', 403)
-        if (name === 'get_waiting_status') return { visible: this.store.offerable(scope.sessionId, card.turnId) }
+        if (name === 'get_waiting_status') return { visible: this.store.offerable(scope.sessionId, card.turnId),
+          excludeNsfwRecommendations: this.store.preferences().excludeNsfwRecommendations }
         card.selected = null
         card.taken = false
         card.browsing = true
@@ -238,6 +246,8 @@ export class Service {
           if (!this.store.offerable(scope.sessionId, card.turnId)) throw new PlayerError('这条推荐已结束')
           const pick = this.store.turnPicks(scope.sessionId, card.turnId).find(item => item.id === p.seriesId)
           if (!pick) throw new PlayerError('请从本轮推荐中选剧', 403)
+          if (this.catalog.sources?.requiresConfirmation?.(parseId(pick.id).source) && this.store.preferences().excludeNsfwRecommendations)
+            throw new PlayerError('当前设置已从推荐中排除 NSFW 片源，请手动选源观看', 403)
           if (this.catalog.sources?.requiresConfirmation?.(parseId(pick.id).source) && scope.source !== parseId(pick.id).source)
             throw new PlayerError('该片源包含 NSFW 内容，请确认后切换', 403)
           this.store.markPicksShown(scope.sessionId, card.turnId, () => this.store.offerable(scope.sessionId, card.turnId))
@@ -250,6 +260,11 @@ export class Service {
           return {}
         }
         // Mounting is not playback: a host can replace or redraw the iframe before it starts.
+        if (card.selected && this.catalog.sources?.requiresConfirmation?.(parseId(card.selected.id).source) &&
+            this.store.preferences().excludeNsfwRecommendations) {
+          card.selected = null
+          card.played = true
+        }
         const running = this.store.activeTurn(scope.sessionId, card.turnId)
         const play = !!card.selected && !card.played && running &&
           !this.store.picksDismissed(scope.sessionId, card.turnId)

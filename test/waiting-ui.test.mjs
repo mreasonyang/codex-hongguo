@@ -29,6 +29,38 @@ class Observer {
 const flush = async () => { for (let i = 0; i < 40; i++) await Promise.resolve() }
 const code = transformSync(readFileSync(new URL('../src/ui/waiting.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code
 
+test('an existing inline card removes NSFW suggestions when exclusion changes in another panel', async t => {
+  const document = new Document(), exports = {}
+  let exclude = false, tick, feedCalls = 0
+  const api = {
+    displayMode: () => 'inline',
+    call: async name => {
+      if (name === 'get_waiting_status') return { visible: true, excludeNsfwRecommendations: exclude }
+      if (name === 'get_waiting_picks') {
+        feedCalls++
+        return { items: exclude ? [] : [{ id: 'p.demo.s.MQ', title: 'Sensitive fixture' }] }
+      }
+      return {}
+    },
+  }
+  const context = vm.createContext({
+    require: name => name === './api' ? api : { tr: value => value }, module: { exports }, exports,
+    document, AbortController, IntersectionObserver: Observer,
+    setInterval: callback => { tick = callback; return 1 }, clearInterval() {},
+  })
+  vm.runInContext(code, context)
+  const card = context.module.exports.waitingCard(() => {}, () => {})
+  t.after(() => card.dispose())
+  const titles = document.getElementById('waitingTitles')
+  card.connected(); await flush()
+  assert.equal(titles.children[0].textContent, 'Sensitive fixture')
+  exclude = true; tick(); await flush()
+  assert.equal(feedCalls, 2)
+  assert.deepEqual(titles.children.map(button => button.textContent), ['更多…'])
+  exclude = false; tick(); await flush()
+  assert.equal(titles.children[0].textContent, 'Sensitive fixture')
+})
+
 test('resume autoplay survives overlapping mode notifications and an iframe replacement until actual playback', async t => {
   const root = mkdtempSync(join(tmpdir(), 'hongguo-card-ui-')), store = new Store(root)
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }) })

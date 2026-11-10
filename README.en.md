@@ -15,6 +15,8 @@ Watch Hongguo short dramas in the right-hand panel of Codex Desktop, with browsi
 
 Includes Hongguo, Bilibili and Huangguo (NSFW). Huangguo requires confirmation on every entry and uses anonymous access with full-episode HLS preparation. Explicitly installed local sources use the [Provider plugin API](docs/providers.md) (Chinese) and start automatically. Hover over the play mark at the top left and select a source. Providers declaring `nsfw: true` require confirmation before switching; cancelling preserves the current source. Recommendations, search, history and cache identities remain separate; switching saves your position and stops playback.
 
+Chat suggestions always exclude NSFW sources by default, including continue watching. You can turn off **Always exclude NSFW sources** in Settings → Recommendations. This setting does not affect manual browsing after source confirmation.
+
 This is an independent, unofficial plugin with original icon artwork. The red fruit echoes the name Hongguo ("red fruit"), while the leaf and play button form the plugin's own mark.
 
 After installation and Hook review, continue working normally. The optional **Watch while you wait** card offers up to three shows per turn. It prioritizes **Continue watching**, or **Watch next** when the saved episode is complete and another episode is available. Other slots rotate unwatched shows. Clicking a title opens the player in that chat and uses your default-mute setting.

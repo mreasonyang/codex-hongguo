@@ -121,12 +121,87 @@ test('NSFW switching requires explicit confirmation each time and never becomes 
   assert.equal(scope.source, 'hongguo'); assert.equal(scope.waiting.selected, null)
   await service.call(scope, 'set_source', { source: 'demo', confirmNsfw: true })
   assert.equal(scope.source, 'demo'); assert.equal(store.preferences().defaultSource, 'demo')
+  assert.equal((await service.waitingPicks('A', 'nsfw-turn', true, () => true, scope.source)).items.length, 0)
+  await service.call(scope, 'set_preferences', { excludeNsfwRecommendations: false })
   assert.equal((await service.waitingPicks('A', 'nsfw-turn', true, () => true, scope.source)).items.length, 1)
   assert.equal(service.open({ threadId: 'B' }).source, 'hongguo')
   assert.equal((await service.call(scope, 'get_preferences', {})).defaultSource, 'hongguo')
   await service.call(scope, 'set_source', { source: 'hongguo' })
   await assert.rejects(service.call(scope, 'set_source', { source: 'demo' }), /NSFW/)
   assert.equal(scope.source, 'hongguo')
+})
+
+test('existing preferences default to NSFW exclusion, explicit opt-out persists, and only booleans are accepted', async t => {
+  const root = await temporary(t); let store = new Store(root)
+  defer(t, () => store.close())
+  store.db.prepare('INSERT OR REPLACE INTO player_preferences VALUES(1,?)').run(JSON.stringify({ volume: 0.43, autoPrompt: false }))
+  assert.equal(store.preferences().excludeNsfwRecommendations, true)
+  const service = new Service(store, {}), scope = service.panel(service.open({ threadId: 'policy' }).panel)
+  for (const value of ['false', 0, null])
+    await assert.rejects(service.call(scope, 'set_preferences', { excludeNsfwRecommendations: value }), /参数无效/)
+  await service.call(scope, 'set_preferences', { excludeNsfwRecommendations: false })
+  store.close(); store = new Store(root)
+  assert.equal(store.preferences().excludeNsfwRecommendations, false)
+  assert.equal(store.preferences().volume, 0.43); assert.equal(store.preferences().autoPrompt, false)
+})
+
+async function sensitiveRecommendations(t) {
+  const root = await temporary(t), store = new Store(root); defer(t, () => store.close())
+  const sources = new ProviderRegistry(root, { directory: '', builtins: fixtures().map(plugin => ({ ...plugin,
+    manifest: { ...plugin.manifest, nsfw: plugin.manifest.id === 'demo' } })) })
+  defer(t, () => sources.dispose())
+  const catalog = new Catalog(store, { sources }), service = new Service(store, catalog)
+  store.event({ session_id: 'policy', turn_id: 'one', hook_event_name: 'UserPromptSubmit' })
+  const scope = service.panel(service.openWaiting({ threadId: 'policy' }, 'one').panel)
+  await service.call(scope, 'set_source', { source: 'demo', confirmNsfw: true })
+  const pick = { id: 'p.demo.s.MQ', title: 'Sensitive fixture' }
+  catalog.waitingRecommendations = async () => [pick]
+  return { root, store, sources, catalog, service, scope, pick }
+}
+
+test('exclusion covers fresh feeds, resume history and pinned suggestions without restricting manual browsing', async t => {
+  const f = await sensitiveRecommendations(t), { service, scope, store, pick } = f
+  store.save({ seriesId: pick.id, episodeId: 'p.demo.e.MQ', title: pick.title, label: '1', positionMs: 100, durationMs: 1000 })
+  let feedCalls = 0
+  f.catalog.waitingRecommendations = async () => { feedCalls++; return [pick] }
+  assert.deepEqual((await service.waitingPicks('policy', 'one', true, () => true, 'demo')).items, [])
+  assert.equal(feedCalls, 0)
+  assert.ok((await service.call(scope, 'get_episodes', { seriesId: pick.id })).items.length)
+  await service.call(scope, 'set_preferences', { excludeNsfwRecommendations: false })
+  assert.equal((await service.waitingPicks('policy', 'one', true, () => true, 'demo')).items[0].episodeId, 'p.demo.e.MQ')
+  await service.call(scope, 'select_waiting_pick', { seriesId: pick.id })
+  // Another panel changes the global preference while the old card still exists.
+  const peer = new Store(f.root); defer(t, () => peer.close())
+  peer.setPreferences({ excludeNsfwRecommendations: true })
+  assert.equal((await service.call(scope, 'get_waiting_status', {})).excludeNsfwRecommendations, true)
+  assert.deepEqual((await service.waitingPicks('policy', 'one', true, () => true, 'demo')).items, [])
+  await assert.rejects(service.call(scope, 'select_waiting_pick', { seriesId: pick.id }), /排除 NSFW/)
+  const activation = await service.call(scope, 'activate_waiting_player', {})
+  assert.equal(activation.pick, null); assert.equal(activation.play, false)
+  assert.equal(scope.source, 'demo')
+  assert.ok((await service.call(scope, 'get_episodes', { seriesId: pick.id })).items.length)
+  assert.equal(store.history(undefined, undefined, 30, 'demo').length, 1)
+})
+
+test('enabling exclusion while a feed is pending prevents both publication and cached allocation', async t => {
+  const { store, service, catalog, pick } = await sensitiveRecommendations(t)
+  store.setPreferences({ excludeNsfwRecommendations: false })
+  let release
+  catalog.waitingRecommendations = () => new Promise(resolve => { release = resolve })
+  const pending = service.waitingPicks('policy', 'one', true, () => true, 'demo')
+  assert.equal(typeof release, 'function')
+  store.setPreferences({ excludeNsfwRecommendations: true }); release([pick])
+  assert.deepEqual((await pending).items, [])
+  assert.deepEqual(store.turnPicks('policy', 'one'), [])
+})
+
+test('NSFW rows in a mixed cached feed or continuation cannot enter safe-source suggestions', async t => {
+  const { store, service, catalog, pick } = await sensitiveRecommendations(t)
+  catalog.waitingRecommendations = async () => [pick, { id: 'hg-1', title: 'Safe fixture' }]
+  service.resumePick = async () => ({ ...pick, episodeId: 'p.demo.e.MQ', kind: 'resume' })
+  const result = await service.waitingPicks('policy', 'mixed', true, () => true, 'hongguo')
+  assert.deepEqual(result.items.map(pick => pick.id), ['hg-1'])
+  assert.deepEqual(store.turnPicks('policy', 'mixed').map(pick => pick.id), ['hg-1'])
 })
 test('invalid NSFW metadata rejects a local plugin before its entry runs', async t => {
   const root = await temporary(t), directory = join(root, 'plugins'); await mkdir(directory)

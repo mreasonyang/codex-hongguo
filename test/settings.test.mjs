@@ -15,7 +15,7 @@ function fixture({ hoverDecoyEnabled = false, back, modalOpen } = {}) {
   } })
   document.getElementById('playerContent')
   document.getElementById('decoy')
-  let stored = { autoPrompt: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
+  let stored = { autoPrompt: true, excludeNsfwRecommendations: true, autoplayNext: true, autoPauseOnFinish: true, autoPlayOnStart: true,
     defaultMuted: true, hoverDecoyEnabled, coverStyle: 'random', volume: 0.42, searchTerms: ['都市'] }
   let current = structuredClone(stored), beforeSave = async () => {}, applied = 0
   const requests = []
@@ -55,6 +55,19 @@ test('switches save small patches automatically, preserve unrelated settings and
   assert.equal(await f.settings.finish(), true)
   assert.equal(f.elements.get('settings').hidden, true)
   assert.equal(f.requests.length, 1)
+})
+test('NSFW recommendation exclusion is checked by default and can be disabled and restored with autosave', async () => {
+  const f = fixture()
+  assert.equal(f.elements.get('excludeNsfwRecommendations').checked, true)
+  f.toggle('excludeNsfwRecommendations', false); await settle()
+  assert.deepEqual(f.requests, [{ excludeNsfwRecommendations: false }])
+  assert.equal(f.stored.excludeNsfwRecommendations, false)
+  assert.equal(f.stored.autoPrompt, true); assert.equal(f.stored.volume, 0.42)
+  assert.equal(f.elements.get('settings').hidden, false)
+  f.toggle('excludeNsfwRecommendations', true); await settle()
+  assert.equal(f.stored.excludeNsfwRecommendations, true)
+  await f.settings.finish(); f.settings.open()
+  assert.equal(f.elements.get('excludeNsfwRecommendations').checked, true)
 })
 test('a source confirmation outside Settings does not dismiss the Settings sheet', async () => {
   let modal = true
