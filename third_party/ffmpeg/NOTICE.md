@@ -18,6 +18,11 @@ source, build configuration and licensing information:
 - FFmpeg source commit for that build: https://github.com/FFmpeg/FFmpeg/tree/7adfbe40dc
 
 Exact archive URLs, sizes and SHA-256 hashes are in ffmpeg-artifacts.json.
+The Apple Silicon 9.0.2 distributor replaced its versioned ZIP in place.
+The 2026-11-10 refresh pins the new 28,344,375-byte archive and 64,304,008-byte
+executable; the binary SHA-256 was independently checked against the value
+published on https://www.osxexperts.net/. The executable changed, so this
+refresh uses a separate cache identity and does not overwrite the old cache.
 The original Windows/Linux archive pins are retained in upstream-artifacts.json.
 The compact archives contain the unchanged executable, upstream license notices,
 GPLv3 text and provenance. Binary hashes are checked before and after repacking;

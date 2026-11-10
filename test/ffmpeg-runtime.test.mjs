@@ -64,6 +64,22 @@ test('a shared cache key cannot reuse an executable with a different pinned bina
   assert.deepEqual(await readFile(original), replacement)
 })
 
+test('a refreshed upstream binary gets its own verified cache and leaves the earlier installation intact', async t => {
+  const f = await fixture(t)
+  const original = await ensureFfmpeg({ ...f.options, fetchImpl: async () => new Response(f.archive) })
+  const receipt = await readFile(original + '.json', 'utf8')
+  const binary = Buffer.from('refreshed-native-executable'), archive = zipSync({ ffmpeg: binary })
+  const artifact = { ...f.artifact, archiveBytes: archive.length, archiveSha256: sha(archive),
+    binaryBytes: binary.length, binarySha256: sha(binary) }
+  const options = { ...f.options, artifacts: { [process.platform + '-' + process.arch]: artifact },
+    fetchImpl: async () => new Response(archive) }
+  const refreshed = await ensureFfmpeg(options)
+  assert.notEqual(refreshed, original)
+  assert.deepEqual(await readFile(refreshed), binary)
+  assert.deepEqual(await readFile(original), f.binary)
+  assert.equal(await readFile(original + '.json', 'utf8'), receipt)
+})
+
 test('a compact installer rejects a corrupt legacy binary and repairs it from the compact archive', async t => {
   const f = await fixture(t)
   const original = await ensureFfmpeg({ ...f.options, fetchImpl: async () => new Response(f.archive) })
