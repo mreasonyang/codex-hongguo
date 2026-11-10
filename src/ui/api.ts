@@ -49,20 +49,35 @@ function syncHostLook(ctx?: Partial<HostContext>) {
   if (ctx.theme) applyDocumentTheme(ctx.theme)
   if (ctx.styles?.variables) applyHostStyleVariables(ctx.styles.variables)
 }
+type PanelResult = { _meta?: Record<string, unknown>; structuredContent?: Record<string, unknown> }
+function acceptPanel(result: PanelResult): Context {
+  if (typeof result._meta?.panel !== 'string' || !result._meta.panel) throw Error('等待会话面板连接')
+  panel = result._meta.panel
+  const waitingTurn = typeof result._meta.waitingTurn === 'string' ? result._meta.waitingTurn : undefined
+  const source = result.structuredContent?.source
+  return { identified: !!result.structuredContent?.identified || !!waitingTurn, waitingTurn,
+    ...(typeof source === 'string' && /^[a-z][a-z0-9-]{0,31}$/.test(source) ? { source } : {}) }
+}
+async function browserContext(): Promise<Context> {
+  const r = await fetch('context', { signal: AbortSignal.timeout(4000) })
+  if (!r.ok) throw Error('分屏已失效，请从面板重新打开')
+  return r.json()
+}
+/** Renew through the normal host tool so an expired in-memory panel is never reused. */
+export async function reopenPanel(): Promise<Context> {
+  if (browser) return browserContext()
+  const result = await app!.callServerTool({ name: 'open_drama_panel', arguments: {} }, { timeout: 10000 })
+  if (result.isError) throw Error('连接失败，请重试')
+  return acceptPanel(result)
+}
 export async function connect(ready: (c: Context) => void, teardown: () => Promise<void>, modeChanged: () => void) {
   if (browser) {
-    const r = await fetch('context', { signal: AbortSignal.timeout(4000) })
-    if (!r.ok) throw Error('分屏已失效，请从面板重新打开')
-    ready(await r.json())
+    ready(await browserContext())
     return
   }
   app!.ontoolresult = (r) => {
     if (typeof r._meta?.panel !== 'string') return
-    panel = r._meta.panel
-    const waitingTurn = typeof r._meta.waitingTurn === 'string' ? r._meta.waitingTurn : undefined
-    const source = r.structuredContent?.source
-    ready({ identified: !!r.structuredContent?.identified || !!waitingTurn, waitingTurn,
-      ...(typeof source === 'string' && /^[a-z][a-z0-9-]{0,31}$/.test(source) ? { source } : {}) })
+    ready(acceptPanel(r))
   }
   app!.onteardown = async () => {
     inlineSizing?.dispose()

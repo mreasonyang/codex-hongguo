@@ -4,7 +4,7 @@ import { panelStream } from './panel-stream'
 import { mediaErrorMessage, waitForMetadata } from './media-startup'
 import { finishedTurn, startedTurn } from './playback-turn'
 import { ProviderAccount } from './provider-account'
-import { browser, call, connect, hostLocale, type Context, type State, type Preferences, type SourceId } from './api'
+import { browser, call, connect, reopenPanel, hostLocale, type Context, type State, type Preferences, type SourceId } from './api'
 import { pickLabel, showWaitingPicks, waitingCard, type WaitingSelection } from './waiting'
 import { createHoverDecoy } from './hover-decoy'
 import { createCoverPage } from './cover-page'
@@ -1550,8 +1550,47 @@ window.addEventListener('focus', restoreAfterFocus)
 window.addEventListener('pagehide', () => { account.hide(); void suspend() })
 window.addEventListener('pageshow', activatePage)
 
+let startupSelection: WaitingSelection | undefined, reconnecting = false
+function startupFailed(error: unknown) {
+  const message = explain(error)
+  text('startupErrorMessage', /请重新打开短剧面板|会话不匹配/.test(message)
+    ? '此页面已失效，请重新连接。'
+    : /分屏已失效/.test(message) ? '请从原面板重新打开此页面。' : '连接失败，请重新连接后重试。')
+  decoy.setUnavailable(true)
+  if (document.documentElement.dataset.surface === 'waiting') {
+    text('waitingMessage', '连接失败，请重新连接后重试。')
+    el('waitingCard').hidden = false
+    return
+  }
+  el('startupError').hidden = false
+}
+async function retryStartup() {
+  if (reconnecting) return
+  reconnecting = true
+  el<HTMLButtonElement>('startupRetry').disabled = true
+  text('startupErrorMessage', '正在重新连接…')
+  let generation: number | undefined
+  try {
+    await closePlayer()
+    generation = sourceGeneration
+    const ctx = await reopenPanel()
+    if (generation !== sourceGeneration) return
+    context = ctx
+    const locale = hostLocale()
+    initLocale(locale)
+    coverPage.initialize(locale)
+    await initPlayer(startupSelection).catch(error => notice(explain(error)))
+  } catch (error) {
+    if (generation === undefined || generation === sourceGeneration) startupFailed(error)
+  } finally {
+    reconnecting = false
+    el<HTMLButtonElement>('startupRetry').disabled = false
+  }
+}
+el('startupRetry').onclick = () => { void retryStartup() }
 async function initPlayer(selection?: WaitingSelection) {
   if (playerReady) return
+  startupSelection = selection
   const generation = sourceGeneration
   playerReady = true
   pendingRecommendationTurn = undefined
@@ -1566,10 +1605,20 @@ async function initPlayer(selection?: WaitingSelection) {
   current = null
   displayState()
   activatePage()
-  await openingPreferences()
+  try {
+    await openingPreferences()
+    if (!playerReady || generation !== sourceGeneration) return
+    await refreshProviders()
+  } catch (error) {
+    if (!playerReady || generation !== sourceGeneration) return
+    playerReady = pageActive = false
+    window.clearInterval(timer)
+    startupFailed(error)
+    return
+  }
   if (!playerReady || generation !== sourceGeneration) return
-  await refreshProviders()
-  if (!playerReady || generation !== sourceGeneration) return
+  decoy.setUnavailable(false)
+  el('startupError').hidden = true
   activeSource = context.source ?? prefs.defaultSource ?? 'hongguo'
   syncSourceButton()
   if (selection?.pick) {
@@ -1622,4 +1671,4 @@ void connect(ctx => {
   context = ctx
   if (waiting) { if (ctx.waitingTurn) waiting.connected() }
   else void initPlayer().catch(e => notice(explain(e)))
-}, async () => { waiting?.dispose(); await closePlayer(); decoy.dispose() }, () => waiting?.modeChanged()).catch(e => notice(explain(e)))
+}, async () => { waiting?.dispose(); await closePlayer(); decoy.dispose() }, () => waiting?.modeChanged()).catch(startupFailed)

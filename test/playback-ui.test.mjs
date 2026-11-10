@@ -43,7 +43,7 @@ class Video extends Element {
 // start and pause paths run unchanged against a real Service and SQLite store.
 const source = readFileSync(new URL('../src/ui/player.ts', import.meta.url), 'utf8') + `
 export const fixture = {
-  poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer, changeSource, changeContent, contentChoice, list, history, refreshProviders,
+  poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer, changeSource, changeContent, contentChoice, list, history, refreshProviders, initPlayer, retryStartup,
   sourceState() { return { source: activeSource, cards: cards.map(row => row.id), watched: watched.map(row => row.seriesId) } },
   setProviders(items) { providers = items.filter(item => item.available); syncSourceButton() },
   decoy, coverPage, settings, sourceConfirmation,
@@ -65,12 +65,13 @@ const accountCode = transformSync(readFileSync(new URL('../src/ui/provider-accou
 const decoyCode = transformSync(readFileSync(new URL('../src/ui/hover-decoy.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code
 const flush = async () => { for (let i = 0; i < 50; i++) await Promise.resolve() }
 
-function setup(t) {
+function setup(t, selected = true) {
   const root = mkdtempSync(join(tmpdir(), 'hongguo-playback-ui-'))
   const store = new Store(root), peer = new Store(root)
   t.after(() => { store.close(); peer.close(); rmSync(root, { recursive: true, force: true }) })
   const service = new Service(store, {}), other = new Service(peer, {})
-  const panel = service.panel(service.open({ threadId: 'A' }).panel)
+  let panelKey = service.open({ threadId: 'A' }).panel
+  const panel = service.panel(panelKey)
   const otherPanel = other.panel(other.open({ threadId: 'B' }).panel)
   const video = new Video(), elements = new Map()
   const document = Object.assign(new EventTarget(), {
@@ -85,13 +86,17 @@ function setup(t) {
   const window = Object.assign(new EventTarget(), { innerWidth: 900, innerHeight: 700, setInterval: () => 1, clearInterval() {}, scrollTo() {} })
   const api = {
     browser: false, connect: async () => {}, hostLocale: () => 'zh',
+    reopenPanel: async () => {
+      const initial = service.open({ threadId: 'A' }); panelKey = initial.panel
+      return { identified: initial.identified, source: initial.source }
+    },
     call: (name, args = {}) => name === 'get_providers' && !service.catalog.sources
       ? Promise.resolve({ items: ['hongguo', 'demo'].map(id => ({ id, name: id === 'hongguo' ? '红果' : '示例片源', available: true, nsfw: false })) })
-      : service.call(panel, name, args),
+      : Promise.resolve().then(() => service.call(service.panel(panelKey), name, args)),
   }
   const exports = {}, context = vm.createContext({
     module: { exports }, exports, document, window, navigator: {}, crypto: webcrypto,
-    AbortController, DOMException, setTimeout, clearTimeout,
+    AbortController, DOMException, Error, setTimeout, clearTimeout,
     require(name) {
       if (name === './provider-account') {
         const exports = {}, scope = vm.createContext({ module: { exports }, exports, document, Blob, URL, setTimeout, clearTimeout,
@@ -108,7 +113,7 @@ function setup(t) {
         vm.runInContext(decoyCode, decoyContext)
         return decoyContext.module.exports
       }
-      if (name === './locale') return { tr: value => value }
+      if (name === './locale') return { tr: value => value, initLocale() {} }
       if (name === './playback-turn') return turnHelpers
       if (name === './media-startup') return mediaHelpers
       if (name === './panel-stream') return { panelStream(video) { queueMicrotask(()=>video.dispatchEvent(new Event('loadedmetadata'))); return ()=>{} } }
@@ -119,11 +124,11 @@ function setup(t) {
   vm.runInContext(code, context)
   const ui = context.module.exports.fixture
   t.after(() => { ui.decoy.dispose(); ui.closePlayer() })
-  ui.selected()
+  if (selected) ui.selected()
   ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'demo', name: '示例片源', available: true }])
   let at = Date.now()
   return {
-    store, peer, service, panel, video, document, window, ui, elements,
+    store, peer, service, panel, video, document, window, ui, elements, api,
     event(turn, kind = 'UserPromptSubmit', session = 'A') {
       peer.event({ session_id: session, turn_id: turn, hook_event_name: kind }, ++at)
     },
@@ -133,6 +138,96 @@ function setup(t) {
 }
 const turnHelpers = await import('../src/ui/playback-turn.ts')
 const mediaHelpers = await import('../src/ui/media-startup.ts')
+
+test('expired startup panels expose recovery above the cover, and reconnect creates a working panel', async t => {
+  const f = setup(t, false)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  f.service.panels.clear() // A server restart loses its in-memory panels.
+  await f.ui.initPlayer()
+  const error = f.elements.get('startupError'), retry = f.elements.get('startupRetry')
+  assert.equal(error.hidden, false)
+  assert.equal(f.elements.get('startupErrorMessage').textContent, '此页面已失效，请重新连接。')
+  assert.equal(f.document.documentElement.dataset.decoyReady, undefined)
+  assert.equal(f.elements.get('playerContent').inert, true, 'failed startup must not expose unconfigured content')
+  await f.ui.retryStartup()
+  assert.equal(error.hidden, true)
+  assert.equal(retry.disabled, false)
+  assert.equal(f.service.panels.size, 1)
+  assert.equal(f.document.documentElement.dataset.decoyReady, 'true')
+  assert.equal(f.elements.get('playerContent').inert, false)
+  f.ui.settings.open()
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.elements.get('settingsSource').children.length, 2)
+  assert.equal(f.store.preferences().defaultSource, 'hongguo')
+})
+
+test('reconnect failure stays actionable without exposing backend details, with one request at a time', async t => {
+  const f = setup(t, false)
+  f.service.panels.clear()
+  await f.ui.initPlayer()
+  let reject, attempts = 0
+  f.api.reopenPanel = () => { attempts++; return new Promise((_, no) => { reject = no }) }
+  const retry = f.ui.retryStartup()
+  await flush()
+  assert.equal(f.elements.get('startupRetry').disabled, true)
+  await f.ui.retryStartup()
+  assert.equal(attempts, 1)
+  reject(Error('synthetic internal detail'))
+  await retry
+  assert.equal(f.elements.get('startupError').hidden, false)
+  assert.equal(f.elements.get('startupRetry').disabled, false)
+  assert.equal(f.elements.get('startupErrorMessage').textContent, '连接失败，请重新连接后重试。')
+  assert.equal(f.elements.get('playerContent').inert, true)
+})
+
+test('reconnecting preserves saved privacy and sound settings and does not reveal a covered player', async t => {
+  const f = setup(t, false)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  await f.settings({ hoverDecoyEnabled: true, defaultMuted: false, volume: 0.25 })
+  const before = f.store.preferences()
+  f.service.panels.clear()
+  await f.ui.initPlayer()
+  await f.ui.retryStartup()
+  assert.equal(f.elements.get('startupError').hidden, true)
+  assert.equal(f.ui.decoy.covered, true)
+  assert.equal(f.elements.get('playerContent').inert, true)
+  assert.deepEqual(f.store.preferences(), before)
+})
+
+test('provider initialization failure also exposes recovery rather than leaving a covered dead end', async t => {
+  const f = setup(t, false), call = f.api.call
+  f.api.call = (name, args) => name === 'get_providers' ? Promise.reject(Error('synthetic provider failure')) : call(name, args)
+  await f.ui.initPlayer()
+  assert.equal(f.elements.get('startupError').hidden, false)
+  assert.equal(f.elements.get('startupErrorMessage').textContent, '连接失败，请重新连接后重试。')
+  assert.equal(f.elements.get('playerContent').inert, true)
+  f.ui.decoy.configure({ hoverDecoyEnabled: false })
+  assert.equal(f.elements.get('playerContent').inert, true, 'hover configuration must not unlock controls behind recovery')
+  assert.equal(f.video.plays, 0)
+})
+
+test('closing during reconnect prevents a late response from reopening the player', async t => {
+  const f = setup(t, false)
+  f.service.panels.clear()
+  await f.ui.initPlayer()
+  let resolve
+  f.api.reopenPanel = () => new Promise(yes => { resolve = yes })
+  const retry = f.ui.retryStartup()
+  await flush()
+  await f.ui.closePlayer()
+  resolve({ identified: true, source: 'hongguo' })
+  await retry
+  assert.equal(f.document.documentElement.dataset.decoyReady, undefined)
+  assert.equal(f.elements.get('playerContent').inert, true)
+  assert.equal(f.video.plays, 0)
+})
+
+test('startup recovery is outside covered content and follows the cover at the same top layer', () => {
+  const html = readFileSync(new URL('../src/ui/player.html', import.meta.url), 'utf8')
+  const css = readFileSync(new URL('../src/ui/style.css', import.meta.url), 'utf8')
+  assert.match(html, /<\/main>\s*<section id="decoy"[^>]*><\/section>\s*<section id="startupError"[^>]*role="alert"/)
+  assert.match(css, /\.startupError:not\(\[hidden\]\)\s*\{[^}]*position: fixed;[^}]*z-index: 2147483647;/)
+})
 
 test('hovering or clicking the source mark opens a menu; only choosing a provider switches sources', async t => {
   const f = setup(t)

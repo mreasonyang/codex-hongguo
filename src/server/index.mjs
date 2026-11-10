@@ -24,7 +24,7 @@ await catalog.sources.ready
 const browser = new BrowserServer(service)
 service.pair = (scope) => browser.pair(scope)
 const server = new McpServer({ name: 'codex-hongguo', version: pkg.version })
-const uri = 'ui://hongguo/v36/player', waitingUri = 'ui://hongguo/v36/waiting',
+const uri = 'ui://hongguo/v37/player', waitingUri = 'ui://hongguo/v37/waiting',
   mimeType = 'text/html;profile=mcp-app'
 const ui = { visibility: ['app'] }
 // Both resources can become the player. hls.js attaches its in-memory MediaSource via a blob URL.
@@ -46,7 +46,7 @@ for (const [resourceUri, name] of [[uri, '红果短剧'], [waitingUri, '等待�
   }
   server.registerResource(name, resourceUri, { mimeType, _meta: meta }, read)
   // Older conversations can reopen their original URI without advertising a second entry.
-  for (const prefix of ['ui://hongguo/', ...Array.from({ length: 34 }, (_, i) => `ui://hongguo/v${i + 2}/`)]) {
+  for (const prefix of ['ui://hongguo/', ...Array.from({ length: 35 }, (_, i) => `ui://hongguo/v${i + 2}/`)]) {
     const oldUri = prefix + (waiting ? 'waiting' : 'player')
     if (oldUri === resourceUri) continue
     const legacy = new ResourceTemplate(oldUri, { list: undefined })

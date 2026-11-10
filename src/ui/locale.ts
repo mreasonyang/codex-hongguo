@@ -1,5 +1,10 @@
 // The catalog supplies show names and episode titles. Translate player chrome only.
 const en: Record<string, string> = {
+  连接暂不可用: 'Connection unavailable', 重新连接: 'Reconnect',
+  '此页面已失效，请重新连接。': 'This page has expired. Reconnect to continue.',
+  '请从原面板重新打开此页面。': 'Open this page again from the original panel.',
+  '连接失败，请重新连接后重试。': 'Could not connect. Reconnect to try again.',
+  '正在重新连接…': 'Reconnecting…',
   番剧: 'Series', 视频: 'Videos', 内容类型: 'Content type', 视频分区: 'Video category',
   热门: 'Popular', 知识: 'Knowledge', 科技: 'Technology', 游戏: 'Gaming', 生活: 'Lifestyle', 美食: 'Food', 音乐: 'Music',
   发现视频: 'Discover videos', 发现番剧: 'Discover series', '分 P': 'Parts', '上一 P': 'Previous part', '下一 P': 'Next part',
