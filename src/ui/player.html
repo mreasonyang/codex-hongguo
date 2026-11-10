@@ -151,9 +151,14 @@
         <p class="settingsHint">以下设置对所有聊天生效，修改后自动保存</p>
         <section class="settingsGroup" aria-labelledby="sourceSettingsTitle">
           <h2 id="sourceSettingsTitle" class="settingsGroupTitle">视频源</h2>
-          <div class="select settingsSourceSelect">
-            <select id="settingsSource" aria-labelledby="sourceSettingsTitle"></select>
-            <svg class="i" aria-hidden="true"><use href="#i-down" /></svg>
+          <div id="settingsSourcePicker" class="coverStylePicker settingsSourcePicker">
+            <div id="settingsSource" class="coverStyleControl" role="combobox" tabindex="0"
+              aria-haspopup="listbox" aria-expanded="false" aria-controls="settingsSourceOptions"
+              aria-labelledby="sourceSettingsTitle">
+              <span id="settingsSourceValue"></span>
+              <svg class="i" aria-hidden="true"><use href="#i-down" /></svg>
+            </div>
+            <div id="settingsSourceOptions" class="coverStyleOptions" role="listbox" aria-labelledby="sourceSettingsTitle" hidden></div>
           </div>
           <p class="settingsHint">也可以从左上角快捷切换</p>
         </section>

@@ -10,6 +10,7 @@ import { createHoverDecoy } from './hover-decoy'
 import { createCoverPage } from './cover-page'
 import { createSettings } from './settings'
 import { createSourceConfirmation } from './source-confirmation'
+import { createSourcePicker } from './source-picker'
 
 type Series = {
   id: string
@@ -78,6 +79,7 @@ type Provider = { id: string; name: string; contentTypes?: ContentType[]; availa
 let providers: Provider[] = [{ id: 'hongguo', name: '红果', available: true, nsfw: false }]
 let sourceChoice = 0
 const sourceConfirmation = createSourceConfirmation({ translate: tr })
+const sourcePicker = createSourcePicker({ changed: selectSettingsSource })
 let sourceMenuTimer: ReturnType<typeof setTimeout> | undefined
 let authRevision: string | undefined
 const account = new ProviderAccount(async source => {
@@ -104,22 +106,11 @@ function renderProviderAccount(_settings: Preferences, disabled: boolean) {
     (!provider.nsfw || provider.id === activeSource)).map(({ id, name }) => ({ id, name })), disabled)
 }
 function syncSettingsSource(disabled = false) {
-  const select = el<HTMLSelectElement>('settingsSource')
-  const signature = JSON.stringify(providers.map(({ id, name, nsfw }) => [id, name, nsfw]))
-  // Polling Settings must not recreate an open native select menu.
-  if (select.dataset.providers !== signature) {
-    select.replaceChildren(...providers.map(provider => {
-      const option = document.createElement('option')
-      option.value = provider.id
-      option.textContent = tr(provider.id === 'hongguo' ? '红果短剧' : provider.name) + (provider.nsfw ? ' · NSFW' : '')
-      return option
-    }))
-    select.dataset.providers = signature
-  }
-  select.value = activeSource
   // The modal traps interaction; keep this control focusable so Cancel/Escape
   // can restore focus before the confirmation promise settles.
-  select.disabled = disabled || settings.closing || switchingSource || providers.length < 2
+  sourcePicker.sync(providers.map(provider => ({ id: provider.id,
+    label: tr(provider.id === 'hongguo' ? '红果短剧' : provider.name) + (provider.nsfw ? ' · NSFW' : ''),
+  })), activeSource, disabled || settings.closing || switchingSource || providers.length < 2)
 }
 function closeSourceMenu(focus = false) {
   clearTimeout(sourceMenuTimer)
@@ -283,8 +274,8 @@ const settings = createSettings({
   save: patch => call<Preferences>('set_preferences', patch, 4000),
   syncExtra: renderProviderAccount,
   modalOpen: () => sourceConfirmation.pending,
-  back: () => account.back(),
-  closed: () => account.hide(),
+  back: () => sourcePicker.close() || account.back(),
+  closed: () => { sourcePicker.close(); account.hide() },
   edited: () => { ++preferencesRevision },
   applied: updated => {
     ++preferencesRevision
@@ -306,6 +297,7 @@ function configureDecoy() {
 }
 function decoyChanged(covered: boolean) {
   if (covered) {
+    sourcePicker.close()
     sourceConfirmation.cancel()
     const resume = !!episode && (!video.paused || preparing || playback === 'playing')
     const pending = preparing ? activeStart : undefined
@@ -1373,8 +1365,7 @@ async function changeSource(next: SourceId) {
   }
   finally { switchingSource = false; syncSourceButton() }
 }
-el<HTMLSelectElement>('settingsSource').onchange = async () => {
-  const next = el<HTMLSelectElement>('settingsSource').value
+async function selectSettingsSource(next: string) {
   // Keep the current source selected until confirmation and the service commit.
   syncSettingsSource()
   if (switchingSource || sourceConfirmation.pending || !providers.some(provider => provider.id === next)) return

@@ -13,6 +13,7 @@ import { ProviderRegistry } from '../src/server/providers/registry.mjs'
 import { createCoverPage } from '../src/ui/cover-page.ts'
 import { createSettings } from '../src/ui/settings.ts'
 import { createSourceConfirmation } from '../src/ui/source-confirmation.ts'
+import { createSourcePicker } from '../src/ui/source-picker.ts'
 
 class Element extends EventTarget {
   hidden = true; checked = false; value = '1'; dataset = {}; children = []; textContent = ''
@@ -46,7 +47,7 @@ export const fixture = {
   poll, pause, suspend, start, select, nextEpisode, home, openingPreferences, closePlayer, changeSource, changeContent, contentChoice, list, history, refreshProviders, initPlayer, retryStartup,
   sourceState() { return { source: activeSource, cards: cards.map(row => row.id), watched: watched.map(row => row.seriesId) } },
   setProviders(items) { providers = items.filter(item => item.available); syncSourceButton() },
-  decoy, coverPage, settings, sourceConfirmation,
+  decoy, coverPage, settings, sourceConfirmation, sourcePicker,
   unload() { loaded = false },
   selected() {
     coverPage.initialize('zh-CN');
@@ -107,6 +108,7 @@ function setup(t, selected = true) {
       if (name === './api') return api
       if (name === './cover-page') return { createCoverPage }
       if (name === './source-confirmation') return { createSourceConfirmation: options => createSourceConfirmation(options, document) }
+      if (name === './source-picker') return { createSourcePicker: options => createSourcePicker(options, document) }
       if (name === './settings') return { createSettings: options => createSettings(options, document) }
       if (name === './hover-decoy') {
         const exports = {}, decoyContext = vm.createContext({ module: { exports }, exports, document, window, setTimeout, clearTimeout })
@@ -157,7 +159,7 @@ test('expired startup panels expose recovery above the cover, and reconnect crea
   assert.equal(f.elements.get('playerContent').inert, false)
   f.ui.settings.open()
   assert.equal(f.elements.get('settings').hidden, false)
-  assert.equal(f.elements.get('settingsSource').children.length, 2)
+  assert.equal(f.elements.get('settingsSourceOptions').children.length, 2)
   assert.equal(f.store.preferences().defaultSource, 'hongguo')
 })
 
@@ -273,24 +275,30 @@ test('leaving the source popover closes it, while crossing into it cancels dismi
   assert.equal(menu.hidden, true)
   assert.equal(f.ui.sourceState().source, 'hongguo')
 })
-test('Settings source select switches immediately, remembers the choice and tracks the top-left entry', async t => {
+function chooseSettingsSource(f, id) {
+  const combo = f.elements.get('settingsSource')
+  if (combo.getAttribute('aria-expanded') !== 'true') combo.onclick()
+  return f.elements.get('settingsSourceOptions').children.find(item => item.id === 'settingsSource-' + id).onclick()
+}
+test('Settings source picker switches immediately, remembers the choice and tracks the top-left entry', async t => {
   const f = setup(t)
   f.service.catalog = { list: async () => ({ items: [] }) }
   f.ui.settings.open()
   const select = f.elements.get('settingsSource')
-  assert.equal(select.value, 'hongguo')
-  assert.deepEqual(select.children.map(o => o.textContent), ['红果短剧', '示例片源'])
-  const option = select.children[0]
+  const options = f.elements.get('settingsSourceOptions')
+  assert.equal(select.dataset.value, 'hongguo')
+  assert.deepEqual(options.children.map(o => o.textContent), ['红果短剧', '示例片源'])
+  const option = options.children[0]
   f.ui.settings.sync(); f.ui.settings.sync()
-  assert.equal(select.children[0], option, 'polling must not recreate the native menu')
-  select.value = 'demo'; await select.onchange()
+  assert.equal(options.children[0], option, 'polling must not recreate the panel menu')
+  await chooseSettingsSource(f, 'demo')
   assert.equal(f.store.preferences().defaultSource, 'demo')
-  assert.equal(select.value, 'demo')
+  assert.equal(select.dataset.value, 'demo')
   assert.equal(f.elements.get('sourceName').textContent, '示例片源')
   assert.equal(f.elements.get('settings').hidden, false)
   await f.ui.changeSource('hongguo')
-  assert.equal(select.value, 'hongguo')
-  assert.equal(select.disabled, false)
+  assert.equal(select.dataset.value, 'hongguo')
+  assert.equal(select.getAttribute('aria-disabled'), 'false')
 })
 test('Settings source selection preserves the current value when the service rejects a switch', async t => {
   const f = setup(t), call = f.service.call.bind(f.service)
@@ -298,19 +306,20 @@ test('Settings source selection preserves the current value when the service rej
   f.service.call = (scope, name, args) => name === 'set_source' ? Promise.reject(Error('Synthetic failure')) : call(scope, name, args)
   f.ui.settings.open()
   const select = f.elements.get('settingsSource')
-  select.value = 'demo'; await select.onchange()
-  assert.equal(select.value, 'hongguo')
+  await chooseSettingsSource(f, 'demo')
+  assert.equal(select.dataset.value, 'hongguo')
   assert.equal(f.store.preferences().defaultSource, 'hongguo')
   assert.equal(f.ui.sourceState().source, 'hongguo')
   assert.equal(f.elements.get('settings').hidden, false)
-  assert.equal(select.disabled, false)
+  assert.equal(select.getAttribute('aria-disabled'), 'false')
 })
 test('Settings disables source selection when only one source is available and ignores reselecting the current source', async t => {
   const f = setup(t); f.video.paused = false
   f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'unavailable', name: 'Unavailable', available: false }])
   const select = f.elements.get('settingsSource')
-  assert.equal(select.children.length, 1); assert.equal(select.disabled, true)
-  select.value = 'hongguo'; await select.onchange()
+  assert.equal(f.elements.get('settingsSourceOptions').children.length, 1)
+  assert.equal(select.getAttribute('aria-disabled'), 'true')
+  await chooseSettingsSource(f, 'hongguo')
   assert.equal(f.video.paused, false)
   assert.equal(f.ui.episodeId(), 'hg-11')
 })
@@ -402,24 +411,24 @@ test('Settings NSFW selection keeps playback and Settings open until explicit co
   const f = await nsfwPlayer(t); f.video.paused = false; f.ui.settings.open()
   const select = f.elements.get('settingsSource')
   select.focus()
-  assert.match(select.children[1].textContent, /NSFW/)
-  select.value = 'demo'; const first = select.onchange(); await flush()
-  assert.equal(select.value, 'hongguo'); assert.equal(select.disabled, false)
+  assert.match(f.elements.get('settingsSourceOptions').children[1].textContent, /NSFW/)
+  const first = chooseSettingsSource(f, 'demo'); await flush()
+  assert.equal(select.dataset.value, 'hongguo'); assert.equal(select.getAttribute('aria-disabled'), 'false')
   assert.equal(f.video.paused, false)
   assert.equal(f.elements.get('settings').hidden, false)
   f.elements.get('sourceCancel').onclick(); await first
-  assert.equal(select.value, 'hongguo'); assert.equal(select.disabled, false)
+  assert.equal(select.dataset.value, 'hongguo'); assert.equal(select.getAttribute('aria-disabled'), 'false')
   assert.equal(f.document.activeElement, select)
   assert.equal(f.video.paused, false)
   const escape = new Event('keydown', { cancelable: true }); Object.assign(escape, { key: 'Escape' })
-  select.value = 'demo'; const second = select.onchange(); await flush()
+  const second = chooseSettingsSource(f, 'demo'); await flush()
   f.document.dispatchEvent(escape); await second
   assert.equal(f.elements.get('settings').hidden, false)
-  assert.equal(select.value, 'hongguo')
+  assert.equal(select.dataset.value, 'hongguo')
   assert.equal(f.video.paused, false)
-  select.value = 'demo'; const third = select.onchange(); await flush()
+  const third = chooseSettingsSource(f, 'demo'); await flush()
   f.elements.get('sourceConfirm').onclick(); await third
-  assert.equal(select.value, 'demo'); assert.equal(f.store.preferences().defaultSource, 'demo')
+  assert.equal(select.dataset.value, 'demo'); assert.equal(f.store.preferences().defaultSource, 'demo')
   assert.equal(f.elements.get('settings').hidden, false)
 })
 test('cancelling NSFW selection leaves the source, playback, progress and default untouched', async t => {
@@ -593,6 +602,94 @@ async function hoveringPlayer(t, playing = true) {
   if (playing) await f.ui.start()
   return f
 }
+test('focusing and opening the source popup under the hover cover never conceals or pauses; polling preserves its highlight', async t => {
+  const f = await hoveringPlayer(t)
+  await f.elements.get('prefs').onclick()
+  const combo = f.elements.get('settingsSource'), menu = f.elements.get('settingsSourceOptions')
+  const plays = f.video.plays
+  combo.focus(); combo.onclick()
+  assert.equal(f.document.activeElement, combo)
+  menu.children[1].onpointermove()
+  for (let round = 0; round < 5; round++) {
+    await f.poll(); t.mock.timers.tick(1000); await flush()
+    assert.equal(f.ui.decoy.covered, false)
+    assert.equal(f.video.paused, false)
+    assert.equal(f.video.plays, plays)
+    assert.equal(f.elements.get('settings').hidden, false)
+    assert.equal(combo.getAttribute('aria-expanded'), 'true')
+    assert.equal(combo.getAttribute('aria-activedescendant'), 'settingsSource-demo')
+    assert.equal(f.document.activeElement, combo)
+  }
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+})
+test('Escape cancels the source popup before dismissing Settings and does not commit the highlighted provider', async t => {
+  const f = await hoveringPlayer(t)
+  f.ui.settings.open()
+  const combo = f.elements.get('settingsSource')
+  combo.onclick()
+  combo.onkeydown({ key: 'End', preventDefault() {} })
+  const escape = () => f.document.dispatchEvent(Object.assign(new Event('keydown', { cancelable: true }), { key: 'Escape' }))
+  escape(); await flush()
+  assert.equal(f.ui.sourcePicker.expanded, false)
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.ui.sourceState().source, 'hongguo')
+  assert.equal(f.video.paused, false)
+  escape(); await flush()
+  assert.equal(f.elements.get('settings').hidden, true)
+})
+test('source popup keyboard navigation survives polling and commits only on Enter', async t => {
+  const f = await hoveringPlayer(t, false)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  f.ui.settings.open()
+  const combo = f.elements.get('settingsSource')
+  combo.onkeydown({ key: 'ArrowDown', preventDefault() {} })
+  combo.onkeydown({ key: 'End', preventDefault() {} })
+  await f.poll()
+  assert.equal(combo.dataset.value, 'hongguo')
+  assert.equal(combo.getAttribute('aria-activedescendant'), 'settingsSource-demo')
+  await combo.onkeydown({ key: 'Enter', preventDefault() {} })
+  assert.equal(f.ui.sourceState().source, 'demo')
+  assert.equal(f.store.preferences().defaultSource, 'demo')
+  assert.equal(f.elements.get('settings').hidden, false)
+  assert.equal(f.ui.decoy.covered, false)
+})
+for (const event of ['blur', 'mouseleave']) test(`an open source popup cannot suppress a genuine ${event} privacy boundary`, async t => {
+  const f = await hoveringPlayer(t)
+  f.ui.settings.open(); f.elements.get('settingsSource').onclick()
+  assert.equal(f.ui.sourcePicker.expanded, true)
+  ;(event === 'blur' ? f.window : f.document).dispatchEvent(new Event(event))
+  assert.equal(f.ui.decoy.covered, true)
+  assert.equal(f.ui.sourcePicker.expanded, false)
+  assert.equal(f.video.paused, true)
+  assert.equal(f.elements.get('settings').hidden, false)
+  await enterPanel(t, f)
+  assert.equal(f.ui.decoy.covered, false)
+  assert.equal(f.elements.get('settings').hidden, false)
+})
+test('first exit after choosing a source and dismissing Settings still shows the cover', async t => {
+  const f = await hoveringPlayer(t, false)
+  f.service.catalog = { list: async () => ({ items: [] }) }
+  f.ui.settings.open(); await chooseSettingsSource(f, 'demo')
+  await f.ui.settings.finish()
+  f.document.dispatchEvent(Object.assign(new Event('mouseleave'), { clientX: 40, clientY: 80, relatedTarget: null }))
+  assert.equal(f.ui.decoy.covered, true)
+  await enterPanel(t, f)
+  assert.equal(f.ui.decoy.covered, false)
+  assert.equal(f.ui.sourceState().source, 'demo')
+  assert.equal(f.elements.get('settings').hidden, true)
+})
+test('source popup fits above a low control and remains valid when providers change during a poll', t => {
+  const f = setup(t), combo = f.elements.get('settingsSource'), menu = f.elements.get('settingsSourceOptions')
+  f.document.defaultView = f.window; f.window.innerHeight = 260
+  combo.getBoundingClientRect = () => ({ top: 220, bottom: 256 })
+  combo.onclick(); menu.children[1].onpointermove()
+  assert.equal(menu.dataset.side, 'above')
+  assert.ok(parseFloat(menu.style.maxHeight) <= 212)
+  f.ui.setProviders([{ id: 'hongguo', name: '红果', available: true }, { id: 'local', name: 'Local source', available: true }])
+  assert.equal(combo.getAttribute('aria-expanded'), 'true')
+  assert.equal(combo.getAttribute('aria-activedescendant'), 'settingsSource-hongguo')
+  assert.deepEqual(menu.children.map(item => item.id), ['settingsSource-hongguo', 'settingsSource-local'])
+})
 test('selecting a cover style keeps Settings open and preserves playback and unrelated preferences', async t => {
   const f = await hoveringPlayer(t)
   const host = f.elements.get('decoy'), page = host.children[0]
