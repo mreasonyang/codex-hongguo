@@ -67,7 +67,7 @@ async function sourceTree(path) {
     else if (entry.isFile()) sourceEntries[file.replaceAll('\\', '/')] = new Uint8Array(await readFile(file))
   }
 }
-for (const directory of ['src', 'scripts', 'test', 'assets', 'bin', 'skills', 'hooks', '.codex-plugin', 'third_party', 'launcher']) await sourceTree(directory)
+for (const directory of ['src', 'scripts', 'test', 'assets', 'bin', 'skills', 'hooks', '.codex-plugin', 'third_party', 'launcher', 'native']) await sourceTree(directory)
 for (const file of ['package.json', 'package-lock.json', 'tsconfig.json', '.mcp.json', 'plugin.json', 'LICENSE', 'COPYING', 'NOTICE', 'README.md', 'README.en.md', 'docs/providers.md'])
   sourceEntries[file] = new Uint8Array(await readFile(file))
 await writeFile(join(notices, 'codex-hongguo-source.zip'), zipSync(sourceEntries, { level: 6 }))
@@ -100,7 +100,7 @@ async function collect(dir, base) {
     if (entry.isDirectory()) await collect(path, name)
     else {
       // Native unzip must retain the POSIX launcher's executable bit too, including Windows-built ZIPs.
-      const executable = /\/bin\/(?:run-node(?:-arm64)?(?:\.exe)?|codex-hongguo\.mjs)$/.test(name)
+      const executable = /\/bin\/(?:run-node(?:-arm64)?(?:\.exe)?|codex-hongguo\.mjs)$/.test(name) || /\/MacOS\/HongguoPlayer$/.test(name)
       entries[name] = [new Uint8Array(await readFile(path)), { os: 3, attrs: ((executable ? 0o100755 : 0o100644) << 16) >>> 0 }]
     }
   }

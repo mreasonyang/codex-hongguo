@@ -9,6 +9,7 @@ import { Store } from './store.mjs'
 import { Service, schemas } from './service.mjs'
 import { Catalog } from './catalog.mjs'
 import { BrowserServer } from './browser.mjs'
+import { DetachedPlayers } from './detached.mjs'
 import { message } from './errors.mjs'
 
 process.umask(0o077)
@@ -22,9 +23,10 @@ const catalog = new Catalog(store),
   service = new Service(store, catalog)
 await catalog.sources.ready
 const browser = new BrowserServer(service)
+service.detached = new DetachedPlayers(service)
 service.pair = (scope) => browser.pair(scope)
 const server = new McpServer({ name: 'codex-hongguo', version: pkg.version })
-const uri = 'ui://hongguo/v38/player', waitingUri = 'ui://hongguo/v38/waiting',
+const uri = 'ui://hongguo/v39/player', waitingUri = 'ui://hongguo/v39/waiting',
   mimeType = 'text/html;profile=mcp-app'
 const ui = { visibility: ['app'] }
 // Both resources can become the player. hls.js attaches its in-memory MediaSource via a blob URL.
@@ -46,7 +48,7 @@ for (const [resourceUri, name] of [[uri, '红果短剧'], [waitingUri, '等待�
   }
   server.registerResource(name, resourceUri, { mimeType, _meta: meta }, read)
   // Older conversations can reopen their original URI without advertising a second entry.
-  for (const prefix of ['ui://hongguo/', ...Array.from({ length: 36 }, (_, i) => `ui://hongguo/v${i + 2}/`)]) {
+  for (const prefix of ['ui://hongguo/', ...Array.from({ length: 37 }, (_, i) => `ui://hongguo/v${i + 2}/`)]) {
     const oldUri = prefix + (waiting ? 'waiting' : 'player')
     if (oldUri === resourceUri) continue
     const legacy = new ResourceTemplate(oldUri, { list: undefined })
@@ -103,6 +105,7 @@ for (const [name, schema] of Object.entries(schemas)) {
   )
 }
 server.server.onclose = () => {
+  service.detached.close()
   void catalog.sources.dispose()
   catalog.panelMedia?.close()
   browser.close()

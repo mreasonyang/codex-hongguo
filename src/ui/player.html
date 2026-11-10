@@ -109,6 +109,10 @@
       <span id="waitingMessage" role="status"></span>
     </section>
     <div id="playerRoot">
+    <section id="desktopSlot" class="desktopSlot" aria-label="播放器回收区" hidden>
+      <p id="desktopHint" aria-live="polite" hidden>拖回这里恢复播放</p>
+      <button id="desktopReturn" class="btn ghost" type="button">返回面板</button>
+    </section>
     <main id="playerContent">
       <header class="topbar">
         <div class="brand" id="sourceControl">
@@ -328,10 +332,13 @@
           <button class="icon" id="back" type="button" aria-label="返回选剧" title="返回选剧">
             <svg class="i" aria-hidden="true"><use href="#i-back" /></svg>
           </button>
-          <div class="ctx">
+          <div class="ctx" id="desktopHandle" title="拖动播放器到桌面">
             <h2 id="title">选择一部短剧</h2>
             <span id="subtitle"></span>
           </div>
+          <button id="detach" class="icon" type="button" title="移到桌面" aria-label="移到桌面" hidden>
+            <svg class="i" aria-hidden="true"><use href="#i-split" /></svg>
+          </button>
           <button id="pair" class="link" type="button" title="在同窗分屏播放" hidden>
             <svg class="i" aria-hidden="true"><use href="#i-split" /></svg>
             <span>分屏</span>

@@ -4,6 +4,7 @@ import { callerId } from './store.mjs'
 import { PlayerError } from './errors.mjs'
 import { manualHooks } from './setup.mjs'
 import { providerPattern, seriesPattern, episodePattern, parseId, matchesSeries } from './sources/ids.mjs'
+import { desktopSchemas } from './detached.mjs'
 
 export const secret = () => randomBytes(24).toString('base64url')
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/)
@@ -18,6 +19,7 @@ const ms = z
   .min(0)
   .max(24 * 3600 * 1000)
 export const schemas = {
+  ...desktopSchemas,
   get_run_state: z.object({ turnId: id.optional(), playerInstance: id.optional(), observeSession: z.literal(true).optional() }),
   set_player_visible: z.object({ instance: id, visible: z.boolean() }),
   get_waiting_picks: z.object({ turnId: id.optional(), inView: z.literal(true).optional() }),
@@ -191,6 +193,13 @@ export class Service {
     if (!a?.success) throw new PlayerError('请求参数无效')
     const p = a.data
     if (this.catalog.syncProviders) await this.syncProviders(scope)
+    if (name in desktopSchemas) {
+      if (browser) throw new PlayerError('请从会话面板移出播放器',403)
+      if (!this.detached && name==='get_window_state') return {supported:false,phase:'docked',generation:0}
+      if (!this.detached) throw new PlayerError('此系统暂不支持独立播放器')
+      return this.detached.call(scope,name,p)
+    }
+    if (this.detached?.blocks(scope,name,p)) throw new PlayerError('播放器已移到桌面，请先返回面板',409)
     switch (name) {
       case 'get_waiting_status':
       case 'browse_waiting_catalog': {

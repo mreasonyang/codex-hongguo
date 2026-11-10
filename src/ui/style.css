@@ -1778,3 +1778,11 @@ h1 {
 .feature.videoCard .cover { width: 42%; max-width: 260px; }
 .episodeList.videoParts { display: flex; flex-direction: column; gap: 6px; }
 .videoParts button { text-align: start; white-space: normal; line-height: 1.5; padding: 9px 11px; }
+/* A detached player leaves a real drop target in its original sidebar. */
+.desktopSlot { min-height: min(70vh, 620px); display:flex; flex-direction:column; justify-content:center; align-items:center; gap:16px; color:var(--muted); }
+.desktopSlot.dragOver { outline:2px dashed currentColor; outline-offset:-14px; }
+.desktopSlot #desktopReturn { opacity:0; transition:opacity 120ms; }
+.desktopSlot:hover #desktopReturn,.desktopSlot:focus-within #desktopReturn { opacity:1; }
+.desktopDetached #playerContent,.desktopDetached #decoy,.desktopDetached #waitingCard { display:none !important; }
+.canDetach { cursor:grab; user-select:none; touch-action:none; }
+.desktopDragging,.desktopDragging * { cursor:grabbing !important; user-select:none !important; }

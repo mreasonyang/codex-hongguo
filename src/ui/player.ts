@@ -11,6 +11,7 @@ import { createCoverPage } from './cover-page'
 import { createSettings } from './settings'
 import { createSourceConfirmation } from './source-confirmation'
 import { createSourcePicker } from './source-picker'
+import { createDesktopPlayer, type DesktopSnapshot } from './desktop-player'
 
 type Series = {
   id: string
@@ -267,6 +268,43 @@ let volumeTimer: ReturnType<typeof setTimeout> | undefined, volumeSaved = Promis
 type HoverResume = { action: number; selection: number; episodeId: string; turn?: string; automatic: boolean }
 let hoverResume: HoverResume | undefined, activeStart: { turn?: string; automatic: boolean } | undefined
 let turnStateAvailable = false
+let desktopRestoring = false
+function desktopSnapshot(): DesktopSnapshot | null {
+  const duration=totalDuration()
+  if(!series||!episode||!loaded||!Number.isFinite(duration)||duration<=0)return null
+  return {seriesId:series.id,episodeId:episode.id,title:series.title,label:episode.label,
+    positionMs:Math.round(video.currentTime*1000),durationMs:Math.round(duration*1000),
+    paused:video.paused,muted:video.muted,volume:video.volume,rate:video.playbackRate}
+}
+const desktop = createDesktopPlayer({instance,snapshot:desktopSnapshot,notice,
+  async freeze(){
+    const snapshot=desktopSnapshot()
+    action++;cancelNextPreload();backgroundPlayback=undefined;hoverResume=undefined;preparing=false;playback='idle'
+    video.pause();syncButtons();await save();await saved
+    return snapshot
+  },
+  async restore(snapshot){
+    desktopRestoring=true
+    try {
+      if(series?.id!==snapshot.seriesId||episode?.id!==snapshot.episodeId)
+        await select({id:snapshot.seriesId,title:snapshot.title},snapshot.episodeId)
+      if(!loaded)await start(undefined,false,true)
+      if(!loaded||episode?.id!==snapshot.episodeId)throw Error(tr('播放器尚未准备好返回'))
+      video.muted=snapshot.muted;video.volume=snapshot.volume;video.playbackRate=snapshot.rate
+      el<HTMLSelectElement>('speed').value=snapshot.rate+'×'
+      seekTo(snapshot.positionMs/1000)
+      if(video.seeking)await new Promise<void>((ok,no)=>{
+        const timeout=setTimeout(()=>{cleanup();no(Error(tr('播放位置恢复超时，请重试')))},5000)
+        const cleanup=()=>{clearTimeout(timeout);video.removeEventListener('seeked',ready)}
+        const ready=()=>{cleanup();ok()};video.addEventListener('seeked',ready,{once:true})
+      })
+      if(!snapshot.paused&&!decoy.covered){playback='playing';await video.play()}
+      else {video.pause();playback='idle'}
+      syncButtons();updateTime()
+      notice(snapshot.paused?'已暂停':'正在播放')
+    } finally {desktopRestoring=false}
+  },
+})
 const decoy = createHoverDecoy({ changed: decoyChanged })
 const coverPage = createCoverPage(el('decoy'))
 const settings = createSettings({
@@ -378,6 +416,7 @@ function syncButtons() {
     .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.id === episode?.id)))
 }
 function save(reset = false) {
+  if(desktop.external())return saved
   const duration = totalDuration()
   if (!loaded || !series || !episode || !Number.isFinite(duration) || !duration || (!video.currentTime && !reset)) return saved
   const p: Progress = {
@@ -395,6 +434,7 @@ function save(reset = false) {
   return saved
 }
 function pause(reason = '', preserveRecommendation = false, preserveHover = false) {
+  if(desktop.external()&&!desktopRestoring)return saved
   if (!preserveHover) hoverResume = undefined
   if (!preserveRecommendation) pendingRecommendationTurn = undefined
   if (reason === '已手动暂停') confirmWaitingPlayback()
@@ -982,6 +1022,7 @@ function poll() {
 }
 async function readTurnState() {
   try {
+    await desktop.refresh()
     const revision = preferencesRevision
     const state = await call<State>('get_run_state', {
       observeSession: true, playerInstance: document.hidden ? undefined : instance,
@@ -1010,6 +1051,7 @@ async function readTurnState() {
     current = state
     if (changed) renderPicks()
     displayState()
+    if(desktop.external())return
     if (reason && series && prefs.autoPauseOnFinish) void pause(reason)
     else if (starting && prefs.autoPlayOnStart && series && episode?.playable &&
         video.paused && !preparing) void start(state.turnId!, true)
@@ -1041,10 +1083,11 @@ function applySeek() {
 function playlistDuration(manifest: string) {
   return Array.from(manifest.matchAll(/#EXTINF:([\d.]+)/g), match => Number(match[1])).reduce((a, b) => a + b, 0)
 }
-async function start(recommendationTurn?: string, automatic = false) {
+async function start(recommendationTurn?: string, automatic = false, prepareOnly = false) {
+  if(desktop.external()&&!desktopRestoring)return
   if (!episode?.playable || !series || !pageActive) return
   activeStart = { turn: recommendationTurn, automatic }
-  if (decoy.covered) {
+  if (decoy.covered && !prepareOnly) {
     hoverResume = { action: ++action, selection, episodeId: episode.id, turn: recommendationTurn, automatic }
     return
   }
@@ -1142,6 +1185,7 @@ async function start(recommendationTurn?: string, automatic = false) {
     }
     if (n !== action || !pageActive) return
     preparing = false
+    if(prepareOnly){playback='idle';syncButtons();return}
     if (playback === 'finished') seekTo(0)
     playback = 'playing'
     video.playbackRate = parseFloat(el<HTMLSelectElement>('speed').value)
@@ -1490,6 +1534,7 @@ function presence(visible: boolean) {
   return call('set_player_visible', { instance, visible }, 1800).catch(() => {})
 }
 async function suspend() {
+  desktop.suspend()
   sourceConfirmation.cancel()
   if (!pageActive) return flushVolume()
   pageActive = false
@@ -1508,6 +1553,7 @@ function retryInterruptedPlayback(intent: InterruptedPlayback) {
   }).catch(() => {})
 }
 function rememberBackgroundPlayback() {
+  if(desktop.external())return
   if (decoy.covered || !pageActive || playback !== 'playing') return
   if (backgroundPlayback?.action !== action) backgroundPlayback = { action }
   retryInterruptedPlayback(backgroundPlayback)
@@ -1531,6 +1577,7 @@ function syncVisibility() {
 function activatePage() {
   if (!playerReady || pageActive) return
   pageActive = true
+  desktop.resume()
   syncVisibility()
   if (pendingRecommendationTurn && episode?.playable && video.paused && !preparing)
     void start(pendingRecommendationTurn)
@@ -1609,8 +1656,10 @@ async function initPlayer(selection?: WaitingSelection) {
   }
   if (!playerReady || generation !== sourceGeneration) return
   decoy.setUnavailable(false)
-  el('startupError').hidden = true
   activeSource = context.source ?? prefs.defaultSource ?? 'hongguo'
+  await desktop.start()
+  if (!playerReady || generation !== sourceGeneration) return
+  el('startupError').hidden = true
   syncSourceButton()
   if (selection?.pick) {
     const pick = selection.pick

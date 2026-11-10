@@ -26,8 +26,8 @@ permissions:
   contents: read
 jobs:
   build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: macos-latest
+    timeout-minutes: 15
     outputs:
       artifact_name: ${{ steps.candidate.outputs.artifact_name }}
       source_sha: ${{ steps.candidate.outputs.source_sha }}
@@ -43,12 +43,12 @@ jobs:
           cache: ${{ !inputs.clean_build && 'npm' || '' }}
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x'
+          go-version-file: native/player/go.mod
           cache: false
       - run: npm ci
       - name: Build and package once
         run: npm run package
-        timeout-minutes: 4
+        timeout-minutes: 8
       - name: Bind candidate to source and archive hashes
         id: candidate
         run: node scripts/release-artifacts.mjs prepare
@@ -105,6 +105,9 @@ jobs:
         with:
           name: ${{ needs.build.outputs.artifact_name }}
           path: .
+      - name: Restore native helper executable permissions
+        if: runner.os == 'macOS'
+        run: chmod +x dist/native/darwin-*/HongguoPlayer.app/Contents/MacOS/HongguoPlayer
       - name: Check the shared candidate
         run: node --input-type=module -e "import {validateCandidate} from './scripts/release-artifacts.mjs'; await validateCandidate(process.cwd(), process.env.RELEASE_SOURCE_SHA)"
         env:

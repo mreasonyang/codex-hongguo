@@ -64,6 +64,7 @@ export const fixture = {
 const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code
 const accountCode = transformSync(readFileSync(new URL('../src/ui/provider-account.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code
 const decoyCode = transformSync(readFileSync(new URL('../src/ui/hover-decoy.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code
+const desktopCode = transformSync(readFileSync(new URL('../src/ui/desktop-player.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code
 const flush = async () => { for (let i = 0; i < 50; i++) await Promise.resolve() }
 
 function setup(t, selected = true) {
@@ -106,6 +107,12 @@ function setup(t, selected = true) {
         return scope.module.exports
       }
       if (name === './api') return api
+      if (name === './desktop-player') {
+        const exports={}, desktopContext=vm.createContext({module:{exports},exports,document,window,Date,Math,setTimeout,clearTimeout,
+          require:name=>name==='./api'?api:{tr:value=>value}})
+        vm.runInContext(desktopCode,desktopContext)
+        return desktopContext.module.exports
+      }
       if (name === './cover-page') return { createCoverPage }
       if (name === './source-confirmation') return { createSourceConfirmation: options => createSourceConfirmation(options, document) }
       if (name === './source-picker') return { createSourcePicker: options => createSourcePicker(options, document) }

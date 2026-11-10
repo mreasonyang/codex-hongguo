@@ -1,5 +1,10 @@
 // The catalog supplies show names and episode titles. Translate player chrome only.
 const en: Record<string, string> = {
+  移到桌面:'Move to desktop',拖动播放器到桌面:'Drag player to desktop',播放器回收区:'Player docking area',
+  拖回这里恢复播放:'Drag here to return the player',返回面板:'Return to sidebar','正在返回播放器…':'Returning the player…',
+  播放器尚未准备好返回:'The player is not ready to return','播放位置恢复超时，请重试':'Restoring playback position timed out. Try again.',
+  '独立窗口准备超时，请重试':'Preparing the desktop player timed out. Try again.',独立窗口暂不可用:'Desktop player is unavailable',
+  '返回面板失败，请重试':'Could not return the player. Try again.',
   连接暂不可用: 'Connection unavailable', 重新连接: 'Reconnect',
   '此页面已失效，请重新连接。': 'This page has expired. Reconnect to continue.',
   '请从原面板重新打开此页面。': 'Open this page again from the original panel.',

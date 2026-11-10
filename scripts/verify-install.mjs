@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto'
 import { Store } from '../src/server/store.mjs'
 import { marketplace, npmPackageName } from './distribution.mjs'
 import { releaseChannel } from '../src/runtime/version.mjs'
+import { ensureFfmpeg, ffmpegPath } from '../src/runtime/ffmpeg-runtime.mjs'
 
 const tmp = await realpath(await mkdtemp(join(tmpdir(), '红果 安装 ')))
 const root = join(tmp, '本地 市场'),
@@ -18,7 +19,7 @@ const root = join(tmp, '本地 市场'),
 const npmMarket = join(tmp, 'npm 市场')
 const version = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version
 const channel = releaseChannel(version)
-const playerUri = 'ui://hongguo/v38/player', waitingUri = 'ui://hongguo/v38/waiting'
+const playerUri = 'ui://hongguo/v39/player', waitingUri = 'ui://hongguo/v39/waiting'
 const commands = Object.fromEntries(['npm', 'codex', 'openssl'].map(name => [name, findExecutable(name)]))
 const env = {
   HOME: tmp,
@@ -92,6 +93,19 @@ try {
   await writeFile(join(npmMarket, '.agents/plugins/marketplace.json'), JSON.stringify(marketplace(version, { source: 'npm', package: npmPackageName, version, registry: origin })))
   const defaultData = dataRoot({ env: { ...env, HONGGUO_DATA_DIR: undefined }, home: tmp })
   env.HONGGUO_DATA_DIR = defaultData
+  // Optional warm-cache qualification when an upstream archive is unavailable.
+  // Copy only the pinned, verified playback runtime into the disposable home;
+  // never share the real cache with the uninstall tests below.
+  const cachedRuntime = process.argv.includes('--cached-runtime')
+  if (cachedRuntime) {
+    const runtimeEnv = { ...process.env, HONGGUO_FFMPEG: undefined }
+    const sourceRuntime = await ensureFfmpeg({ env: runtimeEnv })
+    const targetRuntime = ffmpegPath({ env, home: tmp })
+    await mkdir(dirname(targetRuntime), { recursive: true })
+    await copyFile(sourceRuntime, targetRuntime)
+    await copyFile(sourceRuntime + '.json', targetRuntime + '.json')
+    console.log('本次使用已校验播放组件的独立缓存副本；联网下载另行验收')
+  }
   const setupOutput = run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
   assert.match(setupOutput, /审查.*信任.*UserPromptSubmit.*Stop.*Interrupt/, '安装完成时必须明确告知 Hooks 信任步骤')
   assert.match(setupOutput, /新的本地聊天/, '安装完成时必须提示打开新聊天，避免复用旧播放器连接')
@@ -240,6 +254,10 @@ try {
   const turnId = 'installation-probe'
   assert.match(event('UserPromptSubmit', turnId).hookSpecificOutput.additionalContext, /show_waiting_picks/)
   const hostIdentity = await hostCall('open_drama_panel', {})
+  const nativeState = await hostCall('get_window_state', { panel: hostIdentity._meta.panel, instance: 'install-native-check' })
+  assert.notEqual(nativeState.isError, true, '安装副本须能处理独立窗口状态请求')
+  assert.equal(nativeState._meta.data.supported, process.platform === 'darwin' && Number((await import('node:os')).release().split('.')[0]) >= 23,
+    'macOS 安装包必须包含可执行的原生播放器；其他平台保留面板播放')
   console.log('宿主直接调用时传入可辨认的会话', hostIdentity.structuredContent?.identified === true)
   const card = await hostCall('show_waiting_picks', { turnId })
   assert.equal(card.structuredContent?.shown, true, '宿主传入的会话与提交事件未匹配')
@@ -396,7 +414,7 @@ try {
   await assert.rejects(access(env.HONGGUO_FORBIDDEN_FFMPEG), '不应调用系统 FFmpeg')
   const sha256 = createHash('sha256').update(await readFile(archivePath)).digest('hex')
   await writeFile(resolve('release/verification.json'), JSON.stringify({
-    name: npmPackageName, version, installation: 'fresh', sha256,
+    name: npmPackageName, version, installation: 'fresh', sha256, mediaPreparation: cachedRuntime ? 'verified-cache' : 'cold-download',
     platform: process.platform, arch: process.arch,
     powershellInstall: process.platform === 'win32' ? ['5.1', '7'] : [],
     checkedAt: new Date().toISOString(),

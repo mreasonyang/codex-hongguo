@@ -1,6 +1,6 @@
 {
   "name": "@kyun.si/codex-hongguo",
-  "version": "0.0.37",
+  "version": "0.0.38-beta.1",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
