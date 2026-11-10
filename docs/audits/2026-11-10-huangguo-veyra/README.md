@@ -19,4 +19,12 @@ npm test
 node scripts/verify-huangguo.mjs --live --playback
 ```
 
+## 本地候选包
+
+源码提交 `64e8a03` 在隔离 checkout 打包为 npm TGZ 和离线 ZIP，位于本机 `release/huangguo-veyra-64e8a03/`。这是未发布的分支候选，版本沿用 main 的 0.0.37，不应视为新的正式发行。
+
+[打包回执](package.json) 记录文件摘要和许可检查：两种归档包含 Veyra 许可及修改说明，对应源码 ZIP 包含适配器、vendored 模块、GPL 文本和构建脚本。归档服务 SHA-256 与真实 MCP 验证完全一致。
+
+额外的全新隔离安装检查未通过：现有 FFmpeg 组件下载在 `archive-size` 校验阶段失败，未完成后续新装资格检查；独立运行原有 runtime 下载器也复现同一阶段。该检查不修改用户的已安装插件。本次没有改动 FFmpeg 下载器或其制品清单。
+
 这次真实验证覆盖本机编译后的 MCP 服务，不代表用户已安装插件或 Codex 主窗口的画面、声音及自然 Stop/Interrupt 验收。未执行公开发布或替换用户安装。
