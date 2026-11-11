@@ -18,7 +18,7 @@ export const ffmpeg = findExecutable('ffmpeg', process.env.HONGGUO_FFMPEG)
 export function hasFfmpeg() {
   return isFfmpegReady()
 }
-export async function runFfmpeg(args, input = null, capture = false, cwd = undefined) {
+export async function runFfmpeg(args, input = null, capture = false, cwd = undefined, { signal } = {}) {
   await ensureFfmpeg()
   return new Promise((resolve, reject) => {
     const child = spawn(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-nostdin', ...args], {
@@ -27,6 +27,7 @@ export async function runFfmpeg(args, input = null, capture = false, cwd = undef
       windowsHide: true,
       timeout: 120_000,
       killSignal: 'SIGKILL',
+      signal,
     })
     const chunks = []
     let bytes = 0
@@ -37,7 +38,7 @@ export async function runFfmpeg(args, input = null, capture = false, cwd = undef
     })
     child.stdin.on('error', () => {})
     child.stdin.end(input)
-    child.on('error', () => reject(new PlayerError('FFmpeg 启动失败，请检查本机安装')))
+    child.on('error', error => { if (error.name !== 'AbortError') reject(new PlayerError('FFmpeg 启动失败，请检查本机安装')) })
     child.on('close', (code) =>
       code === 0 && bytes <= MB
         ? resolve(Buffer.concat(chunks))

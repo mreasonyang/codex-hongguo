@@ -2,7 +2,7 @@ import type { Preferences } from './api'
 import { createCoverStylePicker } from './cover-style-picker.ts'
 import { createSettingsHelp } from './settings-help.ts'
 
-const switches = ['autoPauseOnFinish', 'autoPlayOnStart', 'defaultMuted', 'hoverDecoyEnabled', 'autoPrompt'] as const
+const switches = ['autoPauseOnFinish', 'autoPlayOnStart', 'defaultMuted', 'hoverDecoyEnabled', 'autoPrompt', 'excludeNsfwRecommendations'] as const
 type Options = {
   read: () => Preferences
   save: (patch: Partial<Preferences>) => Promise<Preferences>

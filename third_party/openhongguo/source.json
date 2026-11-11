@@ -1,0 +1,15 @@
+{
+  "project": "openhongguo",
+  "upstreamVersion": "0.2.0",
+  "version": "0.2.0",
+  "license": "Apache-2.0",
+  "revision": "4bc88830eba186c13caf36cc915ace38785e2f8e",
+  "repository": "https://github.com/beilunyang/openhongguo",
+  "sourceTree": "8367d057a4bb787af6eda9726feb1b2040b33aaa",
+  "mergedPullRequest": "https://github.com/beilunyang/openhongguo/pull/7",
+  "sourceURL": "https://github.com/beilunyang/openhongguo/tree/4bc88830eba186c13caf36cc915ace38785e2f8e",
+  "archiveURL": "https://codeload.github.com/beilunyang/openhongguo/tar.gz/4bc88830eba186c13caf36cc915ace38785e2f8e",
+  "archive": "source.tar.gz",
+  "sourceSHA256": "e8bb1daacb40f3901c2668742ab95707525ebf8ac14f64103b58bbc74603256e",
+  "modifiedFiles": []
+}

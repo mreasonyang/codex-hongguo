@@ -1,0 +1,25 @@
+{
+  "sourceCommit": "5420a5d",
+  "version": "0.0.37",
+  "artifacts": [
+    {
+      "file": "kyun.si-codex-hongguo-0.0.37.tgz",
+      "bytes": 5857103,
+      "sha256": "7a5dedd899d0df5feef9edfd849a44ba57c4c542f9c5ed412530e62b8b3e3509"
+    },
+    {
+      "file": "codex-hongguo-0.0.37.zip",
+      "bytes": 6222073,
+      "sha256": "50841010bbd7a9e6b15bd340308b78be70bafa81da8df40442411186b5b56b2e"
+    }
+  ],
+  "serverSha256": "eac24bf5fc58714c1fdd3fc58932356acf87f0bea201f374118cb75d77fd05a1",
+  "bundledPinMatches": true,
+  "sourcePinMatches": true,
+  "veyraLicenseIncluded": true,
+  "matchesLiveVerifiedServer": true,
+  "status": "pass",
+  "fullFreshInstallPassed": true,
+  "installedCopyMediaDecoded": true,
+  "desktopPlaybackObserved": false
+}

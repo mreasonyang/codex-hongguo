@@ -4,6 +4,7 @@ import { open, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { PlayerError } from './errors.mjs'
 import { responseBytes } from './sources/network.mjs'
+import { hlsIndex, hlsBytes, clearHlsKeys } from './hls-media.mjs'
 
 const MB = 1024 * 1024, maxAsset = 32 * MB, idle = 10 * 60000
 const invalid = () => new PlayerError('片源分段索引无效，请重新点播')
@@ -67,6 +68,7 @@ export class DashMedia {
   drop(e) {
     if (this.entries.get(e.id) === e) this.entries.delete(e.id)
     e.abort.abort()
+    clearHlsKeys(e)
     for (const cached of e.files.values()) this.bytes -= cached.size
     e.files.clear()
     rmSync(e.dir, { recursive: true, force: true })
@@ -99,7 +101,7 @@ export class DashMedia {
     if (e.error) return { status: 'error', reason: e.error }
     if (e.fallback) return { status: 'fallback' }
     if (!e.manifest) return { status: 'preparing', phase: e.phase }
-    return { status: 'ready', format: 'dash', stream: e.stream, manifest: e.manifest,
+    return { status: 'ready', format: e.format || 'dash', stream: e.stream, manifest: e.manifest,
       codec: 'h264', durationMs: e.durationMs }
   }
   valid(e) {
@@ -123,6 +125,18 @@ export class DashMedia {
   async build(e, resolve) {
     const descriptor = await resolve()
     this.valid(e)
+    const hls = descriptor.candidates?.find(row => row.kind === 'hls' && /^h264$/i.test(row.codec || ''))
+    if (hls) {
+      e.fetch = descriptor.fetchMedia; e.phase = 'index'
+      const index = await hlsIndex(hls, e.fetch, e.abort.signal, () => this.valid(e))
+      this.valid(e)
+      if (!index) { e.fallback = true; return }
+      Object.assign(e, index, { format: 'hls' })
+      if (e.preload) void (async () => {
+        for (const asset of [...e.assets.keys()].slice(0, 2)) await this.asset(e, asset)
+      })().catch(() => {})
+      return
+    }
     const candidates = descriptor.candidates?.filter(row => row.kind === 'tracks' && row.video?.indexRange && row.audio?.indexRange)
     if (!candidates?.length) { e.fallback = true; return }
     if (!(descriptor.durationMs > 0 && descriptor.durationMs <= 86400000)) throw invalid()
@@ -192,7 +206,8 @@ export class DashMedia {
     const descriptor = e.assets.get(asset)
     if (!descriptor || e.jobs.size >= 4) throw new PlayerError('播放分段请求无效')
     const job = (async () => {
-      const bytes = await this.range(e, descriptor.track, descriptor.range)
+      const bytes = e.format === 'hls' ? await hlsBytes(e, descriptor, () => this.valid(e))
+        : await this.range(e, descriptor.track, descriptor.range)
       this.valid(e)
       mkdirSync(e.dir, { recursive: true, mode: 0o700 })
       await writeFile(join(e.dir, asset), bytes, { mode: 0o600 })
