@@ -2,16 +2,22 @@ import { Transform } from 'node:stream'
 import { PlayerError } from '../errors.mjs'
 
 export const hongguoHosts = /(?:^|\.)(?:qznovelvod\.com|byteimg\.com|fqnovelpic\.com|douyinvod\.com|bytecdn\.cn|ibytedtos\.com|snssdk\.com|pstatp\.com)$/i
+// Some qznovelvod media replies redirect through this CDN routing domain.
+// It is accepted only after an allowed initial URL, not as a direct locator.
+export const allowsHongguoRedirect = host => hongguoHosts.test(host) || /(?:^|\.)(?:bdcgslb\.com|jspcdn\.cn)$/i.test(host)
+// Observed in HTTPS redirects issued by qznovelvod. Keep this exception
+// restricted to the routing destination; direct URLs still reject all ports.
+export const allowsHongguoRedirectPort = url => /(?:^|\.)jspcdn\.cn$/i.test(url.hostname) && url.port === '20443'
 const invalid = () => new PlayerError('片源地址不在支持的媒体域名内')
-export function allowedURL(input, allows) {
+export function allowedURL(input, allows, allowsPort = () => false) {
   let url
   try { url = new URL(input) } catch { throw invalid() }
   if (url.protocol === 'http:') url.protocol = 'https:'
-  if (url.protocol !== 'https:' || url.port || url.username || url.password || !allows(url.hostname)) throw invalid()
+  if (url.protocol !== 'https:' || (url.port && !allowsPort(url)) || url.username || url.password || !allows(url.hostname)) throw invalid()
   return url
 }
 export async function boundedResponse(input, {
-  allows, budget, timeout = 10000, signal, headers = {}, method = 'GET', body, range, followRedirects = true,
+  allows, redirectAllows = allows, redirectPorts = () => false, budget, timeout = 10000, signal, headers = {}, method = 'GET', body, range, followRedirects = true,
 }) {
   const deadline = Date.now() + timeout
   let target = allowedURL(input, allows)
@@ -34,7 +40,7 @@ export async function boundedResponse(input, {
       if (!followRedirects) return { response: res, url: target.href }
       const location = res.headers.get('location'); await res.body?.cancel()
       if (!location || redirect === 3) throw invalid()
-      const next = allowedURL(new URL(location, target), allows)
+      const next = allowedURL(new URL(location, target), redirectAllows, redirectPorts)
       // Never forward an authenticated request to another origin.
       if (next.origin !== target.origin && (requestHeaders.has('authorization') || requestHeaders.has('cookie'))) throw invalid()
       if (res.status === 303 || ([301, 302].includes(res.status) && method === 'POST')) { method = 'GET'; body = undefined }
@@ -47,10 +53,10 @@ export async function boundedResponse(input, {
   }
   throw invalid()
 }
-export function mediaFetcher({ allows = host => hongguoHosts.test(host), headers = {}, signal: lifetime } = {}) {
+export function mediaFetcher({ allows = host => hongguoHosts.test(host), redirectAllows = allows, redirectPorts = () => false, headers = {}, signal: lifetime } = {}) {
   return async (url, budget, timeout, _redirects = 0, range, signal) => {
     const signals = [lifetime, signal].filter(Boolean)
-    const { response: res, url: finalURL } = await boundedResponse(url, { allows, headers, budget, timeout, range,
+    const { response: res, url: finalURL } = await boundedResponse(url, { allows, redirectAllows, redirectPorts, headers, budget, timeout, range,
       signal: signals.length ? AbortSignal.any(signals) : undefined })
     const validRange = !range || (res.status === 206 && res.headers.get('content-range')?.split('/')[0] ===
       'bytes ' + range.offset + '-' + (range.offset + range.length - 1))
@@ -67,7 +73,7 @@ export function mediaFetcher({ allows = host => hongguoHosts.test(host), headers
     return { body: res.body, limit, url: finalURL }
   }
 }
-export const cdn = mediaFetcher()
+export const cdn = mediaFetcher({ redirectAllows: allowsHongguoRedirect, redirectPorts: allowsHongguoRedirectPort })
 export async function responseBytes(body, budget) {
   const chunks = []; let size = 0
   for await (const chunk of body) {

@@ -5,6 +5,11 @@ This version of codex-hongguo is licensed under the GNU Affero General Public
 License, version 3 only (AGPL-3.0-only). The complete license is in LICENSE.
 
 Third-party components retain their respective licenses. In particular,
+openhongguo includes the unmerged playback signing patch from pull request #7,
+pinned to bed14595d35b02e0d550270621812ca7386c4108 under Apache-2.0.
+Its matching source, license and patch provenance are included in
+licenses/openhongguo/; see NOTICE.md there for the experimental build status.
+
 @ikenxuan/amagi remains GPL-3.0-only; its license text is in COPYING. The
 combination is permitted by section 13 of GPLv3 and AGPLv3, and the AGPLv3
 network-interaction requirements apply to the combination.

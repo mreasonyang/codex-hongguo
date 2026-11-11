@@ -52,12 +52,13 @@ export function decodeCursor(cursor, source, operation, scope) {
 export function filePlayback(result) {
   const { playback = {}, contentKey } = result
   const streams = (playback.streams || []).filter(s => s.url)
-  const file = streams.find(s => !s.hls && !s.dash)
+  const files = streams.filter(s => !s.hls && !s.dash)
+  const file = files.find(s => !/bytevc2/i.test(s.codec || '')) || files[0]
   return { candidates: [...new Set([
     file && (file.protected || playback.protected) ? file : undefined,
     streams.find(s => s.hls), streams.find(s => s.dash), file,
-  ].filter(Boolean))].map(s => ({
-    kind: s.hls ? 'hls' : s.dash ? 'dash' : 'file', url: s.url, codec: s.codec,
+  ].filter(Boolean))].flatMap(s => [...new Set([s.url, s.backup_url].filter(Boolean))].map(url => ({
+    kind: s.hls ? 'hls' : s.dash ? 'dash' : 'file', url, codec: s.codec,
     ...(s.protected || playback.protected ? { encryption: { kind: 'cenc', key: contentKey?.key } } : {}),
-  })) }
+  }))) }
 }

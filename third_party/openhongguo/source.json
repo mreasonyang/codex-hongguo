@@ -1,0 +1,17 @@
+{
+  "project": "openhongguo",
+  "upstreamVersion": "0.2.0",
+  "version": "0.2.0-pr.7.bed1459",
+  "license": "Apache-2.0",
+  "revision": "bed14595d35b02e0d550270621812ca7386c4108",
+  "baseRevision": "42b73f201309423f012d483bfc0ce579dcc0937c",
+  "pullRequest": "https://github.com/beilunyang/openhongguo/pull/7",
+  "sourceURL": "https://github.com/kadaliao/openhongguo/tree/bed14595d35b02e0d550270621812ca7386c4108",
+  "archive": "source.tar.gz",
+  "sourceSHA256": "9416c26f8589088a4cb2d376c7a73271029ee32d0a55d47d3fb68ed4b6aaf6ed",
+  "modifiedFiles": [
+    "internal/protocol/sign/playback.go",
+    "internal/protocol/sign/playback_test.go",
+    "sdk/media.go"
+  ]
+}
