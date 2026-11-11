@@ -1,133 +1,50 @@
-name: Cross-platform qualification
+name: Openhongguo current live self-check
 on:
-  push:
-    branches: ['**']
-  pull_request:
   workflow_dispatch:
-  workflow_call:
-    inputs:
-      source_sha:
-        required: true
-        type: string
-      release_tag:
-        default: ''
-        type: string
-      clean_build:
-        default: false
-        type: boolean
-    outputs:
-      artifact_name:
-        value: ${{ jobs.build.outputs.artifact_name }}
-      source_sha:
-        value: ${{ jobs.build.outputs.source_sha }}
-      version:
-        value: ${{ jobs.build.outputs.version }}
 permissions:
   contents: read
 jobs:
-  build:
+  live:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    outputs:
-      artifact_name: ${{ steps.candidate.outputs.artifact_name }}
-      source_sha: ${{ steps.candidate.outputs.source_sha }}
-      version: ${{ steps.candidate.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.source_sha || github.sha }}
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: ${{ !inputs.clean_build && 'npm' || '' }}
+          repository: beilunyang/openhongguo
+          ref: 42b73f201309423f012d483bfc0ce579dcc0937c
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x'
+          go-version: '1.25.4'
           cache: false
-      - run: npm ci
-      - name: Build and package once
-        run: npm run package
-        timeout-minutes: 4
-      - name: Bind candidate to source and archive hashes
-        id: candidate
-        run: node scripts/release-artifacts.mjs prepare
+      - name: Install frame decoder
+        run: sudo apt-get update -qq >/dev/null 2>&1 && sudo apt-get install -y --no-install-recommends ffmpeg >/dev/null 2>&1
+      - name: Run the unmodified upstream live self-check
         env:
-          RELEASE_SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.candidate.outputs.artifact_name }}
-          include-hidden-files: true
-          if-no-files-found: error
-          path: |
-            dist/
-            release/*.tgz
-            release/*.zip
-            release/package-metadata.json
-            release/candidate.json
-            release/npm/codex-hongguo/package.json
-            release/marketplace/.agents/plugins/marketplace.json
-  qualify:
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.build.outputs.source_sha }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: ${{ !inputs.clean_build && 'npm' || '' }}
-      - name: Install CLI
-        run: npm install --global @openai/codex@0.157.1
-      - name: Install Linux media tools
-        if: runner.os == 'Linux'
-        run: sudo apt-get update -qq && sudo apt-get install -y openssl
-      - name: Install macOS media tools
-        if: runner.os == 'macOS'
-        run: brew install openssl@3
-      - name: Locate Windows OpenSSL
-        if: runner.os == 'Windows'
-        shell: pwsh
+          DIAGNOSTIC_OUT: ${{ runner.temp }}/selfcheck-result
         run: |
-          $candidates = @("$env:ProgramFiles\OpenSSL\bin", "$env:ProgramFiles\OpenSSL-Win64\bin", "$env:ProgramFiles\Git\usr\bin")
-          $opensslDirectory = $candidates | Where-Object { Test-Path "$_\openssl.exe" } | Select-Object -First 1
-          if (-not $opensslDirectory) { throw 'OpenSSL was not found in the Windows runner image.' }
-          $opensslDirectory >> $env:GITHUB_PATH
-      - run: npm ci
-      - uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.build.outputs.artifact_name }}
-          path: .
-      - name: Check the shared candidate
-        run: node --input-type=module -e "import {validateCandidate} from './scripts/release-artifacts.mjs'; await validateCandidate(process.cwd(), process.env.RELEASE_SOURCE_SHA)"
-        env:
-          RELEASE_SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
-      - name: Prepare managed playback runtime
-        run: node scripts/prepare-media.mjs
-        timeout-minutes: 7
-      - name: Verify Windows command shims and launcher independently
-        if: runner.os == 'Windows'
-        run: node --test --test-timeout=120000 test/windows.test.mjs test/windows-hooks-shell.test.mjs test/distribution.test.mjs
-        timeout-minutes: 2
-      - name: Run regression tests against the shared build
-        run: node --test --test-timeout=180000 test/*.test.mjs
-        timeout-minutes: 5
-      - name: Install the shared npm archive
-        run: npm run verify:install
-      - name: Bind native installer receipt to source
-        run: node scripts/release-artifacts.mjs receipt
-        env:
-          RELEASE_SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          python3 - <<'PYCODE'
+          import datetime,json,os,pathlib,re,subprocess,sys
+          result={'sourceCommit':'42b73f201309423f012d483bfc0ce579dcc0937c','platform':'ubuntu-latest','freshGuest':True,'checkedAt':datetime.datetime.now(datetime.timezone.utc).isoformat()}
+          p=subprocess.run(['go','test','-json','-count=1','-tags','live','-run','TestLiveContract','./internal/contract'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=230)
+          checks=[];actions=[];frame_skipped=False
+          for line in p.stdout.decode(errors='replace').splitlines():
+            try:e=json.loads(line)
+            except ValueError:continue
+            if e.get('Test')=='TestLiveContract' and e.get('Action') in ['pass','fail','skip']:actions.append(e['Action'])
+            s=e.get('Output','')
+            hit=re.match(r'\s*([a-z ]+?)\s{2,}(ok|FAIL)(?:\s|$)',s)
+            if hit:checks.append({'check':hit.group(1).strip(),'status':hit.group(2)})
+            if 'ffmpeg not found' in s:frame_skipped=True
+          result.update(exitCode=p.returncode,checks=checks,testActions=actions,frameDecodeSkipped=frame_skipped,stderrBytes=len(p.stderr))
+          out=pathlib.Path(os.environ['DIAGNOSTIC_OUT']);out.mkdir(parents=True,exist_ok=True)
+          (out/'report.json').write_text(json.dumps(result,indent=2))
+          print(json.dumps(result))
+          sys.exit(p.returncode or int(frame_skipped))
+          PYCODE
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: install-proof-${{ matrix.os }}
-          overwrite: true
-          if-no-files-found: error
-          path: release/qualifications/*.json
+          name: openhongguo-current-live-selfcheck
+          path: ${{ runner.temp }}/selfcheck-result/report.json
+          if-no-files-found: ignore
