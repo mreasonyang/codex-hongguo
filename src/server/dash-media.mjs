@@ -2,11 +2,13 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync, rmSync, readdirSync, statSync, utimesSync } from 'node:fs'
 import { open, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { errorCodes } from '../../provider-kit/sdk/index.mjs'
 import { PlayerError } from './errors.mjs'
 import { responseBytes } from './sources/network.mjs'
 import { hlsIndex, hlsBytes, clearHlsKeys } from './hls-media.mjs'
 
 const MB = 1024 * 1024, maxAsset = 32 * MB, idle = 10 * 60000
+const maxIndexCandidates = 4
 const invalid = () => new PlayerError('片源分段索引无效，请重新点播')
 export function byteRange(value, maximum = MB) {
   const match = /^(\d+)-(\d+)$/.exec(String(value))
@@ -94,11 +96,12 @@ export class DashMedia {
         used: Date.now(), viewers: new Set(), files: new Map(), jobs: new Map(), assets: new Map(), pending: true, phase: 'source', preload }
       this.entries.set(id, e)
       e.job = this.build(e, resolve).catch(error => {
+        if (errorCodes.includes(error.code)) e.code = error.code
         e.error = error instanceof PlayerError ? error.message : '播放分段暂不可达，请重试'
       }).finally(() => { e.pending = false })
     }
     e.used = Date.now()
-    if (e.error) return { status: 'error', reason: e.error }
+    if (e.error) return { status: 'error', reason: e.error, ...(e.code ? { code: e.code } : {}) }
     if (e.fallback) return { status: 'fallback' }
     if (!e.manifest) return { status: 'preparing', phase: e.phase }
     return { status: 'ready', format: e.format || 'dash', stream: e.stream, manifest: e.manifest,
@@ -118,63 +121,81 @@ export class DashMedia {
         this.valid(e)
         if (bytes.length !== range.length) throw invalid()
         return bytes
-      } catch (error) { failure = error }
+      } catch (error) {
+        if (error?.code === 'ABORTED') throw error
+        failure = error
+      }
     }
-    throw failure instanceof PlayerError ? failure : new PlayerError('播放分段暂不可达，请重试')
+    if (failure instanceof PlayerError || errorCodes.includes(failure?.code)) throw failure
+    throw new PlayerError('播放分段暂不可达，请重试')
   }
   async build(e, resolve) {
-    const descriptor = await resolve()
+    const descriptor = await resolve(e.abort.signal)
     this.valid(e)
-    const hls = descriptor.candidates?.find(row => row.kind === 'hls' && /^h264$/i.test(row.codec || ''))
-    if (hls) {
-      e.fetch = descriptor.fetchMedia; e.phase = 'index'
-      const index = await hlsIndex(hls, e.fetch, e.abort.signal, () => this.valid(e))
-      this.valid(e)
-      if (!index) { e.fallback = true; return }
-      Object.assign(e, index, { format: 'hls' })
-      if (e.preload) void (async () => {
-        for (const asset of [...e.assets.keys()].slice(0, 2)) await this.asset(e, asset)
-      })().catch(() => {})
-      return
-    }
-    const candidates = descriptor.candidates?.filter(row => row.kind === 'tracks' && row.video?.indexRange && row.audio?.indexRange)
-    if (!candidates?.length) { e.fallback = true; return }
-    if (!(descriptor.durationMs > 0 && descriptor.durationMs <= 86400000)) throw invalid()
-    e.durationMs = descriptor.durationMs; e.fetch = descriptor.fetchMedia; e.phase = 'index'
+    e.fetch = descriptor.fetchMedia; e.phase = 'index'
+    const candidates = descriptor.candidates || []
     let failure
-    for (const candidate of candidates.slice(0, 2)) {
+    for (const candidate of candidates.slice(0, maxIndexCandidates)) {
       try {
-        const tracks = await Promise.all(['video', 'audio'].map(async name => {
-          const track = candidate[name]
-          if (!/^(?:video\/mp4; codecs="avc[13]\.[\da-f]{6}"|audio\/mp4; codecs="mp4a\.40\.\d+")$/i.test(track.mime)) throw invalid()
-          const initialization = byteRange(track.initialization), index = byteRange(track.indexRange)
-          if (initialization.offset !== 0 || initialization.offset + initialization.length > index.offset) throw invalid()
-          const segments = sidxSegments(await this.range(e, track, index), index.offset, e.durationMs)
-          const init = name + '-init.mp4'
-          return { name, track, initialization, segments, init }
-        }))
-        this.valid(e)
-        if (tracks.reduce((sum, track) => sum + track.initialization.length +
-          track.segments.reduce((n, segment) => n + segment.length, 0), 0) > 32768 * MB)
-          throw new PlayerError('素材超过大小限制')
-        const manifest = { version: 1, duration: e.durationMs / 1000, tracks: tracks.map(({ name, track, initialization, segments, init }) => {
-          e.assets.set(init, { track, range: initialization })
-          return { mime: track.mime, initialization: init, segments: segments.map((segment, i) => {
-            const asset = name + '-' + String(i).padStart(5, '0') + '.m4s'
-            e.assets.set(asset, { track, range: { offset: segment.offset, length: segment.length } })
-            return { asset, time: segment.time, duration: segment.duration }
-          }) }
-        }) }
-        e.manifest = JSON.stringify(manifest)
-        if (e.manifest.length > 1024 * 1024) throw invalid()
-        if (e.preload) void Promise.all(manifest.tracks.map(async track => {
-          for (const asset of [track.initialization, ...track.segments.slice(0, 2).map(segment => segment.asset)])
-            await this.asset(e, asset)
-        })).catch(() => {})
+        if (candidate.kind === 'tracks' && candidate.video?.indexRange && candidate.audio?.indexRange) {
+          await this.buildTracks(e, candidate, descriptor.durationMs)
+          return
+        }
+        if (candidate.kind === 'hls' && /^h264$/i.test(candidate.codec || '')) {
+          const index = await hlsIndex(candidate, e.fetch, e.abort.signal, () => this.valid(e))
+          this.valid(e)
+          if (index) {
+            Object.assign(e, index, { format: 'hls' })
+            if (e.preload) void (async () => {
+              for (const asset of [...e.assets.keys()].slice(0, 2)) await this.asset(e, asset)
+            })().catch(() => {})
+            return
+          }
+        }
+        // This candidate needs the complete-media path. Respect its priority.
+        e.fallback = true
         return
-      } catch (error) { failure = error; e.assets.clear() }
+      } catch (error) {
+        this.valid(e)
+        if (error?.code === 'ABORTED') throw error
+        failure = error
+      }
     }
-    throw failure
+    // Leave further candidates to the normal ordered playback path.
+    if (failure && candidates.length <= maxIndexCandidates) throw failure
+    e.fallback = true
+  }
+  async buildTracks(e, candidate, durationMs) {
+    if (!(durationMs > 0 && durationMs <= 86400000)) throw invalid()
+    const tracks = await Promise.all(['video', 'audio'].map(async name => {
+      const track = candidate[name]
+      if (!/^(?:video\/mp4; codecs="avc[13]\.[\da-f]{6}"|audio\/mp4; codecs="mp4a\.40\.\d+")$/i.test(track.mime)) throw invalid()
+      const initialization = byteRange(track.initialization), index = byteRange(track.indexRange)
+      if (initialization.offset !== 0 || initialization.offset + initialization.length > index.offset) throw invalid()
+      const segments = sidxSegments(await this.range(e, track, index), index.offset, durationMs)
+      const init = name + '-init.mp4'
+      return { name, track, initialization, segments, init }
+    }))
+    this.valid(e)
+    if (tracks.reduce((sum, track) => sum + track.initialization.length +
+      track.segments.reduce((n, segment) => n + segment.length, 0), 0) > 32768 * MB)
+      throw new PlayerError('素材超过大小限制')
+    const assets = new Map()
+    const manifest = { version: 1, duration: durationMs / 1000, tracks: tracks.map(({ name, track, initialization, segments, init }) => {
+      assets.set(init, { track, range: initialization })
+      return { mime: track.mime, initialization: init, segments: segments.map((segment, i) => {
+        const asset = name + '-' + String(i).padStart(5, '0') + '.m4s'
+        assets.set(asset, { track, range: { offset: segment.offset, length: segment.length } })
+        return { asset, time: segment.time, duration: segment.duration }
+      }) }
+    }) }
+    const json = JSON.stringify(manifest)
+    if (json.length > MB) throw invalid()
+    Object.assign(e, { manifest: json, assets, durationMs })
+    if (e.preload) void Promise.all(manifest.tracks.map(async track => {
+      for (const asset of [track.initialization, ...track.segments.slice(0, 2).map(segment => segment.asset)])
+        await this.asset(e, asset)
+    })).catch(() => {})
   }
   owns(id, stream) { return this.entries.get(id)?.stream === stream }
   entry(id, stream) {

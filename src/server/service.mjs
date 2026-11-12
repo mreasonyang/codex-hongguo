@@ -193,7 +193,7 @@ export class Service {
     const settings = this.store.preferences()
     return { ...settings, defaultSource: this.catalog.defaultSource?.() ?? settings.defaultSource }
   }
-  async call(scope, name, args, browser = false) {
+  async call(scope, name, args, browser = false, signal) {
     const a = schemas[name]?.strict().safeParse(args)
     if (!a?.success) throw new PlayerError('请求参数无效')
     const p = a.data
@@ -319,7 +319,7 @@ export class Service {
         scope.choices.clear()
         return this.store.state(scope.sessionId)
       case 'list_series':
-        return this.catalog.list({ ...p, source: p.source ?? scope.source })
+        return this.catalog.list({ ...p, source: p.source ?? scope.source, signal })
       case 'set_source':
         await this.catalog.sources?.ready
         this.catalog.sources?.get(p.source)
@@ -389,6 +389,10 @@ export class Service {
           scope.playing = p.episodeId
         }
         const result = this.catalog.prepare(p.episodeId, browser, !!p.retry)
+        if (result.status === 'ready' || result.status === 'error') {
+          this.catalog.sources?.recordHealth?.(parseId(p.episodeId, 'episode').source, 'prepare',
+            result.status === 'ready' ? 'passed' : 'failed', result.code)
+        }
         if (browser && result.status === 'ready' && result.src) scope.grants.add(p.episodeId)
         if (result.stream) {
           if (browser && scope.playing !== p.episodeId) {
@@ -437,6 +441,7 @@ export class Service {
         if (!this.catalog.ffmpeg) void this.catalog.prepareMediaRuntime?.().catch(() => {})
         return {
           runtime: process.version,
+          providers: this.catalog.sources?.list?.().map(({ id, version, available, code, health }) => ({ id, version, loaded: available, code, health })),
           database: this.store.writable(),
           ffmpeg: this.catalog.ffmpeg,
         }

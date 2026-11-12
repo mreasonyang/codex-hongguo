@@ -105,8 +105,12 @@ export async function main(argv = process.argv.slice(2)) {
       return
     }
     if (['help', '--help', '-h'].includes(action)) {
-      console.log('红果短剧\n  codex-hongguo setup [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo update [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo uninstall [--dry-run]\n  codex-hongguo doctor\n需要 Node.js >=22.16 和 Codex CLI；播放组件由插件自动准备。')
+      console.log('红果短剧\n  codex-hongguo provider --help\n  codex-hongguo setup [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo update [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo uninstall [--dry-run]\n  codex-hongguo doctor\n需要 Node.js >=22.16 和 Codex CLI；播放组件由插件自动准备。')
       return
+    }
+    if (action === 'provider') {
+      const { providerCommand } = await import('./providers.mjs')
+      return await providerCommand(options)
     }
     if (!['setup', 'update', 'uninstall', 'doctor'].includes(action)) throw Error('未知命令；运行 codex-hongguo --help 查看用法。')
     if (process.platform === 'win32' && !['x64', 'arm64'].includes(process.arch)) throw Error('Windows 需要 x64 或 ARM64 Node.js，请安装对应的 64 位版本后重试。')

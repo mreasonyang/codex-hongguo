@@ -12,7 +12,7 @@ function audioFor(master, variant) {
   return renditions.find((a) => a.default) || renditions[0]
 }
 
-async function tracks(url, read, depth = 0) {
+async function tracks(url, read, hlsOnly, depth = 0) {
   if (depth > 3) throw invalid()
   const page = await read(url, 256 * 1024)
   const body = page.bytes.toString('utf8').trimStart()
@@ -27,15 +27,15 @@ async function tracks(url, read, depth = 0) {
     const master = parser.manifest
     if (!master.playlists?.length) return [{ playlist: master, base: page.url }]
     const variant = master.playlists[0]
-    const video = await tracks(new URL(variant.uri, page.url), read, depth + 1)
+    const video = await tracks(new URL(variant.uri, page.url), read, hlsOnly, depth + 1)
     const audio = audioFor(master, variant)
     if (audio?.uri && video.length === 1) {
-      const [a] = await tracks(new URL(audio.uri, page.url), read, depth + 1)
+      const [a] = await tracks(new URL(audio.uri, page.url), read, hlsOnly, depth + 1)
       video.push(a)
     }
     return video
   }
-  if (!/<MPD[\s>]/.test(body) || /<!DOCTYPE|<!ENTITY|<ContentProtection|type\s*=\s*["']dynamic/i.test(body))
+  if (hlsOnly || !/<MPD[\s>]/.test(body) || /<!DOCTYPE|<!ENTITY|<ContentProtection|type\s*=\s*["']dynamic/i.test(body))
     throw invalid()
   // Bound template and timeline expansion before invoking the DASH parser.
   const duration = body.match(/mediaPresentationDuration=["']PT(?:(\d+)H)?(?:(\d+)M)?(?:([\d.]+)S)?["']/)
@@ -63,24 +63,25 @@ async function tracks(url, read, depth = 0) {
   return [video, audio].filter(Boolean).map((playlist) => ({ playlist, base: page.url }))
 }
 
-export async function prepareAdaptive(source, dir, output, { cdn, run, codec, budget }) {
+export async function prepareAdaptive(source, dir, output, { cdn, run, codec, budget, firstHlsSegment = false }) {
   const deadline = Date.now() + 180000
   async function read(url, limit, range) {
     const remaining = Math.min(limit, budget)
-    if (remaining <= 0 || Date.now() >= deadline) throw invalid()
+    if (remaining <= 0 || range?.length > budget) throw Object.assign(invalid(), { code: 'BUDGET' })
+    if (Date.now() >= deadline) throw invalid()
     const response = await cdn(url, remaining, Math.min(20000, deadline - Date.now()), 0, range)
     let count = 0
     const chunks = []
     for await (const chunk of response.body) {
       count += chunk.byteLength
-      if (count > remaining) throw invalid()
+      if (count > remaining) throw Object.assign(invalid(), { code: 'BUDGET' })
       chunks.push(chunk)
     }
     if (!count || (range && count !== range.length)) throw invalid()
     budget -= count
     return { bytes: Buffer.concat(chunks), url: response.url }
   }
-  const media = await tracks(source, read)
+  const media = await tracks(source, read, firstHlsSegment)
   const inputs = []
   for (const [index, { playlist, base }] of media.entries()) {
     const segments = playlist.segments
@@ -89,7 +90,8 @@ export async function prepareAdaptive(source, dir, output, { cdn, run, codec, bu
       out = await open(path, 'wx', 0o600)
     let init
     try {
-      for (const segment of segments) {
+      // A doctor sample still needs each selected track's initialization data and key.
+      for (const segment of firstHlsSegment ? segments.slice(0, 1) : segments) {
         if (segment.discontinuity || segment.gap) throw invalid()
         const keyInfo = segment.key
         if (keyInfo && (keyInfo.method !== 'AES-128' || !keyInfo.uri || segment.map || segment.byterange)) throw invalid()

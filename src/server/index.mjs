@@ -94,7 +94,7 @@ for (const [name, schema] of Object.entries(schemas)) {
     { inputSchema: { ...schema.shape, panel: z.string().max(80) }, _meta: { ui } },
     async ({ panel, ...input }, extra) => {
       try {
-        const data = await service.call(service.panel(panel, extra._meta), name, input)
+        const data = await service.call(service.panel(panel, extra._meta), name, input, false, extra.signal)
         return { content: [], _meta: { data } }
       } catch (e) {
         return { isError: true, content: [{ type: 'text', text: message(e) }] }

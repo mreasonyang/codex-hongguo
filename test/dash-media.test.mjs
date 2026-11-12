@@ -79,6 +79,56 @@ test('preparation reads only indexes; fragments and long-distance seeks fetch on
   await assert.rejects(f.media.chunk('episode', 'other-panel-stream', last.asset, 0))
   assert.equal(f.requested.length, 3)
 })
+test('mixed progressive candidates keep provider order and advance past a failed index', async t => {
+  const hls = { kind: 'hls', codec: 'h264', url: 'https://fixture.invalid/index.m3u8' }
+  for (const [order, expected, requests] of [
+    [['tracks', 'badHls'], 'dash', ['video', 'audio']],
+    [['badHls', 'tracks'], 'dash', ['badHls', 'video', 'audio']],
+    [['badTracks', 'hls'], 'hls', ['badVideo', 'badAudio', 'hls']],
+    [['hls', 'tracks'], 'hls', ['hls']],
+  ]) {
+    const f = await fixture(t), calls = [], [tracks] = f.descriptor.candidates
+    const badHls = { ...hls, url: 'https://fixture.invalid/broken.m3u8' }
+    const badTracks = { ...tracks, video: { ...tracks.video, url: 'badVideo' }, audio: { ...tracks.audio, url: 'badAudio' } }
+    f.descriptor.candidates = order.map(name => ({ hls, badHls, tracks, badTracks })[name])
+    const fetchTrack = f.descriptor.fetchMedia
+    f.descriptor.fetchMedia = async (url, ...args) => {
+      const name = url === hls.url ? 'hls' : url === badHls.url ? 'badHls' : url
+      calls.push(name)
+      if (name.startsWith('bad')) throw Error('fixture index unavailable')
+      if (name === 'hls') return { url, body: Readable.from([Buffer.from('#EXTM3U\n#EXTINF:5,\npart.ts\n#EXT-X-ENDLIST')]) }
+      return fetchTrack(url, ...args)
+    }
+    const ready = await f.ready()
+    assert.equal(ready.format, expected)
+    assert.deepEqual(calls, requests)
+  }
+})
+test('a preferred complete-media candidate takes precedence over later on-demand tracks', async t => {
+  const f = await fixture(t)
+  f.descriptor.candidates.unshift({ kind: 'file', url: 'file' })
+  f.prepare(); await f.media.entries.get('episode').job
+  assert.equal(f.prepare().status, 'fallback')
+  assert.deepEqual(f.requested, [])
+})
+test('bounded index attempts hand any remaining candidates to complete-media playback', async t => {
+  const f = await fixture(t), calls = []
+  f.descriptor.candidates = Array.from({ length: 5 }, (_, i) => ({ kind: 'hls', codec: 'h264', url: 'hls-' + i }))
+  f.descriptor.fetchMedia = async url => { calls.push(url); throw Error('fixture index unavailable') }
+  f.prepare(); await f.media.entries.get('episode').job
+  assert.equal(f.prepare().status, 'fallback')
+  assert.deepEqual(calls, ['hls-0', 'hls-1', 'hls-2', 'hls-3'])
+})
+test('a revoked entry stops before trying the next progressive candidate', async t => {
+  const f = await fixture(t), calls = []
+  f.descriptor.candidates.unshift({ kind: 'hls', codec: 'h264', url: 'old' })
+  f.descriptor.fetchMedia = async url => { calls.push(url); f.changeRevision(); throw Error('stale') }
+  f.prepare()
+  const entry = f.media.entries.get('episode')
+  await entry.job
+  assert.match(entry.error, /失效/)
+  assert.deepEqual(calls, ['old'])
+})
 test('long ordinary videos prepare from bounded indexes without a whole-file size or two-hour limit', async t => {
   const f = await fixture(t), index = sidx({ refs: Array(2000).fill(1024 * 1024) })
   f.descriptor.durationMs = 10000000

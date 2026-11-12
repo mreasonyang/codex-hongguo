@@ -100,10 +100,11 @@ test('legacy enable lists are ignored, selected sources persist and removed-sour
   assert.equal(peer.history(undefined, undefined, 30, 'demo')[0].positionMs, 1234)
   assert.equal('enabledProviders' in peer.preferences(), false)
 })
-test('NSFW switching requires explicit confirmation each time and never becomes an automatic default', async t => {
+test('a local NSFW provider requires confirmation each time and never becomes an automatic default', async t => {
   const root = await temporary(t), store = new Store(root); defer(t, () => store.close())
-  const sources = new ProviderRegistry(root, { builtins: fixtures().map(plugin => ({ ...plugin,
-    manifest: { ...plugin.manifest, nsfw: plugin.manifest.id === 'demo' } })) })
+  const directory = join(root, 'plugins')
+  await install(directory, 'demo', { nsfw: true })
+  const sources = new ProviderRegistry(root, { directory }); await sources.ready
   defer(t, () => sources.dispose())
   const catalog = new Catalog(store, { sources }), service = new Service(store, catalog)
   const scope = service.panel(service.open({ threadId: 'A' }).panel)
@@ -323,9 +324,11 @@ test('Hongguo implements browsing, search and bound pagination', async t => {
 test('network policies validate every redirect, preserve ranges and bound unknown-length bodies', async t => {
   let requests = 0
   t.mock.method(globalThis, 'fetch', async () => { requests++; return new Response('', { status: 302, headers: { location: 'https://blocked.invalid/a' } }) })
-  await assert.rejects(boundedResponse('https://allowed.invalid/a', { allows: h => h === 'allowed.invalid', budget: 8 }))
+  await assert.rejects(boundedResponse('https://allowed.invalid/a', { allows: h => h === 'allowed.invalid', budget: 8 }),
+    { code: 'HOST_NOT_ALLOWED', message: '片源地址不在支持的媒体域名内' })
   assert.equal(requests, 1)
-  await assert.rejects(boundedResponse('https://allowed.invalid:443/a', { allows: () => false, budget: 8 }))
+  await assert.rejects(boundedResponse('https://allowed.invalid:443/a', { allows: () => false, budget: 8 }),
+    { code: 'HOST_NOT_ALLOWED' })
   t.mock.method(globalThis, 'fetch', async () => new Response('too long'))
   const result = await boundedResponse('https://allowed.invalid/a', { allows: h => h === 'allowed.invalid', budget: 2 })
   await assert.rejects(responseBytes(result.response.body, 2))
@@ -401,6 +404,8 @@ test('provider request timeout and cancellation reject without exposing provider
   const cancellation = assert.rejects(aborted, /请求已取消/)
   controller.abort(); await cancellation
   await assert.rejects(sourceCall(() => { throw Error('private endpoint diagnostic') }), error => !error.message.includes('private'))
+  await assert.rejects(sourceCall(() => { throw Object.assign(new Error('private endpoint diagnostic'), { code: 'MEDIA_EXPIRED' }) }),
+    error => error.code === 'MEDIA_EXPIRED' && !error.message.includes('private'))
 })
 
 for (const branch of ['main', 'provider']) test(`version-two ${branch} database receives both migrations without losing saved state`, async t => {

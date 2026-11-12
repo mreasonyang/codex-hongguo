@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { cdn, responseBytes, mediaFetcher, hongguoHosts, allowsHongguoRedirect, allowsHongguoRedirectPort } from '../src/server/sources/network.mjs'
+import { ProviderRegistry } from '../src/server/providers/registry.mjs'
 
 test('Hongguo CDN accepts its routing redirect after a valid media origin', async t => {
   const hosts = []
@@ -34,14 +35,37 @@ test('Hongguo CDN rejects redirects outside the media and routing domains', asyn
 
 test('Hongguo CDN accepts only the observed routing port after an allowed origin', async t => {
   const origins = []
-  t.mock.method(globalThis, 'fetch', async input => {
+  t.mock.method(globalThis, 'fetch', async (input, options) => {
     origins.push(new URL(input).origin)
+    assert.equal(new Headers(options.headers).get('range'), 'bytes=8-8')
     return origins.length === 1
       ? new Response(null, { status: 302, headers: { location: 'https://fixture.jspcdn.cn:20443/media.mp4' } })
-      : new Response(new Uint8Array([1]))
+      : new Response(new Uint8Array([1]), { status: 206, headers: { 'content-range': 'bytes 8-8/128' } })
   })
-  await cdn('https://fixture.qznovelvod.com/media.mp4', 32, 1000)
+  const result = await cdn('https://fixture.qznovelvod.com/media.mp4', 1, 1000, 0, { offset: 8, length: 1 })
+  assert.equal(result.totalBytes, 128)
+  assert.deepEqual(await responseBytes(result.body, 1), Buffer.from([1]))
   assert.deepEqual(origins, ['https://fixture.qznovelvod.com', 'https://fixture.jspcdn.cn:20443'])
+})
+
+test('provider request options cannot grant extra redirect domains or ports', async t => {
+  const registry = new ProviderRegistry('/unused', { builtins: [], directory: '' })
+  t.after(() => registry.dispose())
+  const context = registry.context({ id: 'fixture', network: { api: ['fixture.invalid'] } })
+  const input = 'https://fixture.invalid/api'
+  let destination = 'https://other.invalid/route'
+  const calls = []
+  t.mock.method(globalThis, 'fetch', async url => {
+    calls.push(url.href)
+    return url.href === input
+      ? new Response(null, { status: 302, headers: { location: destination } })
+      : new Response('unexpected')
+  })
+  const options = { redirectAllows: () => true, redirectPorts: () => true }
+  await assert.rejects(context.fetch(input, options), { code: 'HOST_NOT_ALLOWED' })
+  destination = 'https://fixture.invalid:20443/route'
+  await assert.rejects(context.fetch(input, options), /域名/)
+  assert.deepEqual(calls, [input, input])
 })
 
 test('Hongguo CDN rejects direct routing URLs and unrelated nonstandard ports', async t => {
