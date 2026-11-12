@@ -91,6 +91,9 @@ async function ready(config) {
   } catch { return false }
 }
 
+// A diagnostic with an explicit traffic budget only uses an installed runtime.
+export function checkInstalledFfmpeg() { return ready(settings()) }
+
 async function download(artifact, destination, fetchImpl) {
   const signal = AbortSignal.timeout(downloadTimeoutMs)
   for (let attempt = 0; ; attempt++) {

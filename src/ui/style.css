@@ -1780,3 +1780,7 @@ h1 {
 .feature.videoCard .cover { width: 42%; max-width: 260px; }
 .episodeList.videoParts { display: flex; flex-direction: column; gap: 6px; }
 .videoParts button { text-align: start; white-space: normal; line-height: 1.5; padding: 9px 11px; }
+
+.providerHealth { font-size: var(--fs-sm); color: var(--text-2); }
+.providerHealth summary { cursor: pointer; }
+.providerHealth span { display: block; }

@@ -32,9 +32,13 @@ function apiError(code) {
     : code === -404 ? '内容已下架或不存在'
     : [-412, -352, 429].includes(code) ? 'B 站暂时限制了请求，请稍后重试'
     : 'B 站暂时不可达，请稍后重试', 503)
-  if (code === -101) error.code = 'LOGIN_REQUIRED'
+  if (code === -101) error.code = 'AUTHENTICATION_REQUIRED'
+  else if ([-412, -352, 429].includes(code)) error.code = 'RATE_LIMITED'
+  else if (code === -404) error.code = 'NOT_FOUND'
   return error
 }
+const previewOnly = () => Object.assign(new PlayerError('B 站仅提供试看，请使用拥有完整观看权益的账号'), { code: 'AUTHENTICATION_REQUIRED' })
+
 const preview = data => [true, 1, '1'].includes(data.is_preview) ||
   data.play_check?.play_detail === 'PLAY_PREVIEW' || data.play_video_type === 'preview'
 const drm = data => [true, 1, '1'].includes(data.is_drm) || Number(data.drm_tech_type) > 0
@@ -330,7 +334,7 @@ export class BilibiliSource {
     if (!video.pages.some(p => String(p.cid) === cid)) throw new PlayerError('该分 P 不属于当前视频或已下架')
     let data = await this.request('fetchVideoStreamUrl', { avid: video.aid, cid: Number(cid) }, signal)
     if (!data) throw apiError()
-    if (preview(data)) throw new PlayerError('B 站仅提供试看，请使用拥有完整观看权益的账号')
+    if (preview(data)) throw previewOnly()
     if (drm(data)) throw new PlayerError('该视频需要 DRM 播放授权，当前播放器暂不支持')
     return this.playback(data, true)
   }
@@ -375,9 +379,9 @@ export class BilibiliSource {
     if (data.plugins?.some(item => item.name === 'AreaLimitPanel' && item.config?.is_block))
       throw new PlayerError('该番剧在当前地区不可播放')
     if (data.play_check?.play_detail === 'PLAY_NONE' || data.play_video_type === 'none') throw apiError(-10403)
-    if (preview(data)) throw new PlayerError('B 站仅提供试看，请使用拥有完整观看权益的账号')
+    if (preview(data)) throw previewOnly()
     data = data.video_info ?? data
-    if (preview(data)) throw new PlayerError('B 站仅提供试看，请使用拥有完整观看权益的账号')
+    if (preview(data)) throw previewOnly()
     if (drm(data)) throw new PlayerError('该集需要 DRM 播放授权，当前播放器暂不支持')
     return this.playback(data)
   }

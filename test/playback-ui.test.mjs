@@ -1482,14 +1482,17 @@ test('multi-P shows original chapter titles and single videos hide the episode s
   await single.ui.select({ id: 'p.demo.s.dg', title: '单视频', contentType: 'video' })
   assert.equal(single.elements.get('episodesPane').hidden, true)
 })
-test('a login-required playback failure offers a direct route to the source account page', async t => {
+for (const failure of [
+  { reason: 'B 站需要登录后观看' },
+  { reason: 'Custom source sign-in required', code: 'AUTHENTICATION_REQUIRED' },
+]) test('a login-required playback failure opens the source account page: ' + (failure.code || 'legacy'), async t => {
   const f = await accountPlayer(t)
   await f.ui.settings.finish()
   await f.ui.changeSource('demo')
   f.ui.selected(); f.ui.unload()
   const call = f.service.call.bind(f.service)
   f.service.call = (scope, name, args) => name === 'prepare_playback'
-    ? Promise.resolve({ status: 'error', reason: 'B 站需要登录后观看' }) : call(scope, name, args)
+    ? Promise.resolve({ status: 'error', ...failure }) : call(scope, name, args)
   await f.ui.start(); await flush()
   assert.equal(f.elements.get('accountNeeded').hidden, false)
   await f.elements.get('accountNeeded').onclick(); await flush()

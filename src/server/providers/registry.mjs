@@ -1,6 +1,9 @@
-import { lstat, readdir, readFile, realpath } from 'node:fs/promises'
-import { resolve, join, sep, isAbsolute } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { lstat, readdir, realpath } from 'node:fs/promises'
+import { join } from 'node:path'
+import { existsSync } from 'node:fs'
+import { readPackage } from './package.mjs'
+import { installedProviders, libraryDirectory } from './library.mjs'
+import { errorCodes, providerError, validateManifest, validateResult } from '../../../provider-kit/sdk/index.mjs'
 import { HongguoSource } from '../sources/hongguo.mjs'
 import { BilibiliSource } from '../sources/bilibili.mjs'
 import { HuangguoSource, huangguoManifest } from '../sources/huangguo.mjs'
@@ -24,37 +27,7 @@ export const builtins = [
     createProvider: ctx => new BilibiliSource(ctx, { cookie: process.env.HONGGUO_BILIBILI_COOKIE || '' }) },
   { manifest: huangguoManifest, createProvider: ctx => new HuangguoSource(ctx) },
 ]
-function validate(manifest) {
-  if (!manifest || manifest.apiVersion !== 1 || sourceId(manifest.id) !== manifest.id ||
-      typeof manifest.name !== 'string' || !manifest.name.trim() || manifest.name.length > 80 ||
-      typeof manifest.version !== 'string' || !/^\d+\.\d+\.\d+$/.test(manifest.version)) throw Error('MANIFEST')
-  for (const entries of Object.values(manifest.network || {})) {
-    if (!Array.isArray(entries) || entries.length > 32 || entries.some(host => typeof host !== 'string' ||
-        !/^(?:\*\.)?(?:[a-z0-9-]+\.)+[a-z]{2,}$/i.test(host))) throw Error('NETWORK_POLICY')
-  }
-  for (const key of ['queryHint', 'emptyMessage'])
-    if (manifest[key] !== undefined && (typeof manifest[key] !== 'string' || manifest[key].length > 160)) throw Error('MANIFEST')
-  if (manifest.queryMode !== undefined && !['search', 'link'].includes(manifest.queryMode)) throw Error('MANIFEST')
-  if (manifest.authentication !== undefined && manifest.authentication !== 'qrcode') throw Error('MANIFEST')
-  for (const key of ['nsfw', 'enabled'])
-    if (manifest[key] !== undefined && typeof manifest[key] !== 'boolean') throw Error('MANIFEST')
-  if (manifest.contentTypes !== undefined) {
-    if (!Array.isArray(manifest.contentTypes) || !manifest.contentTypes.length || manifest.contentTypes.length > 8) throw Error('MANIFEST')
-    const ids = new Set()
-    for (const type of manifest.contentTypes) {
-      if (typeof type?.id !== 'string' || !/^[a-z][a-z0-9-]{0,23}$/.test(type.id) || ids.has(type.id) ||
-          typeof type.name !== 'string' || !type.name.trim() || type.name.length > 40) throw Error('MANIFEST')
-      ids.add(type.id)
-      for (const key of ['queryHint', 'emptyMessage'])
-        if (type[key] !== undefined && (typeof type[key] !== 'string' || type[key].length > 160)) throw Error('MANIFEST')
-      if (type.categories !== undefined) {
-        if (!Array.isArray(type.categories) || type.categories.length > 32 || new Set(type.categories.map(c => c.id)).size !== type.categories.length ||
-            type.categories.some(c => typeof c.id !== 'string' || !/^[a-z0-9-]{0,24}$/.test(c.id) || typeof c.name !== 'string' || !c.name.trim() || c.name.length > 40)) throw Error('MANIFEST')
-      }
-    }
-  }
-  return manifest
-}
+export function isBuiltinProviderId(id) { return builtins.some(plugin => plugin.manifest.id === id) }
 function allows(hosts = []) {
   return host => hosts.some(rule => rule.startsWith('*.') ? host.endsWith(rule.substring(1)) : host === rule)
 }
@@ -70,14 +43,25 @@ export class ProviderRegistry {
     this.root = root
     this.adapters = new Map(); this.status = []; this.controllers = new Map(); this.fetchers = new Map()
     this.definitions = new Map()
+    this.contextOverrides = options.contextOverrides
     const pending = []
     for (const plugin of options.builtins || builtins) {
       const task = this.register(plugin.manifest, plugin.createProvider, true)
       if (task?.then) pending.push(task)
     }
     const directory = options.directory ?? process.env.HONGGUO_PROVIDERS_DIR
-    this.loaded = !directory && !pending.length
-    this.ready = Promise.all(pending).then(() => this.loadDirectory(directory)).catch(() => {
+    const library = options.directory === undefined && existsSync(join(libraryDirectory(root), 'index.sqlite'))
+    this.loaded = !library && !directory && !pending.length
+    this.ready = Promise.all(pending).then(async () => {
+      if (library) {
+        try {
+          for (const item of installedProviders(root)) await this.loadPackage(join(libraryDirectory(root), item.active), item)
+        } catch {
+          this.status.push({ id: 'provider-library', name: '已安装 Provider', available: false, code: 'DIRECTORY_UNAVAILABLE' })
+        }
+      }
+      await this.loadDirectory(directory)
+    }).catch(() => {
       this.status.push({ id: 'local-providers', name: '本地 Provider', available: false, code: 'DIRECTORY_UNAVAILABLE' })
     }).finally(() => { this.loaded = true })
   }
@@ -85,19 +69,21 @@ export class ProviderRegistry {
     const controller = new AbortController()
     this.controllers.set(manifest.id, controller)
     const network = manifest.network || {}
-    return { apiVersion: 1, id: manifest.id, root: this.root,
+    const context = { apiVersion: 1, id: manifest.id, root: this.root,
       dataDir: join(this.root, 'device', 'providers', manifest.id), signal: controller.signal,
       fetchMedia: mediaFetcher({ allows: allows(network.media), signal: controller.signal }),
       mediaFetcher: headers => mediaFetcher({ allows: allows(network.media), headers, signal: controller.signal }),
       fetch: async (url, options = {}) => {
+        const budget = Math.min(options.budget || 2 * 1024 * 1024, 2 * 1024 * 1024)
         const { response } = await boundedResponse(url, { ...options,
           signal: AbortSignal.any([controller.signal, ...(options.signal ? [options.signal] : [])]),
-          allows: allows(network.api), budget: Math.min(options.budget || 2 * 1024 * 1024, 2 * 1024 * 1024),
+          allows: allows(network.api), budget,
           timeout: Math.min(options.timeout || 10000, 30000) })
-        return new Response(response.body ? await responseBytes(response.body, 2 * 1024 * 1024) : null,
+        return new Response(response.body ? await responseBytes(response.body, budget) : null,
           { status: response.status, headers: response.headers })
       },
     }
+    return Object.assign(context, this.contextOverrides?.(context))
   }
   accept(manifest, adapter, builtin, context) {
     if (this.adapters.has(manifest.id) || !adapter || adapter.id !== manifest.id || methods.some(method => typeof adapter[method] !== 'function')) throw Error('CONTRACT')
@@ -107,7 +93,8 @@ export class ProviderRegistry {
     Object.assign(this.definitions.get(manifest.id).status, { available: true, code: undefined })
   }
   register(manifest, factory, builtin = false) {
-    validate(manifest)
+    validateManifest(manifest, { builtin })
+    if (!builtin && isBuiltinProviderId(manifest.id)) throw providerError('PROVIDER_ID')
     if (this.definitions.has(manifest.id)) throw Error('DUPLICATE')
     const status = { id: manifest.id, name: manifest.name, version: manifest.version, builtin,
       ...(manifest.queryHint ? { queryHint: manifest.queryHint } : {}),
@@ -116,7 +103,7 @@ export class ProviderRegistry {
       ...(manifest.authentication ? { authentication: manifest.authentication } : {}),
       ...(manifest.contentTypes ? { contentTypes: structuredClone(manifest.contentTypes) } : {}),
       nsfw: manifest.nsfw ?? false,
-      enabled: manifest.enabled !== false, available: false, code: 'DISABLED' }
+      enabled: manifest.enabled !== false, available: false, code: 'DISABLED', health: {} }
     const definition = { manifest, factory, builtin, status }
     this.definitions.set(manifest.id, definition); this.status.push(status)
     if (status.enabled) return this.start(definition)
@@ -148,32 +135,56 @@ export class ProviderRegistry {
         this.status.push({ id: 'local-providers', name: '本地 Provider', available: false, code: 'LOAD_TIMEOUT' }); break
       }
       if (!entry.isDirectory() || entry.isSymbolicLink()) continue
-      let manifest
-      try {
-        const dir = join(root, entry.name), path = join(dir, 'provider.json')
-        const stat = await lstat(path)
-        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 16384) throw Error('MANIFEST')
-        manifest = validate(JSON.parse(await readFile(path, 'utf8')))
-        if (this.definitions.has(manifest.id)) throw Error('DUPLICATE')
-        if (typeof manifest.entry !== 'string' || isAbsolute(manifest.entry) || !manifest.entry.endsWith('.mjs')) throw Error('ENTRY')
-        const requested = resolve(dir, manifest.entry)
-        if (!requested.startsWith(dir + sep)) throw Error('ENTRY')
-        const fileStat = await lstat(requested)
-        if (!fileStat.isFile() || fileStat.isSymbolicLink()) throw Error('ENTRY')
-        const file = await realpath(requested)
-        if (!file.startsWith(dir + sep)) throw Error('ENTRY')
-        await this.register(manifest, async context => {
-          const module = await bounded(import(pathToFileURL(file).href))
-          if (typeof module.createProvider !== 'function') throw Error('CONTRACT')
-          return module.createProvider(context)
-        })
-      } catch {
-        if (manifest && !this.adapters.has(manifest.id)) { this.controllers.get(manifest.id)?.abort(); this.controllers.delete(manifest.id) }
-        this.status.push({ id: manifest?.id || 'invalid-provider', name: manifest?.name || '本地 Provider', available: false, code: 'LOAD_FAILED' })
-      }
+      await this.loadPackage(join(root, entry.name))
     }
   }
-  list() { return this.status.map(row => ({ ...row })) }
+  async loadPackage(directory, installed) {
+    let manifest
+    try {
+      const plugin = await readPackage(directory)
+      manifest = plugin.manifest
+      if (installed && (manifest.id !== installed.id || manifest.version !== installed.version)) throw Error('LIBRARY')
+      await this.register(manifest, plugin.factory)
+      if (installed) this.definitions.get(manifest.id).revision = installed.active
+    } catch {
+      const id = installed?.id || manifest?.id || 'invalid-provider'
+      // A host upgrade can reserve an older local package's ID. Keep the
+      // built-in as the single source; the library CLI can diagnose and remove the copy.
+      if (this.isBuiltin(id)) return
+      this.status.push({ id, name: manifest?.name || '本地 Provider',
+        available: false, code: 'LOAD_FAILED' })
+    }
+  }
+  list() { return structuredClone(this.status) }
+  isBuiltin(id) { return this.definitions.get(id)?.builtin === true }
+  capability(id, key) { return this.definitions.get(id)?.manifest[key] ?? this.get(id)[key] }
+  recordHealth(id, stage, status, code) {
+    const health = this.definitions.get(id).status.health
+    health[stage] = { status, checkedAt: new Date().toISOString(), ...(errorCodes.includes(code) ? { code } : {}) }
+  }
+  revision(id) {
+    const def = this.definitions.get(id)
+    return def?.builtin ? '' : def?.revision || def?.manifest.version || ''
+  }
+  async invoke(id, method, args = [], options = {}) {
+    const definition = this.definitions.get(id), adapter = this.get(id)
+    const stage = { listSeries: options.query ? 'search' : 'catalog', getSeries: 'detail', listEpisodes: 'episodes',
+      getCover: 'cover', resolvePlayback: 'resolve' }[method]
+    const lifetime = this.controllers.get(id).signal
+    const signal = options.signal ? AbortSignal.any([options.signal, lifetime]) : lifetime
+    try {
+      const value = await sourceCall(async requestSignal => {
+        const result = await adapter[method](...args, { ...options, signal: requestSignal })
+        return definition.builtin ? result : validateResult(method, result)
+      }, signal)
+      this.recordHealth(id, stage, 'passed')
+      return value
+    } catch (error) {
+      const code = errorCodes.includes(error.code) ? error.code : 'NETWORK'
+      this.recordHealth(id, stage, 'failed', code)
+      throw error
+    }
+  }
   contentContext(source, preferences = {}, overrides = {}, resolveCategory = true) {
     const types = this.definitions.get(source)?.manifest.contentTypes
     if (!types) {
@@ -202,10 +213,10 @@ export class ProviderRegistry {
   requiresConfirmation(id) { return this.definitions.get(id)?.status.nsfw === true }
   defaultSource(id) { return this.requiresConfirmation(id) ? 'hongguo' : this.fallback(id) }
   forId(id, kind) { const ref = parseId(id, kind); return { adapter: this.get(ref.source), ...ref } }
-  async resolvePlayback(id) {
+  async resolvePlayback(id, options) {
     await this.ready
     const { adapter, id: raw } = this.forId(id, 'episode')
-    const descriptor = await sourceCall(() => adapter.resolvePlayback(raw))
+    const descriptor = await this.invoke(adapter.id, 'resolvePlayback', [raw], options)
     return { ...descriptor, fetchMedia: descriptor.fetchMedia || this.fetchers.get(adapter.id) }
   }
   async dispose() {

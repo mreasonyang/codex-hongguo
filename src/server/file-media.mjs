@@ -19,7 +19,7 @@ export class FileMedia extends DashMedia {
     return super.prepare(id, resolve, revision, retry, preload)
   }
   async build(e, resolve) {
-    const descriptor = await resolve(); this.valid(e)
+    const descriptor = await resolve(e.abort.signal); this.valid(e)
     const files = descriptor.candidates?.filter(c => c.kind === 'file' && !/bytevc2/i.test(c.codec || ''))
     if (!files?.length) throw invalid()
     e.fetch = descriptor.fetchMedia; e.phase = 'index'; e.format = 'hls'

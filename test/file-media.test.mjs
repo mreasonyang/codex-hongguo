@@ -67,6 +67,19 @@ async function collect(media, ready, asset) {
   } while (offset < size)
   return Buffer.concat(parts)
 }
+test('closing a ranged file stream cancels pending source resolution', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'hongguo-file-cancel-'))
+  defer(t, () => rm(root, { recursive: true, force: true }))
+  const media = new FileMedia(root)
+  let resolving
+  media.prepare('episode', signal => {
+    resolving = signal
+    return new Promise((_, reject) => signal.addEventListener('abort', () => reject(Error('cancelled')), { once: true }))
+  }, () => '', false, false)
+  assert.ok(resolving instanceof AbortSignal)
+  await media.close()
+  assert.ok(resolving.aborted)
+})
 test('encrypted MP4 starts, resumes and seeks using only requested windows, with decodable audio/video', async t => {
   const f = await fixture(t), ready = await f.ready()
   assert.equal(ready.format, 'hls')
