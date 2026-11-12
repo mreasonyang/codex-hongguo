@@ -125,7 +125,8 @@ test('the real Windows/Linux component reuses a legacy cache and receipt without
   assert.equal(artifact.cacheKey, upstream.archiveSha256.slice(0, 16))
   const source = await ensureFfmpeg()
   const directory = await realpath(await mkdtemp(join(tmpdir(), 'hongguo-real-legacy-cache-')))
-  t.after(() => rm(directory, { recursive: true, force: true }))
+  // Windows can briefly retain the executable after its native version probe.
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }))
   const options = { env: { HONGGUO_RUNTIME_DIR: directory } }
   const oldPath = ffmpegPath({ ...options, artifacts: { [key]: upstream } })
   assert.equal(ffmpegPath(options), oldPath)

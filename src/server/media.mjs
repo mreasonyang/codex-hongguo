@@ -9,6 +9,7 @@ import { PlayerError } from './errors.mjs'
 import { prepareAdaptive } from './adaptive.mjs'
 import { prepareTracks } from './tracks.mjs'
 import { cdn } from './sources/network.mjs'
+import { errorCodes } from '../../provider-kit/sdk/index.mjs'
 import { parseId } from './sources/ids.mjs'
 
 const MB = 1024 * 1024
@@ -47,7 +48,7 @@ export async function runFfmpeg(args, input = null, capture = false, cwd = undef
   })
 }
 
-export async function remux(raw, output, codec, key) {
+export async function remux(raw, output, codec, key, run = runFfmpeg) {
   const file = basename(raw)
   if (!/^[a-zA-Z0-9.-]+$/.test(file) || (key && !/^[0-9a-f]{32}$/i.test(key)))
     throw new PlayerError('分集授权或素材名称无效')
@@ -59,7 +60,7 @@ export async function remux(raw, output, codec, key) {
   const input = key
     ? ['-format_whitelist', 'concat,mov', '-safe', '0', '-f', 'concat', '-i', 'pipe:0']
     : ['-f', 'mov', '-i', raw]
-  await runFfmpeg(
+  await run(
     [
       '-protocol_whitelist',
       'file,pipe',
@@ -83,6 +84,27 @@ export async function remux(raw, output, codec, key) {
   )
 }
 
+export async function prepareCandidate(stream, raw, output, fetchMedia, budget = maxEpisode, run = runFfmpeg,
+  { firstHlsSegment = false } = {}) {
+  const codec = String(stream.codec || 'MP4').replace(/[^\w.-]/g, '').slice(0, 24)
+  if (stream.kind === 'hls' || stream.kind === 'dash') {
+    if (stream.encryption) throw new PlayerError('该分段片源需要单文件播放授权')
+    mkdirSync(raw, { mode: 0o700 })
+    await prepareAdaptive(stream.url, raw, output, { cdn: fetchMedia, run, codec, budget, firstHlsSegment })
+  } else if (stream.kind === 'tracks') {
+    mkdirSync(raw, { mode: 0o700 })
+    await prepareTracks(stream, raw, output, { cdn: fetchMedia, run, budget })
+  } else if (stream.kind === 'file') {
+    const key = stream.encryption?.key
+    if (stream.encryption && (stream.encryption.kind !== 'cenc' || !/^[a-f0-9]{32}$/i.test(key || '')))
+      throw new PlayerError('片源未提供可用的播放授权')
+    const { body, limit } = await fetchMedia(stream.url, budget, 60000)
+    await pipeline(body, limit, createWriteStream(raw, { mode: 0o600, flags: 'wx' }))
+    await remux(raw, output, codec, key, run)
+  } else throw new PlayerError('不支持的媒体类型')
+  return codec
+}
+
 // SQLite coordinates multiple stdio processes sharing the same user cache.
 export class MediaCache {
   constructor(store, resolve, { maxFiles = 40, maxBytes = 1024 * MB, revision = () => '' } = {}) {
@@ -95,9 +117,11 @@ export class MediaCache {
     mkdirSync(this.dir, { recursive: true, mode: 0o700 })
     this.db.exec(`CREATE TABLE IF NOT EXISTS media (
       id TEXT PRIMARY KEY, status TEXT, owner TEXT, expires INTEGER, accessed INTEGER, size INTEGER DEFAULT 0,
-      codec TEXT DEFAULT '', reason TEXT DEFAULT '', hold_until INTEGER DEFAULT 0, revision TEXT DEFAULT '')`)
+      codec TEXT DEFAULT '', reason TEXT DEFAULT '', error_code TEXT, hold_until INTEGER DEFAULT 0, revision TEXT DEFAULT '')`)
     this.transaction(() => {
-      if (!this.db.prepare('PRAGMA table_info(media)').all().some(column => column.name === 'revision'))
+      const columns = this.db.prepare('PRAGMA table_info(media)').all().map(column => column.name)
+      if (!columns.includes('error_code')) this.db.exec('ALTER TABLE media ADD COLUMN error_code TEXT')
+      if (!columns.includes('revision'))
         this.db.exec("ALTER TABLE media ADD COLUMN revision TEXT DEFAULT ''")
     })
     for (const file of readdirSync(this.dir)) {
@@ -141,7 +165,7 @@ export class MediaCache {
         return { status: 'ready', codec: row.codec }
       }
       if (current && row.status === 'error' && !retry && row.expires > now)
-        return { status: 'error', reason: row.reason }
+        return { status: 'error', reason: row.reason, ...(row.error_code ? { code: row.error_code } : {}) }
       if (current && row.status === 'working' && row.expires > now) return { status: 'preparing' }
       if (
         this.db.prepare("SELECT count(*) AS n FROM media WHERE status='working' AND expires>?").get(now).n >=
@@ -170,23 +194,8 @@ export class MediaCache {
         const fetchMedia = descriptor.fetchMedia || cdn
         lastError = new PlayerError('该集暂未提供可播放的片源')
         for (const stream of descriptor.candidates || []) {
-          codec = String(stream.codec || 'MP4').replace(/[^\w.-]/g, '').slice(0, 24)
           try {
-            if (stream.kind === 'hls' || stream.kind === 'dash') {
-              if (stream.encryption) throw new PlayerError('该分段片源需要单文件播放授权')
-              mkdirSync(raw, { mode: 0o700 })
-              await prepareAdaptive(stream.url, raw, output, { cdn: fetchMedia, run: runFfmpeg, codec, budget: maxEpisode })
-            } else if (stream.kind === 'tracks') {
-              mkdirSync(raw, { mode: 0o700 })
-              await prepareTracks(stream, raw, output, { cdn: fetchMedia, run: runFfmpeg, budget: maxEpisode })
-            } else if (stream.kind === 'file') {
-              const key = stream.encryption?.key
-              if (stream.encryption && (stream.encryption.kind !== 'cenc' || !/^[a-f0-9]{32}$/i.test(key || '')))
-                throw new PlayerError('片源未提供可用的播放授权')
-              const { body, limit } = await fetchMedia(stream.url, maxEpisode, 60000)
-              await pipeline(body, limit, createWriteStream(raw, { mode: 0o600, flags: 'wx' }))
-              await remux(raw, output, codec, key)
-            } else throw new PlayerError('不支持的媒体类型')
+            codec = await prepareCandidate(stream, raw, output, fetchMedia)
             lastError = null
             break
           } catch (error) { lastError = error; rmSync(output, { force: true }) }
@@ -227,8 +236,8 @@ export class MediaCache {
       })
     } catch (e) {
       this.db
-        .prepare("UPDATE media SET status='error',reason=?,expires=? WHERE id=? AND owner=?")
-        .run(e instanceof PlayerError ? e.message : '媒体准备失败，请重试', Date.now() + 30000, id, owner)
+        .prepare("UPDATE media SET status='error',reason=?,error_code=?,expires=? WHERE id=? AND owner=?")
+        .run(e instanceof PlayerError ? e.message : '媒体准备失败，请重试', errorCodes.includes(e?.code) ? e.code : null, Date.now() + 30000, id, owner)
     } finally {
       rmSync(raw, { recursive: true, force: true })
       rmSync(output, { force: true })

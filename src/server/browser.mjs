@@ -82,6 +82,15 @@ export class BrowserServer {
     this.tickets.set(ticket, { scope, expires: Date.now() + 60000 })
     return { url: this.origin + '/pair#' + ticket, expiresIn: 60 }
   }
+  sessionPage(scope, res) {
+    const id = randomBytes(12).toString('hex'),
+      key = secret(),
+      page = '/p/' + id + '/'
+    this.sessions.set(id, { ...scope, key, grants: new Set(), streams: new Map(), playing: undefined,
+      allowed: new Set(scope.allowed), expires: Date.now() + 12 * 3600000 })
+    res.setHeader('Set-Cookie', 'hg=' + key + '; Path=' + page + '; HttpOnly; SameSite=Strict')
+    return page
+  }
   async request(req, res) {
     res.setHeader('Cache-Control', 'no-store')
     res.setHeader('Referrer-Policy', 'no-referrer')
@@ -110,12 +119,7 @@ export class BrowserServer {
         item = this.tickets.get(input?.ticket)
       if (!item || item.expires < Date.now()) throw new PlayerError('分屏链接无效', 403)
       this.tickets.delete(input.ticket)
-      const id = randomBytes(12).toString('hex'),
-        key = secret(),
-        page = '/p/' + id + '/'
-      this.sessions.set(id, { ...item.scope, key, grants: new Set(), streams: new Map(), playing: undefined,
-        allowed: new Set(item.scope.allowed), expires: Date.now() + 12 * 3600000 })
-      res.setHeader('Set-Cookie', 'hg=' + key + '; Path=' + page + '; HttpOnly; SameSite=Strict')
+      const page = this.sessionPage(item.scope, res)
       return json({ page })
     }
     const match = /^\/p\/([a-f0-9]{24})\/(.*)$/.exec(path)
@@ -140,8 +144,13 @@ export class BrowserServer {
         source: session.source,
       })
     }
-    if (route.startsWith('api/') && req.method === 'POST')
-      return json(await this.service.call(session, route.slice(4), await body(req), true))
+    if (route.startsWith('api/') && req.method === 'POST') {
+      const request = new AbortController()
+      const closed = () => request.abort()
+      res.once('close', closed)
+      try { return json(await this.service.call(session, route.slice(4), await body(req), true, request.signal)) }
+      finally { res.off('close', closed) }
+    }
     if (route.startsWith('media/') && ['GET', 'HEAD'].includes(req.method)) {
       const id = route.slice(6)
       await this.service.syncProviders(session)

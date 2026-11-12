@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { PlayerError } from '../errors.mjs'
+import { errorCodes } from '../../../provider-kit/sdk/index.mjs'
 
 // All locators, authorization material and request contexts stay inside the Host.
 // Public models contain qualified IDs; adapters operate on provider-local IDs.
@@ -9,27 +10,33 @@ export function sourceError(error) {
     ANONYMOUS_LIMITED: '上游暂时限制匿名播放', RATE_LIMITED: '请求过于频繁',
     AUTHENTICATION_REQUIRED: '片源需要登录', UNAUTHORIZED: '片源需要登录',
     CONTENT_UNAVAILABLE: '片源暂不可用', NOT_FOUND: '剧目已下架或不存在',
-    NO_VIDEO: '该集暂未提供可播放的片源', ABORTED: '请求已取消',
+    NO_VIDEO: '该集暂未提供可播放的片源', UNSUPPORTED_CODEC: '该集暂未提供兼容编码', CONTRACT: '片源返回的数据格式无效', OFFLINE: '离线检查需要测试数据',
+    BUDGET: '超过诊断预算', TIMEOUT: '片源请求超时', ABORTED: '请求已取消',
+    HOST_NOT_ALLOWED: '片源配置未允许此域名', MEDIA_EXPIRED: '媒体地址已失效',
+    MEDIA_FETCH: '无法获取媒体', MEDIA_FORMAT: '媒体格式不受支持', DECODE_FAILED: '媒体解码失败',
+    LOAD_FAILED: '片源加载失败', MANIFEST: '片源清单无效', RUNTIME_UNAVAILABLE: '播放组件未就绪',
   }
-  const result = new PlayerError((labels[error?.code] || '片源暂时不可达') + '，请稍后重试', 503)
-  result.code = error?.status === 429 ? 'RATE_LIMITED' : (Object.hasOwn(labels, error?.code) ? error.code : 'NETWORK')
-  if (result.code === 'RATE_LIMITED') result.message = '请求过于频繁，请稍后重试'
+  const code = error?.status === 429 ? 'RATE_LIMITED' : (errorCodes.includes(error?.code) ? error.code : 'NETWORK')
+  const result = new PlayerError((labels[code] || '片源暂时不可达') + '，请稍后重试', 503)
+  result.code = code
   return result
 }
 export async function sourceCall(fn, signal) {
-  if (signal?.aborted) throw new PlayerError('请求已取消', 499)
-  let timer, abort
+  const controller = new AbortController()
+  const request = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
+  const failure = () => Object.assign(new PlayerError(signal?.aborted ? '请求已取消' : '片源请求超时，请重试', signal?.aborted ? 499 : 503),
+    { code: signal?.aborted ? 'ABORTED' : 'TIMEOUT' })
+  if (request.aborted) throw failure()
+  let rejectRequest
+  const stop = new Promise((_, reject) => { rejectRequest = () => reject(failure()) })
+  request.addEventListener('abort', rejectRequest, { once: true })
+  const timer = setTimeout(() => controller.abort(), 30000)
   try {
-    const stop = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new PlayerError('片源请求超时，请重试', 503)), 30000)
-      abort = () => reject(new PlayerError('请求已取消', 499))
-      signal?.addEventListener('abort', abort, { once: true })
-    })
-    const result = await Promise.race([fn(), stop])
-    if (signal?.aborted) throw new PlayerError('请求已取消', 499)
+    const result = await Promise.race([fn(request), stop])
+    if (request.aborted) throw failure()
     return result
-  } catch (error) { throw sourceError(error) }
-  finally { clearTimeout(timer); if (abort) signal?.removeEventListener('abort', abort) }
+  } catch (error) { throw request.aborted ? failure() : sourceError(error) }
+  finally { clearTimeout(timer); request.removeEventListener('abort', rejectRequest) }
 }
 const binding = value => createHash('sha256').update(String(value)).digest('hex').slice(0, 24)
 export function encodeCursor(source, operation, scope, state) {
@@ -44,6 +51,7 @@ export function decodeCursor(cursor, source, operation, scope) {
   // Already-open pre-adapter Hongguo panels may finish their original native cursor.
   if (!cursor.startsWith('v1.') && source === 'hongguo') return cursor
   try {
+    if (!cursor.startsWith('v1.')) throw Error()
     const value = JSON.parse(Buffer.from(cursor.substring(3), 'base64url').toString('utf8'))
     if (value.source !== source || value.operation !== operation || value.scope !== binding(scope)) throw Error()
     return value.state

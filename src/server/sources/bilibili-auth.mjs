@@ -96,7 +96,7 @@ export class BilibiliAuth {
     let state
     try { state = this.profile(await this.request('fetchLoginStatus', {}, undefined, { cookie: current.cookie })) }
     catch (error) {
-      if (error.code !== 'LOGIN_REQUIRED') throw error
+      if (error.code !== 'AUTHENTICATION_REQUIRED') throw error
       state = { status: 'expired' }
     }
     if (this.credentials.read().revision !== current.revision) return this.status()

@@ -36,7 +36,7 @@ type Progress = {
   durationMs: number
 }
 type Prepared =
-  | { status: 'preparing' | 'error'; reason?: string; phase?: string }
+  | { status: 'preparing' | 'error'; reason?: string; phase?: string; code?: string }
   | ({ status: 'ready'; codec?: string; durationMs?: number; format?: 'dash' | 'hls' } & ({ stream: string; manifest: string } | { src: string }))
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 const video = document.querySelector('video')!,
@@ -47,10 +47,11 @@ const play = el<HTMLButtonElement>('play'),
 const text = (id: string, s: string) => {
   el(id).textContent = id === 'title' ? s : tr(s)
 }
-const notice = (s: string) => {
+const notice = (s: string, code?: string) => {
   text('notice', s)
   el('accountNeeded').hidden = !providers.find(provider => provider.id === activeSource)?.authentication ||
-    !/B 站需要登录后观看|B 站仅提供试看/.test(s)
+    !(code === 'AUTHENTICATION_REQUIRED' || code === 'UNAUTHORIZED' ||
+      (!code && /B 站需要登录后观看|B 站仅提供试看/.test(s)))
 }
 const explain = (e: unknown) => (e instanceof Error ? e.message : '操作失败，请重试')
 const clock = (s: number) => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0')
@@ -75,7 +76,8 @@ let activeSource: SourceId = 'hongguo', sourceGeneration = 0, switchingSource = 
 let sourceUpdate = Promise.resolve()
 const sourceOf = (id: string): SourceId => id.startsWith('p.') ? id.split('.')[1] : 'hongguo'
 type ContentType = { id: string; name: string; queryHint?: string; emptyMessage?: string; categories?: { id: string; name: string }[] }
-type Provider = { id: string; name: string; contentTypes?: ContentType[]; available: boolean; nsfw: boolean; code?: string; queryHint?: string; queryMode?: 'search' | 'link'; emptyMessage?: string; authentication?: 'qrcode' }
+type Observation = { status: 'passed' | 'failed'; code?: string; checkedAt: string }
+type Provider = { id: string; name: string; builtin?: boolean; version?: string; health?: Record<string, Observation>; contentTypes?: ContentType[]; available: boolean; nsfw: boolean; code?: string; queryHint?: string; queryMode?: 'search' | 'link'; emptyMessage?: string; authentication?: 'qrcode' }
 let providers: Provider[] = [{ id: 'hongguo', name: '红果', available: true, nsfw: false }]
 let sourceChoice = 0
 const sourceConfirmation = createSourceConfirmation({ translate: tr })
@@ -93,6 +95,22 @@ async function refreshProviders() {
   const ticket = ++providerRefresh, generation = preferencesGeneration
   const items = (await call<{ items: Provider[] }>('get_providers')).items
   if (ticket !== providerRefresh || generation !== preferencesGeneration) return
+  const local = items.filter(provider => provider.builtin === false || (!provider.available && !provider.builtin))
+  el('providerHealth').hidden = !local.length
+  el('providerHealthRows').replaceChildren(...local.map(provider => {
+    const row = document.createElement('p'), title = document.createElement('strong')
+    title.textContent = [provider.name, provider.version, provider.available ? tr('已加载') : provider.code].filter(Boolean).join(' · ')
+    row.append(title)
+    if (provider.available) {
+      for (const [key, label] of [['catalog', '片库'], ['search', '搜索'], ['episodes', '分集'], ['resolve', '播放解析'], ['prepare', '播放准备']]) {
+        const observation = provider.health?.[key], line = document.createElement('span')
+        line.textContent = [tr(label), observation ? observation.code || tr(observation.status === 'passed' ? '通过' : '失败') : tr('未验证'),
+          observation && new Date(observation.checkedAt).toLocaleString()].filter(Boolean).join(' · ')
+        row.append(line)
+      }
+    }
+    return row
+  }))
   providers = items.filter(provider => provider.available)
   closeSourceMenu()
   syncSourceButton()
@@ -129,7 +147,7 @@ function syncSourceButton() {
   const query = el<HTMLInputElement>('query'), hint = activeContentType()?.queryHint || providers.find(provider => provider.id === activeSource)?.queryHint || '搜索剧名'
   query.placeholder = tr(hint); query.setAttribute('aria-label', tr(hint))
   const submit = el<HTMLFormElement>('search').querySelector('button')
-  if (submit) submit.textContent = tr(providers.find(provider => provider.id === activeSource)?.queryMode === 'link' ? '添加番剧' : '搜索')
+  if (submit) submit.textContent = tr(providers.find(provider => provider.id === activeSource)?.queryMode === 'link' ? '添加链接' : '搜索')
   const label = tr('切换视频源')
   const canSwitch = providers.some(provider => provider.id !== activeSource)
   control.setAttribute('aria-label', canSwitch ? label : tr(name))
@@ -170,7 +188,7 @@ function syncContentControls() {
     b.setAttribute('aria-pressed', String(category.id === choice.category)); b.disabled = switchingSource
     return b
   }))
-  text('homeTitle', activeSource === 'hongguo' ? '选剧' : choice.contentType === 'video' ? '发现视频' : '发现番剧')
+  text('homeTitle', choice.contentType === 'bangumi' ? '发现番剧' : choice.contentType === 'video' ? '发现视频' : '选剧')
 }
 async function changeContent(contentType: string, category = '') {
   if (switchingSource || (contentChoice().contentType === contentType && contentChoice().category === category)) return
@@ -1077,7 +1095,7 @@ async function start(recommendationTurn?: string, automatic = false) {
         result = await call<Prepared>('prepare_playback', { episodeId: ep.id })
       }
       if (n !== action) return
-      if (result.status !== 'ready') throw Error(result.reason || '准备超时，请重试')
+      if (result.status !== 'ready') throw Object.assign(Error(result.reason || '准备超时，请重试'), { code: result.code })
       const r = await recent
       if (n !== action) return
       const progress = r.items[0]
@@ -1172,6 +1190,7 @@ async function start(recommendationTurn?: string, automatic = false) {
     if (n === action) {
       if (!loaded) release()
       void pause(explain(e))
+      if (e instanceof Error && 'code' in e && typeof e.code === 'string') notice(e.message, e.code)
     }
   }
 }

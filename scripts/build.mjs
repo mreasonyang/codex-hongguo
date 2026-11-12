@@ -1,5 +1,5 @@
 import { build } from 'esbuild'
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, cp } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 await import('./build-launcher.mjs')
 await import('./prepare-amagi-source.mjs')
@@ -7,7 +7,7 @@ await import('./build-openhongguo.mjs')
 execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit'], { stdio: 'inherit' })
 await Promise.all([
   build({
-    entryPoints: ['src/server/index.mjs', 'src/hooks/write.mjs', 'src/setup/check.mjs', 'src/cli/main.mjs'],
+    entryPoints: ['src/server/index.mjs', 'src/hooks/write.mjs', 'src/setup/check.mjs', 'src/cli/main.mjs', 'src/cli/provider-worker.mjs'],
     bundle: true,
     platform: 'node',
     format: 'esm',
@@ -24,6 +24,7 @@ await Promise.all([
     banner: { js: "import {createRequire as __cr} from 'node:module';const require=__cr(import.meta.url);" } }),
   mkdir('dist/ui', { recursive: true }),
 ])
+await cp('test/fixtures/avc-aac.mp4', 'dist/provider-sample.mp4')
 const ui = await build({
   entryPoints: ['src/ui/player.ts'],
   bundle: true,

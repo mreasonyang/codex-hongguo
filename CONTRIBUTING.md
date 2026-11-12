@@ -95,7 +95,7 @@ npm run version:patch
 | `HONGGUO_RUNTIME_DIR` | 指定播放组件缓存根目录，插件使用其下的 `codex-hongguo/` 专属命名空间。 |
 | `HONGGUO_CODEX` | 安装、更新和卸载：指定 Codex CLI。 |
 | `HONGGUO_PROFILE_PATH` | Catalog：指定匿名 SDK 设备档案位置。 |
-| `HONGGUO_PROVIDERS_DIR` | 可选：显式指定本地 Provider 插件父目录，启动时发现；不设置时只加载内置红果。 |
+| `HONGGUO_PROVIDERS_DIR` | 可选：显式指定本地 Provider 插件父目录，启动时发现；省略时仍会发现通过 provider install 安装的来源。 |
 
 覆盖项必须在实际启动服务、Hook 或 Setup 的进程环境中可见。只在运行 npx 的终端里设置，不代表桌面宿主或其子进程继承了这些值；安装器不会把它们写进发布包。
 

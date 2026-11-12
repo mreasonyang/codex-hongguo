@@ -22,13 +22,26 @@ const failed = code => Object.assign(new Error('Verification failed'), { verific
 try {
   client = new Client({ name: 'huangguo-verifier', version: '1.0.0' })
   await client.connect(new StdioClientTransport({ command: process.execPath,
-    args: ['--no-warnings', server], env: { PATH: process.env.PATH, HONGGUO_DATA_DIR: join(scratch, 'data') }, stderr: 'ignore' }))
+    args: ['--no-warnings', server], env: { PATH: process.env.PATH, HONGGUO_DATA_DIR: join(scratch, 'data'),
+      HONGGUO_PROVIDERS_DIR: '', ...(process.env.HONGGUO_RUNTIME_DIR ? { HONGGUO_RUNTIME_DIR: process.env.HONGGUO_RUNTIME_DIR } : {}) }, stderr: 'ignore' }))
   const opened = await client.callTool({ name: 'open_drama_panel', arguments: {} })
   const panel = opened._meta?.panel
   if (!panel) throw failed('PANEL_UNAVAILABLE')
   async function rpc(name, args = {}) {
     const reply = await client.callTool({ name, arguments: { panel, ...args } }, undefined, { timeout: 45000 })
-    if (reply.isError || !reply._meta?.data) throw failed('RPC_FAILED')
+    if (reply.isError || !reply._meta?.data) {
+      // Keep only the host's fixed health fields, never raw error text or RPC data.
+      try {
+        const state = await client.callTool({ name: 'get_providers', arguments: { panel } })
+        const health = state._meta?.data?.items?.find(item => item.id === 'huangguo')?.health
+        const codes = ['NETWORK', 'TIMEOUT', 'CONTENT_UNAVAILABLE', 'CONTRACT', 'NOT_FOUND', 'NO_VIDEO', 'RATE_LIMITED', 'AUTHENTICATION_REQUIRED', 'ABORTED', 'HOST_NOT_ALLOWED']
+        report.providerHealth = Object.fromEntries(Object.entries(health || {}).map(([key, value]) => [
+          ['catalog', 'search', 'detail', 'cover', 'episodes', 'resolve'].includes(key) ? key : 'other',
+          { status: ['passed', 'failed'].includes(value.status) ? value.status : 'other', ...(codes.includes(value.code) ? { code: value.code } : {}) },
+        ]))
+      } catch {}
+      throw failed('RPC_FAILED')
+    }
     return reply._meta.data
   }
   const providers = (await rpc('get_providers')).items
@@ -44,7 +57,9 @@ try {
   report.catalogItems = list.items.length
   const show = list.items[0]
   stage = 'search'
-  report.searchItems = (await rpc('list_series', { query: show.title })).items.length
+  report.searchQuery = 'AI'
+  report.searchItems = (await rpc('list_series', { query: report.searchQuery })).items.length
+  if (!report.searchItems) throw failed('EMPTY_SEARCH')
   stage = 'cover'
   report.coverDecoded = !!(await rpc('get_cover', { seriesId: show.id })).cover
   if (!report.coverDecoded) throw failed('COVER_UNAVAILABLE')
@@ -107,7 +122,7 @@ try {
   report.status = 'pass'
 } catch (error) {
   report.failedStage = stage
-  report.failureCode = ['PANEL_UNAVAILABLE', 'RPC_FAILED', 'EMPTY_CATALOG', 'COVER_UNAVAILABLE', 'NO_PLAYABLE_EPISODE',
+  report.failureCode = ['PANEL_UNAVAILABLE', 'RPC_FAILED', 'EMPTY_CATALOG', 'EMPTY_SEARCH', 'COVER_UNAVAILABLE', 'NO_PLAYABLE_EPISODE',
     'MEDIA_NOT_READY', 'MANIFEST_INVALID', 'ASSET_INVALID', 'CHUNK_INVALID', 'MEDIA_BUDGET', 'ASSET_INCOMPLETE'].includes(error?.verificationCode)
     ? error.verificationCode : 'CHECK_FAILED'
   process.exitCode = 1

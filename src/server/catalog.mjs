@@ -7,7 +7,7 @@ import { SharedCatalogCache } from './catalog-cache.mjs'
 import { PanelMedia } from './panel-media.mjs'
 import { SourceRegistry } from './sources/registry.mjs'
 import { sourceId, qualify, parseId } from './sources/ids.mjs'
-import { decodeCursor, sourceCall } from './sources/contracts.mjs'
+import { decodeCursor, encodeCursor } from './sources/contracts.mjs'
 export class Catalog {
   constructor(store, { sources = new SourceRegistry(store.root) } = {}) {
     this.store = store
@@ -38,31 +38,34 @@ export class Catalog {
     return this.sources.contentContext?.(source, this.store.preferences(), overrides) ?? {}
   }
   feedContext(context) { return !context.contentType || (context.contentType === 'bangumi' && !context.category) ? '' : JSON.stringify(context) }
-  async list({ source = this.defaultSource(), query = '', cursor, preview, contentType, category } = {}) {
+  async page(source, method, args, options) {
+    const external = !this.sources.isBuiltin(source)
+    const operation = method === 'listEpisodes' ? 'episodes' : 'list'
+    const scope = operation === 'episodes' ? args[0] : JSON.stringify([options.query || '', options.contentType || '', options.category || ''])
+    const cursor = external ? decodeCursor(options.cursor, source, operation, scope) : options.cursor
+    const page = await this.sources.invoke(source, method, args, { ...options, cursor })
+    return external ? { ...page, cursor: encodeCursor(source, operation, scope, page.cursor) } : page
+  }
+  async list({ source = this.defaultSource(), query = '', cursor, preview, contentType, category, signal } = {}) {
     if (!this.sources.loaded) await this.sources.ready
     source = sourceId(source)
-    const adapter = this.sources.get(source)
     const context = this.contentContext(source, { contentType, category })
-    if (!query && adapter.discovery === false) {
-      const page = await sourceCall(() => adapter.listSeries({ cursor, pageSize: 16, ...context }))
-      return { items: this.rows(page, true, source), cursor: page.cursor }
-    }
-    if (!query) return { items: this.withLocalSeries(await this.recommendations(preview, source, context), source, context), cursor: null }
-    const page = await sourceCall(() => this.sources.get(source).listSeries({ query, cursor, pageSize: 16, ...context }))
+    if (!query && this.sources.capability(source, 'discovery') !== false && this.sources.isBuiltin(source))
+      return { items: this.withLocalSeries(await this.recommendations(preview, source, context), source, context), cursor: null }
+    const page = await this.page(source, 'listSeries', [], { query, cursor, pageSize: 16, ...context, signal })
     return { items: this.rows(page, true, source), cursor: page.cursor }
   }
   async recommendations(preview = false, source = this.defaultSource(), context = this.contentContext(source)) {
     if (!this.sources.loaded) await this.sources.ready
     source = sourceId(source)
-    const adapter = this.sources.get(source)
-    const feedContext = this.feedContext(context)
-    if (adapter.discovery === false) {
-      const rows = this.rows(await sourceCall(() => adapter.listSeries({ pageSize: 48, ...context })), false, source)
+    const feedContext = this.sources.revision(source) + this.feedContext(context)
+    if (this.sources.capability(source, 'discovery') === false) {
+      const rows = this.rows(await this.page(source, 'listSeries', [], { pageSize: 48, ...context }), false, source)
       this.store.saveWaitingFeed(rows, Date.now(), source, feedContext)
       return rows
     }
-    const terms = adapter.recommendationTerms ?? this.store.preferences().searchTerms
-    const key = 'feed:' + source + ':' + createHash('sha256').update(JSON.stringify(feedContext ? [terms, context] : terms)).digest('hex')
+    const terms = this.sources.capability(source, 'recommendationTerms') ?? (source === 'hongguo' ? this.store.preferences().searchTerms : [])
+    const key = 'feed:' + source + ':' + createHash('sha256').update(JSON.stringify(feedContext ? [terms, feedContext] : terms)).digest('hex')
     const cached = this.store.catalogCache(key)?.value
     const titles = preview && !cached ? this.store.waitingFeed(true, source, feedContext) : []
     const refresh = this.metadata.get(key, async () => {
@@ -70,7 +73,7 @@ export class Catalog {
       this.firstPages.set(key, firstPage.promise)
       try {
         const rows = await this.collectFeed(firstPage.resolve, terms, source, context)
-        if (!rows.length && this.sources.get(source).discovery !== false) throw new PlayerError('片源暂时不可达，请稍后重试', 503)
+        if (!rows.length && this.sources.capability(source, 'discovery') !== false) throw new PlayerError('片源暂时不可达，请稍后重试', 503)
         const covered = rows.filter(row => row.hasCover)
         return { items: (covered.length >= 12 ? covered : rows).slice(0, 48),
           titles: rows.map(({ id, title, contentType, episodes }) => ({ id, title, ...(contentType ? { contentType } : {}), ...(episodes ? { episodes } : {}) })),
@@ -97,7 +100,7 @@ export class Catalog {
   }
   async waitingRecommendations(source = this.defaultSource(), context = this.contentContext(source)) {
     this.sources.get(source)
-    const feedContext = this.feedContext(context)
+    const feedContext = this.sources.revision(source) + this.feedContext(context)
     const cached = this.store.waitingFeed(false, source, feedContext)
     if (cached.length) return this.withLocalSeries(cached, source, context)
     const previous = this.store.waitingFeed(true, source, feedContext)
@@ -109,8 +112,7 @@ export class Catalog {
     await refresh
     return this.withLocalSeries(this.store.waitingFeed(true, source, feedContext), source, context)
   }
-  async collectFeed(onFirstPage, terms = this.store.preferences().searchTerms, source = 'hongguo', context = {}) {
-    const adapter = this.sources.get(source)
+  async collectFeed(onFirstPage, terms, source, context) {
     const rows = new Map(),
       seen = new Set()
     const merge = (page) => {
@@ -122,7 +124,7 @@ export class Catalog {
     let cursor, lastError
     for (let i = 0; i < 6 && rows.size < 48; i++) {
       try {
-        const page = await sourceCall(() => adapter.listSeries({ cursor, pageSize: 16, ...context }))
+        const page = await this.page(source, 'listSeries', [], { cursor, pageSize: 16, ...context })
         merge(page)
         cursor = page.cursor
         if (!cursor || seen.has(cursor)) break
@@ -132,10 +134,10 @@ export class Catalog {
         break
       }
     }
-    for (const term of adapter.discovery === false ? [] : adapter.recommendationTerms ?? terms) {
+    for (const term of terms) {
       if (rows.size >= 24) break
       try {
-        merge(await sourceCall(() => adapter.listSeries({ query: term, pageSize: 16, ...context })))
+        merge(await this.page(source, 'listSeries', [], { query: term, pageSize: 16, ...context }))
       } catch (e) {
         lastError = e
       }
@@ -185,8 +187,8 @@ export class Catalog {
   async loadCover(id) {
     let entry = this.covers.get(id)
     try {
-      const { adapter, id: raw } = this.sources.forId(id)
-      const image = await sourceCall(() => adapter.getCover(raw, { url: entry?.url }))
+      const { source, id: raw } = this.sources.forId(id)
+      const image = await this.sources.invoke(source, 'getCover', [raw], { url: entry?.url })
       if (!image) return { cover: null }
       entry ||= {}
       this.covers.set(id, entry)
@@ -220,15 +222,15 @@ export class Catalog {
     if (!this.sources.loaded) await this.sources.ready
     this.sources.forId(seriesId)
     const ref = parseId(seriesId)
-    const canPlay = this.ffmpeg || this.sources.get(ref.source).progressivePlayback === true
-    const key = 'episodes:v2:' + JSON.stringify([seriesId, decodeCursor(cursor, ref.source, 'episodes', ref.id) ?? null])
+    const canPlay = this.ffmpeg || this.sources.capability(ref.source, 'progressivePlayback') === true
+    const key = 'episodes:v2:' + this.sources.revision(ref.source) + JSON.stringify([seriesId, decodeCursor(cursor, ref.source, 'episodes', ref.id) ?? null])
     const page = await this.metadata.get(key, () => this.loadEpisodes(seriesId, cursor))
     return { ...page, items: page.items.map(ep => ({ ...ep, playable: ep.playable && canPlay })) }
   }
   async loadEpisodes(seriesId, cursor) {
     if (!this.sources.loaded) await this.sources.ready
-    const { adapter, id, source } = this.sources.forId(seriesId)
-    const page = await sourceCall(() => adapter.listEpisodes(id, { cursor, pageSize: 120 }))
+    const { id, source } = this.sources.forId(seriesId)
+    const page = await this.page(source, 'listEpisodes', [id], { cursor, pageSize: 120 })
     return {
       ...(page.series ? { series: this.rows({ items: [page.series] }, true, source)[0] } : {}),
       items: (page.items || [])
@@ -263,12 +265,17 @@ export class Catalog {
     } while (cursor)
     return null
   }
+  mediaRevision(id) {
+    const { source, adapter } = this.sources.forId(id, 'episode')
+    const revision = this.sources.revision(source), auth = adapter.auth?.revision?.() ?? ''
+    return revision ? JSON.stringify([revision, auth]) : auth
+  }
   prepare(id, browser, retry, preload = false) {
-    const { adapter } = this.sources.forId(id, 'episode')
-    if (adapter.progressivePlayback) {
+    const { source, adapter } = this.sources.forId(id, 'episode')
+    if (this.sources.capability(source, 'progressivePlayback')) {
       this.panelMedia ??= new PanelMedia(this.store.root)
-      const result = this.panelMedia.remote.prepare(id, () => this.sources.resolvePlayback(id),
-        () => this.sources.forId(id, 'episode').adapter.auth?.revision?.() ?? '', retry, preload)
+      const result = this.panelMedia.remote.prepare(id, signal => this.sources.resolvePlayback(id, { signal }),
+        () => this.mediaRevision(id), retry, preload)
       if (result.status !== 'fallback') return result
     }
     if (!this.ffmpeg) {
@@ -277,11 +284,11 @@ export class Catalog {
     }
     if (adapter.rangedFilePlayback) {
       this.panelMedia ??= new PanelMedia(this.store.root)
-      return this.panelMedia.file.prepare(id, () => this.sources.resolvePlayback(id),
-        () => this.sources.forId(id, 'episode').adapter.auth?.revision?.() ?? '', retry, preload)
+      return this.panelMedia.file.prepare(id, signal => this.sources.resolvePlayback(id, { signal }),
+        () => this.mediaRevision(id), retry, preload)
     }
     this.cache ??= new MediaCache(this.store, (ep) => this.sources.resolvePlayback(ep), {
-      revision: ep => this.sources.forId(ep, 'episode').adapter.auth?.revision?.() ?? '',
+      revision: ep => this.mediaRevision(ep),
     })
     const result = this.cache.prepare(id, retry)
     if (result.status !== 'ready') return result
