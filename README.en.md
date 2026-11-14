@@ -8,12 +8,12 @@
 
 <p align="center">
   <a href="README.md">中文</a> · English<br>
-  <a href="#installation--setup">Installation &amp; Setup</a> · <a href="#screenshots">Screenshots</a> · <a href="#usage">Usage</a>
+  <a href="#installation--setup">Installation &amp; Setup</a> · <a href="#screenshots">Screenshots</a> · <a href="#usage">Usage</a> · <a href="#add-your-own-source">Add your own source</a>
 </p>
 
 Watch Hongguo short dramas in the right-hand panel of Codex Desktop, with browsing, search, resume and autoplay next. By default, a new task resumes the selected episode; finishing or interrupting the task pauses playback and saves your position. You can turn off either behavior independently in Settings. The plugin supports local-executor Codex Desktop conversations.
 
-Hongguo, Bilibili and Huangguo (NSFW) are built in. To build your own source, use the `hongguo-provider` skill or run `codex-hongguo provider --help` for development, diagnostics, and installation commands. [Provider guide in Chinese](docs/providers.md).
+Hongguo, Bilibili and Huangguo (NSFW) are built in. You can also [add your own source](#add-your-own-source) with the `hongguo-provider` skill.
 
 Installed local sources start automatically. Hover over the play mark at the top left and select a source. Providers declaring `nsfw: true` require confirmation before switching; cancelling preserves the current source. Recommendations, search, history and cache identities remain separate; switching saves your position and stops playback.
 
@@ -100,6 +100,16 @@ Hover mode follows the player panel boundary: moving to the chat, another panel,
 **Source accounts** appears after the general settings as compact list rows (such as **Bilibili**). Clicking the **Bilibili** row opens a dedicated QR sign-in subpage rather than expanding a QR code inline in the settings list. When signed out or after a session expires, the subpage generates a QR code for the app and lets you refresh or retry if sign-in fails or the code expires. Clicking **Back to settings**, **Cancel sign-in**, or pressing Escape on the subpage cancels the current QR scan and returns to the main settings view (whereas pressing Escape on the main settings view saves and closes the entire Settings sheet); clicking outside or closing Settings also cancels any active QR scan. Once sign-in succeeds, it returns to the main settings view automatically and shows your nickname and membership status (**Signed in** or **Premium member**) on the account row. Clicking a signed-in row opens account management to sign out. When playback reports that sign-in is required or only a preview is available, **Sign in to source** next to the notice opens the same sign-in subpage directly.
 
 Settings are independent, saved across restarts, and shared by all chats. Task playback switches and default mute sync to open players. The speaker button changes only the current player, leaving the default unchanged; repeated snapshots preserve that manual choice until the default changes. New players restore the remembered volume. Autoplay requires an open player with an episode selected; it does not choose a show or reopen a closed player. Manual pausing lasts for the current task; the autoplay switch determines whether the next task resumes playback. Updates preserve saved choices.
+
+## Add your own source
+
+The plugin includes the `hongguo-provider` skill; no separate skill installation is needed. Start a new local chat and say:
+
+> Use hongguo-provider to add this website as a source in Hongguo and install it: [URL]
+
+You can also provide API documentation, an existing client library, or an npm package. Codex follows the skill to develop, test and validate the Provider, then installs it locally when validation passes. It asks for any missing information. After installation, start a new chat and select the new source from the player's source menu.
+
+For manual development, CLI commands and validation details, see the [Provider guide in Chinese](docs/providers.md).
 
 ## Troubleshooting
 
