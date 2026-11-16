@@ -1,4 +1,4 @@
-import { call, displayMode, requestPlayerTab } from './api'
+import { call, displayMode, requestPlayerTab, isToolAuthorizationDenied } from './api'
 import { tr } from './locale'
 
 export type WaitingPick = { id: string; title: string; episodeId?: string; kind?: 'resume' | 'next'; contentType?: string; episodes?: number; label?: string }
@@ -56,7 +56,8 @@ export async function showWaitingPicks(
   if (!await whenVisible(titles, signal)) return
   try {
     await call('mark_waiting_picks_shown', scope)
-  } catch {
+  } catch (error) {
+    if (isToolAuthorizationDenied(error)) throw error
     if (await whenVisible(titles, signal)) await call('mark_waiting_picks_shown', scope).catch(() => {})
   }
 }
@@ -72,6 +73,7 @@ export function waitingCard(openPlayer: (selection: WaitingSelection) => void, c
   let showing: AbortController | undefined
   let activation: Promise<WaitingSelection> | undefined
   let timer: ReturnType<typeof setInterval> | undefined
+  let authorizationDenied = false
 
   function hide() {
     ++render
@@ -88,12 +90,16 @@ export function waitingCard(openPlayer: (selection: WaitingSelection) => void, c
   }
 
   function message(error: unknown) {
+    if (isToolAuthorizationDenied(error)) {
+      authorizationDenied = true
+      clearInterval(timer)
+    }
     if (!ready || dismissed || !allowed || expanded) return
     status.textContent = tr(error instanceof Error ? error.message : '当前 Codex 无法在会话中打开播放器')
     card.hidden = false
   }
   async function refresh(force = false) {
-    if (!ready) return
+    if (!ready || authorizationDenied) return
     const mode = displayMode() || 'inline'
     if (!force && mode === lastMode) return
     lastMode = mode
@@ -160,7 +166,7 @@ export function waitingCard(openPlayer: (selection: WaitingSelection) => void, c
     }
   }
   async function check() {
-    if (!ready || expanded || choosing || dismissed || document.hidden || checking) return
+    if (!ready || authorizationDenied || expanded || choosing || dismissed || document.hidden || checking) return
     checking = true
     try {
       const state = await call<WaitingStatus>('get_waiting_status')
@@ -173,7 +179,8 @@ export function waitingCard(openPlayer: (selection: WaitingSelection) => void, c
         if (allowed) await refresh(true)
         else hide()
       }
-    } catch {
+    } catch (error) {
+      if (isToolAuthorizationDenied(error)) { message(error); return }
       if (!expanded && !choosing) { allowed = false; hide() }
     } finally { checking = false }
   }

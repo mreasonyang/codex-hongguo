@@ -5,6 +5,8 @@ const en: Record<string, string> = {
   '请从原面板重新打开此页面。': 'Open this page again from the original panel.',
   '连接失败，请重新连接后重试。': 'Could not connect. Reconnect to try again.',
   '正在重新连接…': 'Reconnecting…',
+  '已取消授权，请重新打开播放器后重试': 'Authorization declined. Reopen the player to try again.',
+  '红果短剧仅在官方 Codex App 中启用': 'Hongguo is only enabled in the official Codex desktop app.',
   番剧: 'Series', 视频: 'Videos', 内容类型: 'Content type', 视频分区: 'Video category',
   热门: 'Popular', 知识: 'Knowledge', 科技: 'Technology', 游戏: 'Gaming', 生活: 'Lifestyle', 美食: 'Food', 音乐: 'Music',
   片库: 'Catalog', 分集: 'Episodes', 失败: 'Failed', 播放准备: 'Playback preparation', 本地片源状态: 'Local source status', 已加载: 'Loaded', 未验证: 'Unchecked', 通过: 'Passed', 播放解析: 'Stream resolution',

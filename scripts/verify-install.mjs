@@ -231,7 +231,7 @@ try {
   const event = (name, turnId) => {
     const launcher = join(installedRoot, 'bin', process.platform === 'win32' ? 'run-node.exe' : 'run-node')
     const result = spawnSync(launcher, ['hook'], {
-      cwd: root, env, encoding: 'utf8', timeout: 2000, stdio: ['pipe', 'pipe', 'ignore'],
+      cwd: root, env: { ...env, CODEX_INTERNAL_ORIGINATOR_OVERRIDE: 'Codex Desktop' }, encoding: 'utf8', timeout: 2000, stdio: ['pipe', 'pipe', 'ignore'],
       input: JSON.stringify({ session_id: thread.thread.id, turn_id: turnId, hook_event_name: name }),
     })
     assert.equal(result.status, 0)

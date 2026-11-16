@@ -34,6 +34,7 @@ test('an existing inline card removes NSFW suggestions when exclusion changes in
   let exclude = false, tick, feedCalls = 0
   const api = {
     displayMode: () => 'inline',
+    isToolAuthorizationDenied: () => false,
     call: async name => {
       if (name === 'get_waiting_status') return { visible: true, excludeNsfwRecommendations: exclude }
       if (name === 'get_waiting_picks') {
@@ -61,6 +62,32 @@ test('an existing inline card removes NSFW suggestions when exclusion changes in
   assert.equal(titles.children[0].textContent, 'Sensitive fixture')
 })
 
+test('declining a waiting-card request stops timer and visibility retries', async t => {
+  const document = new Document(), exports = {}, denied = new Error('已取消授权')
+  let tick, calls = 0, stopped = 0
+  const api = {
+    displayMode: () => 'inline',
+    isToolAuthorizationDenied: error => error === denied,
+    call: async () => { calls++; throw denied },
+  }
+  const context = vm.createContext({
+    require: name => name === './api' ? api : { tr: value => value }, module: { exports }, exports,
+    document, AbortController, IntersectionObserver: Observer,
+    setInterval: callback => { tick = callback; return 1 }, clearInterval() { stopped++ },
+  })
+  vm.runInContext(code, context)
+  const card = context.module.exports.waitingCard(() => {}, () => {})
+  t.after(() => card.dispose())
+  card.connected(); await flush()
+  assert.equal(calls, 1)
+  assert.equal(stopped, 1)
+  tick(); tick()
+  document.dispatchEvent(new Event('visibilitychange'))
+  card.modeChanged()
+  await flush()
+  assert.equal(calls, 1)
+})
+
 test('resume autoplay survives overlapping mode notifications and an iframe replacement until actual playback', async t => {
   const root = mkdtempSync(join(tmpdir(), 'hongguo-card-ui-')), store = new Store(root)
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }) })
@@ -74,6 +101,7 @@ test('resume autoplay survives overlapping mode notifications and an iframe repl
     let mode = initialMode, card, opened, activations = 0
     const api = {
       displayMode: () => mode,
+      isToolAuthorizationDenied: () => false,
       call: async (name, args) => {
         const result = await call(name, args)
         if (name === 'activate_waiting_player') {

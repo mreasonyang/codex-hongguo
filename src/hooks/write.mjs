@@ -3,6 +3,9 @@ import { Store } from '../server/store.mjs'
 process.umask(0o077)
 let store
 let output = {}
+// The official desktop app sets these originators for its two local runtimes.
+// Unknown clients stay silent instead of injecting a widget into another host.
+const officialDesktop = ['Codex Desktop', 'codex_work_desktop'].includes(process.env.CODEX_INTERNAL_ORIGINATOR_OVERRIDE ?? '')
 try {
   let bytes = 0
   const chunks = []
@@ -11,7 +14,7 @@ try {
     if (bytes > 16 * 1024 * 1024) break
     chunks.push(chunk)
   }
-  if (bytes <= 16 * 1024 * 1024) {
+  if (officialDesktop && bytes <= 16 * 1024 * 1024) {
     const { session_id, turn_id, hook_event_name } = JSON.parse(Buffer.concat(chunks).toString('utf8'))
     store = new Store()
     const changed = store.event({ session_id, turn_id, hook_event_name })

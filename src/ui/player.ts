@@ -1566,12 +1566,14 @@ window.addEventListener('pageshow', activatePage)
 let startupSelection: WaitingSelection | undefined, reconnecting = false
 function startupFailed(error: unknown) {
   const message = explain(error)
-  text('startupErrorMessage', /请重新打开短剧面板|会话不匹配/.test(message)
+  const unsupported = message === '红果短剧仅在官方 Codex App 中启用'
+  text('startupErrorMessage', unsupported ? message : /请重新打开短剧面板|会话不匹配/.test(message)
     ? '此页面已失效，请重新连接。'
     : /分屏已失效/.test(message) ? '请从原面板重新打开此页面。' : '连接失败，请重新连接后重试。')
   decoy.setUnavailable(true)
+  if (unsupported) el<HTMLButtonElement>('startupRetry').disabled = true
   if (document.documentElement.dataset.surface === 'waiting') {
-    text('waitingMessage', '连接失败，请重新连接后重试。')
+    text('waitingMessage', unsupported ? message : '连接失败，请重新连接后重试。')
     el('waitingCard').hidden = false
     return
   }

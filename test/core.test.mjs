@@ -143,7 +143,7 @@ test('only a fresh valid submit produces private widget guidance and no prompt c
     const r = spawnSync(process.execPath, ['--no-warnings', script], {
       input: JSON.stringify(input),
       encoding: 'utf8',
-      env: env(dir),
+      env: { ...env(dir), CODEX_INTERNAL_ORIGINATOR_OVERRIDE: 'codex_work_desktop' },
       timeout: 1500,
     })
     assert.equal(r.status, 0)
@@ -160,6 +160,28 @@ test('only a fresh valid submit produces private widget guidance and no prompt c
       'synthetic private sentence',
     ),
   )
+})
+test('hooks stay silent without touching storage outside the official desktop runtimes', t => {
+  const root = mkdtempSync(join(tmpdir(), 'hongguo-host-gate-')), data = join(root, 'data')
+  defer(t, () => rmSync(root, { recursive: true, force: true }))
+  const script = join(projectRoot, 'dist/hooks/write.mjs')
+  for (const originator of ['t3_code', 'paseo', '', 'Codex Desktop Other']) {
+    const result = spawnSync(process.execPath, ['--no-warnings', script], {
+      input: JSON.stringify({ session_id: 'synthetic-host', turn_id: 'one', hook_event_name: 'UserPromptSubmit' }),
+      env: { ...env(data), CODEX_INTERNAL_ORIGINATOR_OVERRIDE: originator }, encoding: 'utf8', timeout: 1500,
+    })
+    assert.equal(result.status, 0)
+    assert.deepEqual(JSON.parse(result.stdout), {})
+    assert.equal(existsSync(data), false)
+  }
+  for (const originator of ['Codex Desktop', 'codex_work_desktop']) {
+    const result = spawnSync(process.execPath, ['--no-warnings', script], {
+      input: JSON.stringify({ session_id: 'synthetic-host', turn_id: originator.replaceAll(' ', '-'), hook_event_name: 'UserPromptSubmit' }),
+      env: { ...env(data), CODEX_INTERNAL_ORIGINATOR_OVERRIDE: originator }, encoding: 'utf8', timeout: 1500,
+    })
+    assert.equal(result.status, 0)
+    assert.match(JSON.parse(result.stdout).hookSpecificOutput.additionalContext, /show_waiting_picks/)
+  }
 })
 test('unidentified panels require an explicit choice and cannot swap a bound identity', async (t) => {
   const { store } = setup(t),
@@ -310,6 +332,18 @@ test('compiled plugin exposes a model-visible waiting widget and keeps player co
   const { version } = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8'))
   assert.equal(client.getServerVersion()?.version, version)
   const { tools } = await client.listTools()
+  // Match the real T3 gate: missing readOnlyHint is treated as requiring
+  // approval for every app request, including each poll and media chunk.
+  for (const name of ['open_drama_panel', 'get_waiting_status', 'get_waiting_picks', 'get_run_state',
+    'list_series', 'get_cover', 'get_episodes', 'get_history', 'read_panel_chunk', 'read_panel_manifest',
+    'get_preferences', 'get_provider_auth', 'get_providers', 'list_sessions']) {
+    assert.equal(tools.find(tool => tool.name === name)?.annotations?.readOnlyHint, true, name)
+  }
+  for (const name of ['save_progress', 'set_preferences', 'remove_history', 'set_source',
+    'mark_waiting_picks_shown', 'start_provider_login', 'poll_provider_login', 'logout_provider',
+    'prepare_playback', 'preload_playback', 'get_health', 'get_setup_status']) {
+    assert.equal(tools.find(tool => tool.name === name)?.annotations?.readOnlyHint, false, name)
+  }
   assert.deepEqual(tools.filter(t => t._meta.ui.visibility.includes('model')).map(t => t.name), ['show_waiting_picks'])
   assert.ok(tools.filter(t => t.name !== 'show_waiting_picks').every(t => t._meta.ui.visibility.join(',') === 'app'))
   assert.equal(tools.filter((tool) => tool._meta['openai/ui']?.entrypoints?.[0]?.type === 'thread').length, 1)

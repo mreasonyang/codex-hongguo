@@ -73,6 +73,7 @@ server.registerTool(
     title: '红果短剧',
     description: '在当前会话选剧与续播',
     inputSchema: {},
+    annotations: { readOnlyHint: true },
     _meta: {
       ui: { ...ui, resourceUri: uri },
       'openai/ui': { entrypoints: [{ type: 'thread' }, { type: 'global' }] },
@@ -88,10 +89,20 @@ server.registerTool(
     }
   },
 )
+// Reads may refresh scoped handles, caches or player liveness. They do not
+// change viewing progress, preferences or account state. Hosts such as T3 use
+// this annotation to keep app polling and media reads out of approval dialogs.
+const readOnlyTools = new Set([
+  'get_waiting_status', 'get_waiting_picks', 'get_run_state', 'list_sessions',
+  'list_series', 'get_cover', 'get_episodes', 'get_history',
+  'read_panel_chunk', 'read_panel_manifest', 'get_preferences',
+  'get_provider_auth', 'get_providers',
+])
 for (const [name, schema] of Object.entries(schemas)) {
   server.registerTool(
     name,
-    { inputSchema: { ...schema.shape, panel: z.string().max(80) }, _meta: { ui } },
+    { inputSchema: { ...schema.shape, panel: z.string().max(80) },
+      annotations: { readOnlyHint: readOnlyTools.has(name) }, _meta: { ui } },
     async ({ panel, ...input }, extra) => {
       try {
         const data = await service.call(service.panel(panel, extra._meta), name, input, false, extra.signal)

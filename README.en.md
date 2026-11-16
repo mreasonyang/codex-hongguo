@@ -13,6 +13,8 @@
 
 Watch Hongguo short dramas in the right-hand panel of Codex Desktop, with browsing, search, resume and autoplay next. By default, a new task resumes the selected episode; finishing or interrupting the task pauses playback and saves your position. You can turn off either behavior independently in Settings. The plugin supports local-executor Codex Desktop conversations.
 
+Only the official Codex desktop app is enabled. Third-party clients such as T3 Code and Paseo, and unrecognized hosts, do not receive automatic suggestions or start background player requests.
+
 Hongguo, Bilibili and Huangguo (NSFW) are built in. You can also [add your own source](#add-your-own-source) with the `hongguo-provider` skill.
 
 Installed local sources start automatically. Hover over the play mark at the top left and select a source. Providers declaring `nsfw: true` require confirmation before switching; cancelling preserves the current source. Recommendations, search, history and cache identities remain separate; switching saves your position and stops playback.
