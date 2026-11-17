@@ -43,7 +43,7 @@ npx.cmd "@kyun.si/codex-hongguo@latest" setup
 
 Keep the package name quoted so PowerShell treats the leading `@` literally. `npx.cmd` invokes the npm command shim directly. See [Windows support](docs/windows-support.md) (Chinese) for details and offline installation.
 
-`setup` prompts you to choose Codex, Antigravity, or both; enter `1,2` to select both. It shows which apps already have the plugin. Run it again to add the other app or reinstall an existing one. Unselected apps stay installed. Antigravity support currently uses the `@beta` channel.
+`setup` displays a checkbox list for Codex and Antigravity. Use ↑/↓ to move, Space to check or uncheck, Enter to confirm, and Esc or Ctrl-C to cancel. You can check both apps. The list shows which apps already have the plugin; run it again to add the other app or reinstall an existing one. Unselected apps stay installed. Antigravity support currently uses the `@beta` channel.
 
 For direct installation, use `setup --codex`, `setup --agy` (or `--antigravity`), or `setup --codex --agy` for both. These flags skip selection and work in scripts without an interactive terminal. The original `--host codex|antigravity` syntax remains supported. `update`, `uninstall`, and `doctor` accept the same flags for a single app.
 

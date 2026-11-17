@@ -12,7 +12,7 @@ npx "@kyun.si/codex-hongguo@latest" update
 npx "@kyun.si/codex-hongguo@latest" uninstall
 ```
 
-`setup` 未指定应用时，在交互终端展示 Codex / Antigravity 多选引导，可用 `1,2` 或空格分隔的编号选择两端。引导显示已安装、未安装或暂无法确认的状态，再次执行可以补装另一端或重新安装已安装端；不选择某端不会卸载它。空输入或无效输入会重新询问，`q`、Ctrl-C 或输入结束会取消安装。后台脚本须显式使用 `--codex`、`--agy` / `--antigravity`，或 `setup --codex --agy`，不再默认为脚本选择 Codex。旧的 `--host codex|antigravity` 参数保留。除 setup 外的命令只接受单端目标，未指定时保留入口默认值（npm 为 Codex，Antigravity 安装副本为 Antigravity）。
+`setup` 未指定应用时，在交互终端展示 Codex / Antigravity 的 checkbox 列表：↑/↓ 移动，空格勾选或取消勾选，回车确认，可同时勾选两端。引导显示已安装、未安装或暂无法确认的状态，再次执行可以补装另一端或重新安装已安装端；不选择某端不会卸载它。初始不勾选任何端，空选时回车会显示提示；Esc、Ctrl-C 或输入结束会取消安装。后台脚本须显式使用 `--codex`、`--agy` / `--antigravity`，或 `setup --codex --agy`，不再默认为脚本选择 Codex。旧的 `--host codex|antigravity` 参数保留。除 setup 外的命令只接受单端目标，未指定时保留入口默认值（npm 为 Codex，Antigravity 安装副本为 Antigravity）。
 
 npx 获取包含完整程序的发行包。安装将程序安装到当前系统用户的共享目录；选择 Codex 时，在 `managed-marketplace/<安装器版本>/` 下生成本机市场和入口，并注册 `hongguo-local`。Antigravity 安装自己的清单、技能和 Node 入口，不要求 Codex CLI。两端启动时从同一份程序加载播放器、MCP 服务、SDK 和 WASM。更新会在切换入口前准备新构建，安装第二端时可复用已有构建。显式选择不支持共享安装协议的旧市场版本时，Codex 继续使用所选版本的原生布局。
 

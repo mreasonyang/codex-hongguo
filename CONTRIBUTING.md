@@ -47,7 +47,9 @@ node scripts/verify-install.mjs --playback
 
 Antigravity 的普通面板在宿主未传入会话元数据时保持未绑定，必须显式选择会话；推荐 Hook 使用随机回合能力值把卡片绑定到所属聊天，不让模型传入任意会话 ID。Hook 只记录会话 ID、开始步数和随机回合 ID，忽略中间模型调用及 `fullyIdle=false` 的普通 Stop；`USER_CANCELED` 记录中断。重放较早的开始事件不会复活旧回合。恢复、回退对话与其他 Stop Hook 强制继续等宿主行为仍需实机验收。
 
-`setup` 未指定目标时使用终端多选引导，并读取原生 Codex 安装记录与 Antigravity 安装器标记来展示状态；未知状态不阻止用户明确选择。`--codex`、`--agy` / `--antigravity` 跳过引导，可组合用于双端安装；其他命令仍使用各入口的固定默认目标，只支持显式选择单端。无交互终端的测试和安装脚本必须指定目标。多端操作保留各端自己的安装回滚；一端失败后继续尝试另一端，最终返回失败状态，不撤销已成功安装的端。
+`setup` 未指定目标时使用终端 checkbox 多选引导（↑/↓ 移动、空格勾选、回车确认），并读取原生 Codex 安装记录与 Antigravity 安装器标记来展示状态；未知状态不阻止用户明确选择。`--codex`、`--agy` / `--antigravity` 跳过引导，可组合用于双端安装；其他命令仍使用各入口的固定默认目标，只支持显式选择单端。无交互终端的测试和安装脚本必须指定目标。多端操作保留各端自己的安装回滚；一端失败后继续尝试另一端，最终返回失败状态，不撤销已成功安装的端。
+
+checkbox 使用 `@inquirer/checkbox`，并固定兼容 Node.js 22.16 的 core、ANSI 和 figures 版本。升级这些依赖时需核对 engine 下限，并验证空选提示、终端宽度变化、取消后的 raw mode 与光标恢复；不能将安装器最低 Node 版本隐式抬高。
 
 插件目录也会被 Antigravity CLI / IDE 发现。Hook 仅根据官方 `transcriptPath` 的 App 路径后缀识别来源，不打开或存储 transcript，其他来源保持静默。配置及事件格式参考 [构建插件](https://antigravity.google/docs/build-plugins) 和 [Hooks](https://antigravity.google/docs/hooks)。
 

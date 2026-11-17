@@ -186,7 +186,7 @@ export async function main(argv = process.argv.slice(2), app = 'codex') {
       return
     }
     if (['help', '--help', '-h'].includes(action)) {
-      console.log('红果短剧\n  codex-hongguo provider --help\n  codex-hongguo setup [--codex] [--agy|--antigravity] [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo update [--codex|--agy|--antigravity] [--dry-run]\n  codex-hongguo uninstall [--codex|--agy|--antigravity] [--dry-run]\n  codex-hongguo doctor [--codex|--agy|--antigravity]\nsetup 不指定应用时启动可多选的安装引导，显示已安装状态；再次运行可补装另一端。\n快捷参数跳过选择，可组合 setup --codex --agy；仍支持 --host codex|antigravity。\n其他命令未指定应用时保留当前入口的默认应用（npm 入口为 Codex）。\n需要 Node.js >=22.16；Codex 安装还需要 Codex CLI。播放组件由插件自动准备。')
+      console.log('红果短剧\n  codex-hongguo provider --help\n  codex-hongguo setup [--codex] [--agy|--antigravity] [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo update [--codex|--agy|--antigravity] [--dry-run]\n  codex-hongguo uninstall [--codex|--agy|--antigravity] [--dry-run]\n  codex-hongguo doctor [--codex|--agy|--antigravity]\nsetup 不指定应用时显示 checkbox 列表：方向键移动、空格勾选、回车确认；显示已安装状态，再次运行可补装另一端。\n快捷参数跳过选择，可组合 setup --codex --agy；仍支持 --host codex|antigravity。\n其他命令未指定应用时保留当前入口的默认应用（npm 入口为 Codex）。\n需要 Node.js >=22.16；Codex 安装还需要 Codex CLI。播放组件由插件自动准备。')
       return
     }
     if (action === 'provider') {

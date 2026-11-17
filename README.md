@@ -43,7 +43,7 @@ npx.cmd "@kyun.si/codex-hongguo@latest" setup
 
 包名的引号必须保留，避免 PowerShell 将 `@` 解析为展开运算符；`npx.cmd` 可直接调用 npm 命令入口。Windows 详细说明和离线安装见 [Windows 支持](docs/windows-support.md)。
 
-`setup` 会引导选择 Codex、Antigravity 或两个都安装，输入 `1,2` 可多选。列表会显示已安装状态，再次运行仍可补装另一端，也可选择已安装的端重新安装；未选择的端不会被卸载。Antigravity 适配目前使用 `@beta` 渠道。
+`setup` 会显示 Codex、Antigravity 的 checkbox 选择列表：用 ↑/↓ 移动、空格勾选或取消勾选、回车确认，Esc 或 Ctrl-C 取消。可以同时勾选两端，列表会显示已安装状态；再次运行可补装另一端，也可勾选已安装的端重新安装。未选择的端不会被卸载。Antigravity 适配目前使用 `@beta` 渠道。
 
 也可用快捷参数直接安装：`setup --codex`、`setup --agy`（或 `--antigravity`），同时安装用 `setup --codex --agy`。这些参数跳过选择，适合脚本和没有交互终端的环境；原来的 `--host codex|antigravity` 仍可用。`update`、`uninstall`、`doctor` 也支持同样的单端快捷参数。
 

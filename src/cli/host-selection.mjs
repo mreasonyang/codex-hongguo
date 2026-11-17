@@ -1,4 +1,4 @@
-import { createInterface } from 'node:readline'
+import checkbox from '@inquirer/checkbox'
 import { homedir } from 'node:os'
 import { findExecutable, spawnSync } from '../runtime/executables.mjs'
 import { codex, antigravity, hostProfile } from '../runtime/host.mjs'
@@ -55,28 +55,46 @@ export async function selectSetupHosts({ input = process.stdin, output = process
   if (!input.isTTY || !output.isTTY)
     throw Error('setup 需要交互终端来选择应用；脚本中请使用 setup --codex、setup --agy 或 setup --codex --agy。')
   const installations = await inspect()
-  output.write('\n选择要安装红果短剧的应用（可多选）：\n')
-  for (const [index, { host, installed }] of installations.entries()) {
+  const choices = installations.map(({ host, installed }) => {
     const status = installed === true ? '已安装，可重新安装' : installed === false ? '未安装' : '安装状态暂无法确认'
-    output.write(`  ${index + 1}. ${hostName(host)}（${status}）\n`)
+    return { value: host, name: `${hostName(host)}（${status}）`, short: hostName(host), checked: false }
+  })
+  const controller = new AbortController(), wasRaw = Boolean(input.isRaw)
+  let inputFailure
+  const cancel = () => controller.abort()
+  const cancelKey = (value, key) => {
+    if (key?.name === 'escape' || (key?.ctrl && key.name === 'd') || value === 'q') cancel()
   }
-  output.write('输入编号，多个用逗号或空格分隔，例如 1,2；输入 q 取消。\n')
-  const terminal = createInterface({ input, output, terminal: true })
-  terminal.on('SIGINT', () => terminal.close())
-  const lines = terminal[Symbol.asyncIterator]()
+  const fail = error => { inputFailure = error; cancel() }
+  input.once('end', cancel)
+  input.once('close', cancel)
+  input.once('error', fail)
+  input.on('keypress', cancelKey)
+  if (input.readableEnded || input.destroyed) cancel()
   try {
-    for (;;) {
-      output.write('要安装哪些应用？> ')
-      const { value, done } = await lines.next()
-      if (done || /^(?:q|quit|exit)$/i.test(value.trim())) return []
-      const values = value.trim().split(/[\s,，、]+/u)
-      if (values.some(value => !/^[12]$/.test(value))) {
-        output.write('请输入 1 或 2，也可以输入 1,2 选择两个应用；输入 q 取消。\n')
-        continue
-      }
-      return [...new Set(values)].map(value => installations[Number(value) - 1].host)
-    }
-  } finally { terminal.close() }
+    return await checkbox({
+      message: '选择要安装红果短剧的应用', choices, loop: true,
+      validate: selected => selected.length > 0 || '请至少勾选一个应用。',
+      shortcuts: { all: null, invert: null },
+      theme: {
+        icon: { checked: '[x]', unchecked: '[ ]', cursor: '❯' },
+        style: {
+          keysHelpTip: () => '↑↓ 移动  空格 勾选  回车 确认  Esc 取消',
+          renderSelectedChoices: selected => selected.map(choice => choice.short).join('、'),
+        },
+      },
+    }, { input, output, signal: controller.signal })
+  } catch (error) {
+    if (inputFailure) throw inputFailure
+    if (error?.name === 'ExitPromptError' || (controller.signal.aborted && error?.name === 'AbortPromptError')) return []
+    throw error
+  } finally {
+    input.removeListener('end', cancel)
+    input.removeListener('close', cancel)
+    input.removeListener('error', fail)
+    input.removeListener('keypress', cancelKey)
+    if (typeof input.setRawMode === 'function' && input.isRaw !== wasRaw) input.setRawMode(wasRaw)
+  }
 }
 
 export async function configureSetupHosts(selected, configure, { error = console.error } = {}) {
