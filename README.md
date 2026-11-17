@@ -27,7 +27,7 @@
 
 ## 安装与配置
 
-支持 macOS、Linux（x64/arm64）、Windows x64 和 Windows 11 ARM64。需要对应架构的 Node.js >=22.16（含 npm）和支持 npm 插件源的 Codex CLI。播放组件由插件自动准备，无需单独安装 FFmpeg。
+支持 macOS、Linux（x64/arm64）、Windows x64 和 Windows 11 ARM64。需要对应架构的 Node.js >=22.16（含 npm）；选择 Codex 时还需要支持 npm 插件源的 Codex CLI。播放组件由插件自动准备，无需单独安装 FFmpeg。
 
 macOS / Linux 使用 npm 安装：
 
@@ -43,7 +43,11 @@ npx.cmd "@kyun.si/codex-hongguo@latest" setup
 
 包名的引号必须保留，避免 PowerShell 将 `@` 解析为展开运算符；`npx.cmd` 可直接调用 npm 命令入口。Windows 详细说明和离线安装见 [Windows 支持](docs/windows-support.md)。
 
-默认安装和更新不需要 Git。命令会检查 Node、npm 和 Codex CLI，自动准备播放组件，再通过本机市场注册 Codex 入口。首次安装需要联网，之后复用本机缓存。安装完成时会提示你到 Codex「设置 → Hooks」审查、信任并启用 `UserPromptSubmit`、`Stop`、`Interrupt`。然后打开新的本地聊天使用。
+`setup` 会引导选择 Codex、Antigravity 或两个都安装，输入 `1,2` 可多选。列表会显示已安装状态，再次运行仍可补装另一端，也可选择已安装的端重新安装；未选择的端不会被卸载。Antigravity 适配目前使用 `@beta` 渠道。
+
+也可用快捷参数直接安装：`setup --codex`、`setup --agy`（或 `--antigravity`），同时安装用 `setup --codex --agy`。这些参数跳过选择，适合脚本和没有交互终端的环境；原来的 `--host codex|antigravity` 仍可用。`update`、`uninstall`、`doctor` 也支持同样的单端快捷参数。
+
+默认安装和更新不需要 Git。命令会检查所选应用需要的环境并自动准备播放组件；Codex 使用本机市场注册入口。首次安装需要联网，之后复用本机缓存。Codex 安装完成时会提示你到「设置 → Hooks」审查、信任并启用 `UserPromptSubmit`、`Stop`、`Interrupt`，然后打开新的本地聊天使用。
 
 ### Antigravity App（实验性）
 
@@ -52,20 +56,20 @@ npx.cmd "@kyun.si/codex-hongguo@latest" setup
 macOS / Linux 安装：
 
 ```sh
-npx "@kyun.si/codex-hongguo@beta" setup --host antigravity
+npx "@kyun.si/codex-hongguo@beta" setup --agy
 ```
 
-后续更新使用 `npx "@kyun.si/codex-hongguo@beta" update --host antigravity`。
+也可直接运行 `setup`，在引导中选择 Antigravity。`--antigravity` 与 `--agy` 等价。后续更新使用 `npx "@kyun.si/codex-hongguo@beta" update --agy`。
 
 Windows PowerShell 安装：
 
 ```powershell
-npx.cmd "@kyun.si/codex-hongguo@beta" setup --host antigravity
+npx.cmd "@kyun.si/codex-hongguo@beta" setup --agy
 ```
 
-后续更新使用 `npx.cmd "@kyun.si/codex-hongguo@beta" update --host antigravity`。
+后续更新使用 `npx.cmd "@kyun.si/codex-hongguo@beta" update --agy`。
 
-Antigravity 的插件清单、技能和启动入口安装到用户主目录下的 `.gemini/config/plugins/codex-hongguo/`。卸载使用同一入口的 `uninstall --host antigravity`。双端安装时先关闭两个播放器，更新后在 Antigravity 的 MCP Servers 中重启 hongguo，并在 Codex 打开新聊天。
+Antigravity 的插件清单、技能和启动入口安装到用户主目录下的 `.gemini/config/plugins/codex-hongguo/`。卸载使用同一入口的 `uninstall --agy`。双端安装时先关闭两个播放器，更新后在 Antigravity 的 MCP Servers 中重启 hongguo，并在 Codex 打开新聊天。
 
 从会话右侧 **＋ → Extensions → 红果短剧** 打开常驻播放器；全局侧栏也有入口。推荐卡点剧名后在卡片原位置展开。推荐入口自动绑定所属聊天；直接从 ＋ 打开的面板若未识别聊天，请用「选择会话」核对会话 ID 后缀与时间，显式绑定。未绑定时可手动观看。
 

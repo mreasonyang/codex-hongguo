@@ -12,9 +12,11 @@ npx "@kyun.si/codex-hongguo@latest" update
 npx "@kyun.si/codex-hongguo@latest" uninstall
 ```
 
-npx 获取包含完整程序的发行包。默认安装将程序安装到当前系统用户的共享目录，在 `managed-marketplace/<安装器版本>/` 下生成 Codex 可以原生发现的本地市场和入口，并注册 `hongguo-local`。Antigravity 安装自己的清单、技能和 Node 入口。两端启动时从同一份程序加载播放器、MCP 服务、SDK 和 WASM。更新会在切换入口前准备新构建，安装第二端时可复用已有构建。显式选择不支持共享安装协议的旧市场版本时，Codex 继续使用所选版本的原生布局。
+`setup` 未指定应用时，在交互终端展示 Codex / Antigravity 多选引导，可用 `1,2` 或空格分隔的编号选择两端。引导显示已安装、未安装或暂无法确认的状态，再次执行可以补装另一端或重新安装已安装端；不选择某端不会卸载它。空输入或无效输入会重新询问，`q`、Ctrl-C 或输入结束会取消安装。后台脚本须显式使用 `--codex`、`--agy` / `--antigravity`，或 `setup --codex --agy`，不再默认为脚本选择 Codex。旧的 `--host codex|antigravity` 参数保留。除 setup 外的命令只接受单端目标，未指定时保留入口默认值（npm 为 Codex，Antigravity 安装副本为 Antigravity）。
 
-两个命令均支持 `--dry-run` 和 `--marketplace owner/repo|本地目录`。预览仍会检查依赖，但不调用 Codex 修改注册。来源参数只接受仓库 slug 或现有本地目录；显式 Git 来源需要 Git。后续操作省略该参数时会选择默认本机 npm 索引，因此自定义和离线来源每次都应显式提供。
+npx 获取包含完整程序的发行包。安装将程序安装到当前系统用户的共享目录；选择 Codex 时，在 `managed-marketplace/<安装器版本>/` 下生成本机市场和入口，并注册 `hongguo-local`。Antigravity 安装自己的清单、技能和 Node 入口，不要求 Codex CLI。两端启动时从同一份程序加载播放器、MCP 服务、SDK 和 WASM。更新会在切换入口前准备新构建，安装第二端时可复用已有构建。显式选择不支持共享安装协议的旧市场版本时，Codex 继续使用所选版本的原生布局。
+
+安装和更新均支持 `--dry-run`；Codex 还支持 `--marketplace owner/repo|本地目录`。预览仍会检查依赖，但不修改注册。来源参数只接受仓库 slug 或现有本地目录；显式 Git 来源需要 Git。自定义或离线来源使用 `setup --codex --marketplace ...`，后续操作省略来源参数时会选择默认本机 npm 索引，因此每次都应显式提供。多端安装分别完成各端操作；一端失败仍会尝试另一端，成功的安装保留，并返回失败状态供重试。
 
 `uninstall` 自动查找 Codex CLI 并移除插件；本机自管市场同时移除注册，随后清理该宿主的观看进度、设置、视频缓存、设备档案和 `managed-marketplace/` 索引。最后一个宿主卸载时会清理共享程序和播放组件。不下载或运行播放组件，也不检查 npm。支持 `--dry-run` 预览，不接受 `--marketplace`。卸载前关闭播放器面板，完成后打开新聊天。
 
@@ -30,7 +32,7 @@ Antigravity 安装器退出时，系统会释放安装锁。如果升级前留�
 
 ## 运行环境与包内容
 
-npm 包的 `os` 为 darwin/linux/win32，Windows 需要 x64 或 ARM64 Node；ARM64 系统需要 Windows 11 和插件 >=0.0.30。Windows PowerShell 使用 `npx.cmd "@kyun.si/codex-hongguo@latest" setup`，详见 [Windows 支持](windows-support.md)。三平台的自动化安装验证与桌面播放观察分别记录。需要外部 Node.js >=22.16（含 npm）和 Codex CLI。播放组件由安装器自动下载到用户缓存，校验固定的归档和可执行文件 SHA-256 后使用；不需要全局安装 FFmpeg。macOS 使用本项目从固定官方源码构建的组件，Windows/Linux 使用本项目独立发布的 BtbN 精简组件。包内提供 JavaScript 依赖、播放器、SDK/WASM、播放组件清单和许可说明。
+npm 包的 `os` 为 darwin/linux/win32，Windows 需要 x64 或 ARM64 Node；ARM64 系统需要 Windows 11 和插件 >=0.0.30。Windows PowerShell 使用 `npx.cmd "@kyun.si/codex-hongguo@latest" setup`，详见 [Windows 支持](windows-support.md)。三平台的自动化安装验证与桌面播放观察分别记录。需要外部 Node.js >=22.16（含 npm）；仅 Codex 适配需要 Codex CLI。播放组件由安装器自动下载到用户缓存，校验固定的归档和可执行文件 SHA-256 后使用；不需要全局安装 FFmpeg。macOS 使用本项目从固定官方源码构建的组件，Windows/Linux 使用本项目独立发布的 BtbN 精简组件。包内提供 JavaScript 依赖、播放器、SDK/WASM、播放组件清单和许可说明。
 
 MCP 使用同名的 `bin/run-node` / Windows `bin/run-node.exe` 入口，Hooks 按平台调用同一启动器。两者都检查 Node 版本及 `node:sqlite`；POSIX 保留 PATH、Homebrew、Volta、nvm、mise、fnm 查找，Windows 支持 PATH、常见 Node、Volta、nvm-windows 和 Scoop 位置。源码构建需 Go >=1.25，发行包使用者无需安装 Go。FFmpeg/Codex 通过 `src/runtime/executables.mjs` 查找，显式覆盖项见 [CONTRIBUTING](../CONTRIBUTING.md#运行环境与诊断)。覆盖值必须在实际宿主子进程的环境中可见。
 

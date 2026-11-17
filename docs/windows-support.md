@@ -65,7 +65,7 @@ npx.cmd "@kyun.si/codex-hongguo@beta" setup
 也可以解压 `release/codex-hongguo-<版本>.zip` 到长期保留的目录，在解压根目录的 PowerShell 执行：
 
 ```powershell
-node .\plugins\codex-hongguo\bin\codex-hongguo.mjs setup --marketplace .
+node .\plugins\codex-hongguo\bin\codex-hongguo.mjs setup --codex --marketplace .
 ```
 
 ZIP 包含插件程序，首次准备播放组件仍需联网。更新时切换到新版解压目录，重复上面的命令。从实际安装副本检查环境：

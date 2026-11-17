@@ -27,7 +27,7 @@ After installation and Hook review, continue working normally. The optional **Wa
 
 ## Installation & Setup
 
-Supports macOS, Linux (x64/arm64), Windows x64, and Windows 11 ARM64. Requires Node.js >=22.16 with npm for your architecture and a Codex CLI supporting npm plugin sources. The plugin prepares its playback component automatically; no separate FFmpeg installation is needed.
+Supports macOS, Linux (x64/arm64), Windows x64, and Windows 11 ARM64. Requires Node.js >=22.16 with npm for your architecture. Choosing Codex also requires a Codex CLI supporting npm plugin sources. The plugin prepares its playback component automatically; no separate FFmpeg installation is needed.
 
 Install with npm on macOS / Linux:
 
@@ -43,7 +43,11 @@ npx.cmd "@kyun.si/codex-hongguo@latest" setup
 
 Keep the package name quoted so PowerShell treats the leading `@` literally. `npx.cmd` invokes the npm command shim directly. See [Windows support](docs/windows-support.md) (Chinese) for details and offline installation.
 
-Default installation and updates do not require Git. The command checks Node, npm and the Codex CLI, prepares the playback component, then registers the Codex adapter through a local marketplace. The first installation requires a network connection; later runs reuse the local cache. The installer tells you to review, trust and enable `UserPromptSubmit`, `Stop` and `Interrupt` in Codex **Settings → Hooks**. Then open a new local chat to use the plugin.
+`setup` prompts you to choose Codex, Antigravity, or both; enter `1,2` to select both. It shows which apps already have the plugin. Run it again to add the other app or reinstall an existing one. Unselected apps stay installed. Antigravity support currently uses the `@beta` channel.
+
+For direct installation, use `setup --codex`, `setup --agy` (or `--antigravity`), or `setup --codex --agy` for both. These flags skip selection and work in scripts without an interactive terminal. The original `--host codex|antigravity` syntax remains supported. `update`, `uninstall`, and `doctor` accept the same flags for a single app.
+
+Default installation and updates do not require Git. The command checks the selected app's prerequisites and prepares the playback component. Codex uses a local marketplace to register its adapter. The first installation requires a network connection; later runs reuse the local cache. The Codex installer tells you to review, trust and enable `UserPromptSubmit`, `Stop` and `Interrupt` in **Settings → Hooks**, then open a new local chat.
 
 ### Antigravity App (experimental)
 
@@ -52,20 +56,20 @@ The installer supports Windows x64, Windows 11 ARM64, Linux x64/arm64 and macOS 
 Install on macOS or Linux:
 
 ```sh
-npx "@kyun.si/codex-hongguo@beta" setup --host antigravity
+npx "@kyun.si/codex-hongguo@beta" setup --agy
 ```
 
-Update with `npx "@kyun.si/codex-hongguo@beta" update --host antigravity`.
+You can also run `setup` and choose Antigravity in the guide. `--antigravity` is an alias for `--agy`. Update with `npx "@kyun.si/codex-hongguo@beta" update --agy`.
 
 Install in Windows PowerShell:
 
 ```powershell
-npx.cmd "@kyun.si/codex-hongguo@beta" setup --host antigravity
+npx.cmd "@kyun.si/codex-hongguo@beta" setup --agy
 ```
 
-Update with `npx.cmd "@kyun.si/codex-hongguo@beta" update --host antigravity`.
+Update with `npx.cmd "@kyun.si/codex-hongguo@beta" update --agy`.
 
-Antigravity discovers its manifest, skills and entry points under `.gemini/config/plugins/codex-hongguo/` in your home directory. To remove it, use `uninstall --host antigravity` through the same CLI entrypoint. When using both hosts, close both players before updating. Restart hongguo in Antigravity's MCP Servers settings and open a new Codex chat afterward.
+Antigravity discovers its manifest, skills and entry points under `.gemini/config/plugins/codex-hongguo/` in your home directory. To remove it, use `uninstall --agy` through the same CLI entrypoint. When using both hosts, close both players before updating. Restart hongguo in Antigravity's MCP Servers settings and open a new Codex chat afterward.
 
 Open the player from the conversation's **＋ → Extensions → 红果短剧**, or from the global sidebar. Suggestions expand in place when clicked. Recommendation players bind to their originating chat; a directly opened panel without host conversation metadata offers **Choose session**, using the conversation ID suffix and timestamp. Unbound panels support manual viewing.
 

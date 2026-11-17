@@ -94,7 +94,7 @@ try {
   const defaultData = dataRoot({ env: { ...env, HONGGUO_DATA_DIR: undefined }, home: tmp })
   env.HONGGUO_DATA_DIR = defaultData
   const npmCLI = ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo']
-  const setupOutput = run('npm', [...npmCLI, 'setup'])
+  const setupOutput = run('npm', [...npmCLI, 'setup', '--codex'])
   assert.match(setupOutput, /审查.*信任.*UserPromptSubmit.*Stop.*Interrupt/, '安装完成时必须明确告知 Hooks 信任步骤')
   assert.match(setupOutput, /新的本地聊天/, '安装完成时必须提示打开新聊天，避免复用旧播放器连接')
   const localMarket = join(defaultData, 'managed-marketplace', version)
@@ -103,7 +103,7 @@ try {
   const [defaultPlugin] = JSON.parse(run('codex', ['plugin', 'list', '--marketplace', 'hongguo-local', '--json'])).installed
   assert.equal(defaultPlugin.source.source, 'local')
   await assert.rejects(access(join(localMarket, 'plugins/codex-hongguo/dist/vendor')), { code: 'ENOENT' })
-  run('npm', [...npmCLI, 'setup', '--marketplace', npmMarket])
+  run('npm', [...npmCLI, 'setup', '--codex', '--marketplace', npmMarket])
   commands.ffmpeg = findExecutable('ffmpeg', undefined, { env, home: tmp })
   assert.ok(commands.ffmpeg.startsWith(tmp), '播放组件必须位于隔离用户缓存')
   await access(commands.ffmpeg)
@@ -114,7 +114,7 @@ try {
   const active = async () => JSON.parse(await readFile(join(programHome, 'current.json'), 'utf8')).directory
   const directory = await active()
   const programRoot = join(programHome, directory)
-  run('npm', [...npmCLI, 'setup', '--host', 'antigravity'], agyEnv)
+  run('npm', [...npmCLI, 'setup', '--codex', '--agy'], agyEnv)
   assert.equal(await active(), directory, '两端安装同一发行包应复用同一份程序')
   assert.deepEqual(await readdir(join(programHome, 'builds')), [directory.split('/')[1]])
   await assert.rejects(access(join(tmp, '.gemini/config/plugins/codex-hongguo/dist/vendor')), { code: 'ENOENT' })
@@ -127,12 +127,12 @@ try {
   seeded.setPreferences({ autoPrompt: true, searchTerms: ['总裁', '重生', '逆袭'], defaultMuted: false, volume: 0.43, coverStyle: 'document' })
   seeded.setSetupDismissed(true)
   seeded.close()
-  run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + channel, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
+  run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + channel, '--', 'codex-hongguo', 'setup', '--codex', '--marketplace', npmMarket])
   if (process.platform === 'win32') {
     // Exercise the same quoted scoped package used in the installation instructions,
     // with both Windows PowerShell 5.1 and PowerShell 7. No platform bypass is allowed.
     const quote = value => "'" + value.replaceAll("'", "''") + "'"
-    const args = ['--yes', '--registry', origin, npmPackageName + '@' + channel, 'setup', '--marketplace', npmMarket]
+    const args = ['--yes', '--registry', origin, npmPackageName + '@' + channel, 'setup', '--codex', '--marketplace', npmMarket]
     const script = "$ErrorActionPreference = 'Stop'; npx.cmd " + args.map(quote).join(' ') + '; exit $LASTEXITCODE'
     for (const shell of ['powershell', 'pwsh']) {
       const result = spawnSync(findExecutable(shell), ['-NoProfile', '-NonInteractive', '-Command', script], {
@@ -427,7 +427,7 @@ try {
     platform: process.platform, arch: process.arch,
     powershellInstall: process.platform === 'win32' ? ['5.1', '7'] : [],
     checkedAt: new Date().toISOString(),
-    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'shared-program-both-hosts', 'codex-thin-adapter', 'progress-preserved', 'sound-preferences-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'installation-trust-instructions', 'minimal-player-ui', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'npx-uninstall', 'uninstall-dry-run', 'repeat-uninstall', 'uninstall-without-media-runtime', 'uninstall-cleans-component-directory-and-partial-downloads', 'uninstall-preserves-external-executables', 'uninstall-deletes-all-local-data'],
+    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'setup-multiple-hosts', 'shared-program-both-hosts', 'codex-thin-adapter', 'progress-preserved', 'sound-preferences-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'installation-trust-instructions', 'minimal-player-ui', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'npx-uninstall', 'uninstall-dry-run', 'repeat-uninstall', 'uninstall-without-media-runtime', 'uninstall-cleans-component-directory-and-partial-downloads', 'uninstall-preserves-external-executables', 'uninstall-deletes-all-local-data'],
     mediaDecoded: process.argv.includes('--playback'), desktopPlaybackObserved: false,
   }, null, 2) + '\n')
 } finally {

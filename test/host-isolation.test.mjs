@@ -92,6 +92,9 @@ test('CLI entrypoints select their fixed defaults and explicit targets without m
     assert.equal(doctor().hooks.events[0].event, expected)
     assert.equal(doctor('--host', 'codex').hooks.events[0].event, 'userPromptSubmit')
     assert.equal(doctor('--host', 'antigravity').hooks.events[0].event, 'PreInvocation')
+    assert.equal(doctor('--agy').hooks.events[0].event, 'PreInvocation')
+    assert.equal(doctor('--antigravity').hooks.events[0].event, 'PreInvocation')
+    assert.equal(doctor('--codex').hooks.events[0].event, 'userPromptSubmit')
     execFileSync(process.execPath, ['--input-type=module', '-e',
       "import { main } from './dist/cli/main.mjs'; const previous = process.env.HONGGUO_HOST; await main(['doctor'], " +
       JSON.stringify(entry) + "); if (process.env.HONGGUO_HOST !== previous) process.exit(2)"],

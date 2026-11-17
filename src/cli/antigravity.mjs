@@ -71,6 +71,9 @@ async function assertOwned(path) {
   if (receipt?.owner !== owner) throw Error('Antigravity 中已有非本安装器管理的 codex-hongguo，请先移走该目录。')
   return true
 }
+export function antigravityInstalled({ home = homedir(), configRoot = join(home, '.gemini', 'config') } = {}) {
+  return assertOwned(join(configRoot, 'plugins', 'codex-hongguo'))
+}
 export async function manageAntigravity(action, {
   sourceRoot = projectRoot, home = homedir(), env = process.env, configRoot = join(home, '.gemini', 'config'), node = process.execPath,
   dryRun = false, log = console.log, prepare = ensureFfmpeg, register = registerFfmpegHost,

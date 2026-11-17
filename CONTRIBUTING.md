@@ -47,6 +47,8 @@ node scripts/verify-install.mjs --playback
 
 Antigravity 的普通面板在宿主未传入会话元数据时保持未绑定，必须显式选择会话；推荐 Hook 使用随机回合能力值把卡片绑定到所属聊天，不让模型传入任意会话 ID。Hook 只记录会话 ID、开始步数和随机回合 ID，忽略中间模型调用及 `fullyIdle=false` 的普通 Stop；`USER_CANCELED` 记录中断。重放较早的开始事件不会复活旧回合。恢复、回退对话与其他 Stop Hook 强制继续等宿主行为仍需实机验收。
 
+`setup` 未指定目标时使用终端多选引导，并读取原生 Codex 安装记录与 Antigravity 安装器标记来展示状态；未知状态不阻止用户明确选择。`--codex`、`--agy` / `--antigravity` 跳过引导，可组合用于双端安装；其他命令仍使用各入口的固定默认目标，只支持显式选择单端。无交互终端的测试和安装脚本必须指定目标。多端操作保留各端自己的安装回滚；一端失败后继续尝试另一端，最终返回失败状态，不撤销已成功安装的端。
+
 插件目录也会被 Antigravity CLI / IDE 发现。Hook 仅根据官方 `transcriptPath` 的 App 路径后缀识别来源，不打开或存储 transcript，其他来源保持静默。配置及事件格式参考 [构建插件](https://antigravity.google/docs/build-plugins) 和 [Hooks](https://antigravity.google/docs/hooks)。
 
 Antigravity 2.32.1 本机随包指南及前端确认：宿主标识为 `Antigravity` / `web`，入口使用 `com.google.antigravity/ui` 的 `aux_pane` / `global`；只提供 inline 显示模式，最多 4 个并发应用调用，不发送 teardown。前端对请求排队并优先保存与状态读取；推荐卡本地展开到 760px，普通面板占满侧栏。协议测试不能替代解码后的画面、声音、账号能力开通和自然 PreInvocation/Stop 的桌面验证；`release/verification-antigravity.json` 明确保留这些未验收项。

@@ -31,7 +31,7 @@ test('setup, update and doctor never query Hook authorization and only ask the u
   }
   for (const action of ['setup','update','doctor']) {
     const result = spawnSync(process.execPath, ['--input-type=module','-e',
-      `import {main} from './src/cli/main.mjs';await main(${JSON.stringify([action])})`],
+      `import {main} from './src/cli/main.mjs';await main(${JSON.stringify([action, '--codex'])})`],
     { cwd: resolve('.'), env, encoding: 'utf8', stdio: ['ignore','pipe','ignore'], timeout: 15000 })
     assert.equal(result.status, 0, 'CLI action failed: ' + action)
     assert.equal(existsSync(marker), false, 'CLI must not start an app-server to inspect authorization')
