@@ -47,15 +47,25 @@ Default installation and updates do not require Git. The command checks Node, np
 
 ### Antigravity App (experimental)
 
-The installer supports Windows x64, Windows 11 ARM64, Linux x64/arm64 and macOS x64/arm64. It requires an Antigravity desktop account with **MCP Apps** enabled (adapted against 2.32.1) and a matching Node.js >=22.16. Codex CLI is not required. This adapter has not shipped to npm `latest` yet; install the current branch from source:
+The installer supports Windows x64, Windows 11 ARM64, Linux x64/arm64 and macOS x64/arm64. It requires an Antigravity desktop account with **MCP Apps** enabled (adapted against 2.32.1) and a matching Node.js >=22.16. Codex CLI is not required. Antigravity support is available on the npm `beta` channel.
+
+Install on macOS or Linux:
 
 ```sh
-npm ci
-npm run build
-node bin/codex-hongguo.mjs setup --host antigravity
+npx "@kyun.si/codex-hongguo@beta" setup --host antigravity
 ```
 
-Antigravity discovers its manifest, skills and entry points under `.gemini/config/plugins/codex-hongguo/` in your home directory. Use `update --host antigravity` or `uninstall --host antigravity` through the same CLI entrypoint. When using both hosts, close both players before updating. Restart hongguo in Antigravity's MCP Servers settings and open a new Codex chat afterward.
+Update with `npx "@kyun.si/codex-hongguo@beta" update --host antigravity`.
+
+Install in Windows PowerShell:
+
+```powershell
+npx.cmd "@kyun.si/codex-hongguo@beta" setup --host antigravity
+```
+
+Update with `npx.cmd "@kyun.si/codex-hongguo@beta" update --host antigravity`.
+
+Antigravity discovers its manifest, skills and entry points under `.gemini/config/plugins/codex-hongguo/` in your home directory. To remove it, use `uninstall --host antigravity` through the same CLI entrypoint. When using both hosts, close both players before updating. Restart hongguo in Antigravity's MCP Servers settings and open a new Codex chat afterward.
 
 Open the player from the conversation's **＋ → Extensions → 红果短剧**, or from the global sidebar. Suggestions expand in place when clicked. Recommendation players bind to their originating chat; a directly opened panel without host conversation metadata offers **Choose session**, using the conversation ID suffix and timestamp. Unbound panels support manual viewing.
 
