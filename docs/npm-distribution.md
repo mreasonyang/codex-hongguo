@@ -122,6 +122,8 @@ git push origin v0.0.34
 
 日常 `ci.yml` 也使用一次构建、三平台共享产物，但不发布。验证完整发布链路时，在 GitHub Actions 中手动运行 Publish，保持 `publish=false`，可留空 `tag` 验证所选提交。该预演会生成合并回执和发布计划，跳过 npm 上传、索引提交和 GitHub Release 创建。
 
+macOS 发布验收固定使用 `macos-26-intel`（x64）。`macos-latest` 当前使用 ARM64；其托管池容量不足时，任务可能在执行任何步骤前因无法取得 runner 而取消。任务的 `timeout-minutes` 控制执行时限，调大它不能修复 runner 分配失败。此类失败可先重跑失败任务；持续失败时，可从包含 runner 配置修复的分支手动运行 Publish，选择原有版本标签。发布源码仍由该标签固定，重新生成的候选包仍需通过三平台验收。Intel 回执不代表 Apple Silicon 的 CI 验收，后者需单独记录。参见 [GitHub runner 规格](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)和[任务超时配置](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idtimeout-minutes)。
+
 失败后优先在同一工作流中仅重跑失败的 job，复用原有验收包；也可以手动选择既有标签并明确勾选 `publish=true`。若 npm 已存在该版本，只有完整性完全一致才可继续收尾；若重新构建的内容不同，流程失败，不覆盖、不推进索引。不得移动已经发布的标签来替换内容。
 
 npm 上传成功与公开元数据可见可能相隔数分钟。发布脚本最多等待十分钟回读版本、完整性和渠道指向；若仍超时，先检查 registry，再重跑原工作流的失败 job。仅因回读延迟不需要递增版本或再次上传。
