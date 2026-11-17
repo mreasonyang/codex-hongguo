@@ -42,14 +42,17 @@ async function writeAdapter(root, programHome, programRoot, node) {
   for (const [event, mode] of [['PreInvocation', 'start'], ['Stop', 'stop']]) {
     const handler = hooks.hongguo[event][0]
     if (process.platform === 'win32') {
-      // Antigravity invokes cmd.exe. Read the pinned Unicode Node path from the
-      // MCP manifest so cmd never expands characters from the installation path.
+      // Keep the Node path out of cmd.exe's parser and pass the native stdio
+      // handles directly to Node so PowerShell cannot re-encode Hook JSON.
       const script = [
         "$ErrorActionPreference = 'Stop'",
-        '$OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)',
-        "$node = (Get-Content -Raw -Encoding UTF8 -LiteralPath './mcp_config.json' | ConvertFrom-Json).mcpServers.hongguo.command",
-        "([IO.StreamReader]::new([Console]::OpenStandardInput(), [Text.Encoding]::UTF8)).ReadToEnd() | & $node './" + hook + "' " + mode,
-        'exit $LASTEXITCODE',
+        '$launch = [Diagnostics.ProcessStartInfo]::new()',
+        "$launch.FileName = (ConvertFrom-Json -InputObject ([IO.File]::ReadAllText('mcp_config.json'))).mcpServers.hongguo.command",
+        "$launch.Arguments = './" + hook + " " + mode + "'",
+        '$launch.UseShellExecute = $false',
+        '$child = [Diagnostics.Process]::Start($launch)',
+        '$child.WaitForExit()',
+        'exit $child.ExitCode',
       ].join('; ')
       handler.command = 'powershell.exe -NoLogo -NoProfile -NonInteractive -Command "' + script + '"'
       handler.timeout = 10

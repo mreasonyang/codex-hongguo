@@ -84,7 +84,10 @@ try {
   const input = { conversationId: 'verification-chat', initialNumSteps: 0, invocationNum: 0,
     transcriptPath: '/test/.gemini/antigravity/brain/verification-chat/.system_generated/logs/transcript.jsonl' }
   const start = hook('start', input)
-  const turnId = /turnId "([A-Za-z0-9_-]+)"/.exec(start.injectSteps[0].systemMessage.systemMessage)[1]
+  const message = start.injectSteps?.[0]?.systemMessage?.systemMessage
+  assert.equal(typeof message, 'string', 'The installed PreInvocation hook must respond to the synthetic start event')
+  const turnId = /turnId "([A-Za-z0-9_-]+)"/.exec(message)?.[1]
+  assert.ok(turnId, 'The PreInvocation response must bind the waiting card to this turn')
   assert.deepEqual(hook('start', { ...input, invocationNum: 1 }), {})
   const waiting = await client.callTool({ name: 'show_waiting_picks', arguments: { turnId } })
   assert.equal(waiting.structuredContent.shown, true)

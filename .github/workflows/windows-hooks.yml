@@ -34,6 +34,6 @@ jobs:
       - name: Package native launchers and plugin
         run: npm run package
       - name: Verify hooks through Windows PowerShell 5.1 and 7
-        run: node --test --test-timeout=120000 test/windows-hooks-shell.test.mjs
+        run: node --test --test-timeout=120000 test/windows-hooks-shell.test.mjs test/antigravity-install.test.mjs
       - name: Verify Antigravity installation, native hooks and playback
         run: npm run verify:antigravity

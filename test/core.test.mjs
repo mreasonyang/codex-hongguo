@@ -19,6 +19,8 @@ import { PanelMedia } from '../src/server/panel-media.mjs'
 import { projectRoot } from '../src/server/paths.mjs'
 import { ensureFfmpeg } from '../src/runtime/ffmpeg-runtime.mjs'
 await ensureFfmpeg()
+const hookDefinitions = JSON.parse(readFileSync(join(projectRoot, 'hooks/hooks.json'), 'utf8')).hooks
+const hookTimeout = event => hookDefinitions[event][0].hooks[0].timeout * 1000
 const avcFixture = join(projectRoot, 'test/fixtures/avc-aac.mp4')
 
 test('the first snapshot, running turns and repeated terminal snapshots leave Play alone', () => {
@@ -145,7 +147,7 @@ test('only a fresh valid submit produces private widget guidance and no prompt c
       input: JSON.stringify(input),
       encoding: 'utf8',
       env: { ...env(dir), CODEX_INTERNAL_ORIGINATOR_OVERRIDE: 'codex_work_desktop' },
-      timeout: 1500,
+      timeout: hookTimeout(input?.hook_event_name ?? 'Stop'),
     })
     assert.equal(r.status, 0)
     const output = JSON.parse(r.stdout)
@@ -169,7 +171,7 @@ test('hooks stay silent without touching storage outside the official desktop ru
   for (const originator of ['t3_code', 'paseo', '', 'Codex Desktop Other']) {
     const result = spawnSync(process.execPath, ['--no-warnings', script], {
       input: JSON.stringify({ session_id: 'synthetic-host', turn_id: 'one', hook_event_name: 'UserPromptSubmit' }),
-      env: { ...env(data), CODEX_INTERNAL_ORIGINATOR_OVERRIDE: originator }, encoding: 'utf8', timeout: 1500,
+      env: { ...env(data), CODEX_INTERNAL_ORIGINATOR_OVERRIDE: originator }, encoding: 'utf8', timeout: hookTimeout('UserPromptSubmit'),
     })
     assert.equal(result.status, 0)
     assert.deepEqual(JSON.parse(result.stdout), {})
@@ -178,7 +180,7 @@ test('hooks stay silent without touching storage outside the official desktop ru
   for (const originator of ['Codex Desktop', 'codex_work_desktop']) {
     const result = spawnSync(process.execPath, ['--no-warnings', script], {
       input: JSON.stringify({ session_id: 'synthetic-host', turn_id: originator.replaceAll(' ', '-'), hook_event_name: 'UserPromptSubmit' }),
-      env: { ...env(data), CODEX_INTERNAL_ORIGINATOR_OVERRIDE: originator }, encoding: 'utf8', timeout: 1500,
+      env: { ...env(data), CODEX_INTERNAL_ORIGINATOR_OVERRIDE: originator }, encoding: 'utf8', timeout: hookTimeout('UserPromptSubmit'),
     })
     assert.equal(result.status, 0)
     assert.match(JSON.parse(result.stdout).hookSpecificOutput.additionalContext, /show_waiting_picks/)

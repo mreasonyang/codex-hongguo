@@ -1,8 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, cp, writeFile, readFile, rm, readdir, symlink } from 'node:fs/promises'
+import { mkdtemp, mkdir, cp, copyFile, writeFile, readFile, rm, readdir, symlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { manageAntigravity, quoteCommand } from '../src/cli/antigravity.mjs'
 import { antigravity } from '../src/runtime/host.mjs'
@@ -41,9 +42,7 @@ test('Antigravity install and update use absolute Node paths without Codex and p
   for (const path of ['dist/ui', 'dist/vendor', 'provider-kit'])
     await assert.rejects(readdir(join(f.destination, path)), { code: 'ENOENT' })
   const hooks = JSON.parse(await readFile(join(f.destination, 'hooks.json'), 'utf8'))
-  if (process.platform === 'win32') {
-    assert.match(hooks.hongguo.Stop[0].command, /mcp_config\.json.*antigravity\.mjs' stop/)
-  } else {
+  if (process.platform !== 'win32') {
     assert.equal(hooks.hongguo.Stop[0].command, quoteCommand(process.execPath) + ' ./dist/hooks/antigravity.mjs stop')
   }
   await writeFile(join(f.sourceRoot, 'NOTICE'), 'updated')
@@ -52,6 +51,40 @@ test('Antigravity install and update use absolute Node paths without Codex and p
   assert.equal(await readFile(data, 'utf8'), 'existing-progress')
   assert.deepEqual((await readdir(join(f.configRoot, 'plugins'))).sort(), ['codex-hongguo', 'other'])
   assert.deepEqual((await readdir(f.configRoot)).sort(), ['.hongguo-install.sqlite', 'plugins'])
+})
+test('Windows manifest hooks use the pinned Node path, raw stdin and the correct event argument', { skip: process.platform !== 'win32' }, async t => {
+  const f = await setup(t), node = join(f.root, "中文 %USERNAME% !test! & ' node.exe")
+  await copyFile(process.execPath, node)
+  const options = { ...f.options, node }
+  const entry = 'dist/hooks/antigravity.mjs'
+  const source = join(f.sourceRoot, entry)
+  const env = { ...process.env, ...options.env, HONGGUO_ANTIGRAVITY_DATA_DIR: join(f.root, 'antigravity-data'),
+    HONGGUO_DATA_DIR: join(f.root, 'codex-data') }
+  const run = (file, args, input, windowsVerbatimArguments = false) => JSON.parse(execFileSync(file, args, {
+    cwd: f.destination, env, input, encoding: 'utf8', timeout: 15000, windowsVerbatimArguments,
+  }))
+  await writeFile(source, `import { createHash } from 'node:crypto'
+const hash = createHash('sha256')
+let bytes = 0
+for await (const chunk of process.stdin) { bytes += chunk.length; hash.update(chunk) }
+console.log(JSON.stringify({ node: process.execPath, args: process.argv.slice(2), bytes, sha256: hash.digest('hex') }))
+`)
+  await manageAntigravity('setup', options)
+  const hooks = JSON.parse(await readFile(join(f.destination, 'hooks.json'), 'utf8')).hongguo
+  const shellHook = (event, input) => run(process.env.ComSpec || 'cmd.exe',
+    ['/d', '/s', '/v:off', '/c', hooks[event][0].command], input, true)
+  const sample = Buffer.from(JSON.stringify({ prompt: "中文 %USERNAME% ! & | ^ $ \' \" 换行\n" }))
+  for (const [event, mode] of [['PreInvocation', 'start'], ['Stop', 'stop']]) {
+    assert.deepEqual(shellHook(event, sample), { node, args: [mode], bytes: sample.length,
+      sha256: createHash('sha256').update(sample).digest('hex') })
+  }
+
+  await copyFile(entry, source)
+  await manageAntigravity('update', options)
+  const start = conversationId => JSON.stringify({ invocationNum: 0, initialNumSteps: 0, conversationId,
+    transcriptPath: 'C:/test/antigravity/brain/' + conversationId + '/.system_generated/logs/transcript.jsonl' })
+  assert.ok(run(node, [entry, 'start'], start('direct-test')).injectSteps?.length, 'direct Node hook must recognize PreInvocation')
+  assert.ok(shellHook('PreInvocation', start('shell-test')).injectSteps?.length, 'cmd hook must recognize PreInvocation')
 })
 test('a failed Antigravity update leaves the working installation in place', async t => {
   const f = await setup(t)

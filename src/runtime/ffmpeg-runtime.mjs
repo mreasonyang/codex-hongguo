@@ -20,15 +20,16 @@ const lockStaleMs = 10 * 60_000
 export const ffmpegPreparationTimeoutMs = lockWaitMs + downloadTimeoutMs + 2 * 60_000
 const runtimeOwner = '@kyun.si/codex-hongguo'
 const failureCodes = new Set(['prepare', 'download', 'download-url', 'download-http', 'download-network', 'download-timeout',
-  'archive-size', 'archive-hash', 'extract', 'binary-hash', 'probe', 'publish'])
+  'archive-size', 'archive-hash', 'extract', 'binary-hash', 'probe', 'probe-timeout', 'probe-start', 'publish'])
 const transientNetwork = new Set(['UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT',
   'UND_ERR_SOCKET', 'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH'])
 const transientHttp = new Set([408, 429, 500, 502, 503, 504])
-const failure = (code = 'prepare', httpStatus) => Object.assign(
+const failure = (code = 'prepare', httpStatus, exitStatus) => Object.assign(
   Error(code === 'download-timeout'
     ? '播放组件自动准备失败：下载已超过30分钟，请检查网络后重试安装。'
     : '播放组件自动准备失败，请检查网络和缓存目录权限后重试安装。'),
-  { code, ...(Number.isInteger(httpStatus) && httpStatus >= 400 && httpStatus <= 599 ? { httpStatus } : {}) },
+  { code, ...(Number.isInteger(httpStatus) && httpStatus >= 400 && httpStatus <= 599 ? { httpStatus } : {}),
+    ...(code === 'probe' && Number.isInteger(exitStatus) ? { exitStatus } : {}) },
 )
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -80,8 +81,14 @@ async function digest(path) {
   for await (const bytes of createReadStream(path)) hash.update(bytes)
   return hash.digest('hex')
 }
-function probe(path, options) {
-  return options.probe ? options.probe(path) : spawnSync(path, ['-version'], { stdio: 'ignore', timeout: 5000, windowsHide: true }).status === 0
+function probe(path, options, staged = false) {
+  // Windows can scan the newly extracted executable on its first launch.
+  const timeout = staged && options.platform === 'win32' ? 30_000 : 5_000
+  if (options.probe) return options.probe(path, timeout)
+  const result = spawnSync(path, ['-version'], { stdio: 'ignore', timeout, windowsHide: true })
+  if (result.error) throw failure(result.error.code === 'ETIMEDOUT' ? 'probe-timeout' : 'probe-start')
+  if (result.status !== 0) throw failure('probe', undefined, result.status)
+  return true
 }
 function matchesArtifact(receipt, artifact) {
   // Repacked archives can retain the original receipt when the pinned binary is identical.
@@ -347,7 +354,7 @@ async function stageLegacy(config, output) {
       // Verify the staged inode before executing it, even if the old receipt matches.
       const file = await lstat(output)
       if (file.isFile() && (!artifact.binaryBytes || file.size === artifact.binaryBytes) &&
-        await digest(output) === artifact.binarySha256 && probe(output, config)) return contents
+        await digest(output) === artifact.binarySha256 && probe(output, config, true)) return contents
     } catch { /* Missing or unusable legacy entries are not a reason to reject a fresh install. */ }
     await rm(output, { force: true })
   }
@@ -376,7 +383,9 @@ async function install(config) {
   }, 30_000)
   heartbeat.unref?.()
   const paths = config.platform === 'win32' ? win32 : posix
-  const temporary = paths.basename(target) + '.' + randomUUID(), archive = paths.join(directory, temporary + '.archive'), output = paths.join(directory, temporary + '.part')
+  const temporary = paths.basename(target) + '.' + randomUUID()
+  const archive = paths.join(directory, temporary + '.archive')
+  const output = paths.join(directory, temporary + (config.platform === 'win32' ? '.part.exe' : '.part'))
   let stage = 'download'
   try {
     if (await ready(config)) return target
@@ -388,7 +397,7 @@ async function install(config) {
       const binarySha256 = await digest(output)
       if (artifact.binarySha256 && binarySha256 !== artifact.binarySha256) throw failure('binary-hash')
       await chmod(output, 0o755)
-      if (!probe(output, config)) throw failure('probe')
+      if (!probe(output, config, true)) throw failure('probe')
       receipt = JSON.stringify({ owner: runtimeOwner, schema: 1, archiveSha256: artifact.archiveSha256,
         binarySha256, binaryBytes: (await stat(output)).size, version: artifact.version }) + '\n'
     }
@@ -398,7 +407,7 @@ async function install(config) {
     await writeFile(target + '.json', receipt, { mode: 0o600 })
     verified.set(target, signature(config))
     return target
-  } catch (error) { throw failure(failureCodes.has(error?.code) && error.code !== 'prepare' ? error.code : stage, error?.httpStatus) }
+  } catch (error) { throw failure(failureCodes.has(error?.code) && error.code !== 'prepare' ? error.code : stage, error?.httpStatus, error?.exitStatus) }
   finally {
     clearInterval(heartbeat)
     await refreshing

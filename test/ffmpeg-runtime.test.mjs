@@ -429,6 +429,33 @@ test('a long-running installer refreshes its lock so older versions cannot treat
   await assert.rejects(lstat(lock), { code: 'ENOENT' })
 })
 
+test('staged Windows probes allow a longer first launch and published binaries use the normal check', async t => {
+  const f = await fixture(t), probes = []
+  const options = { ...f.options, probe(path, timeout) { probes.push({ path, timeout }); return true } }
+  const target = await ensureFfmpeg({ ...options, fetchImpl: async () => new Response(f.archive) })
+  const fresh = await import('../src/runtime/ffmpeg-runtime.mjs?probe-windows-first-launch')
+  assert.equal(await fresh.checkInstalledFfmpeg(options), true)
+  assert.equal(probes.length, 2)
+  assert.match(probes[0].path, process.platform === 'win32' ? /\.part\.exe$/ : /\.part$/)
+  assert.equal(probes[0].timeout, process.platform === 'win32' ? 30_000 : 5_000)
+  assert.deepEqual(probes[1], { path: target, timeout: 5_000 })
+})
+
+test('native probe failures retain safe status and never publish an unstartable component', async t => {
+  const f = await fixture(t)
+  const { archive, options } = compactOptions(f, Buffer.from('#!/bin/sh\necho SYNTHETIC_PRIVATE_PROBE_DETAIL >&2\nexit 23\n'))
+  await assert.rejects(ensureFfmpeg({ ...options, probe: undefined, fetchImpl: async () => new Response(archive) }), error => {
+    if (process.platform === 'win32') assert.equal(error.code, 'probe-start')
+    else {
+      assert.equal(error.code, 'probe')
+      assert.equal(error.exitStatus, 23)
+    }
+    assert.doesNotMatch(error.message, /SYNTHETIC_PRIVATE_PROBE_DETAIL/)
+    return true
+  })
+  await assert.rejects(lstat(ffmpegPath(options)), { code: 'ENOENT' })
+})
+
 test('permanent HTTP errors and integrity failures do not retry and only expose fixed diagnostic metadata', async t => {
   for (const reason of ['http', 'hash', 'probe']) await t.test(reason, async t => {
     const f = await fixture(t)
