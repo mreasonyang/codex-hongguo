@@ -102,10 +102,12 @@ test('host status detection follows owned Antigravity receipts and native Codex 
   await writeFile(entry, 'console.log(JSON.stringify({installed:process.env.TEST_CODEX_INSTALLED ? [{pluginId:"codex-hongguo@hongguo-local"}] : []}))')
   const command = join(root, process.platform === 'win32' ? 'codex.cmd' : 'codex')
   const quote = value => "'" + value.replaceAll("'", "'\\''") + "'"
+  // Keep the batch file ASCII, as npm does. Expand Unicode paths at runtime
+  // instead of making them depend on cmd.exe's active script code page.
   await writeFile(command, process.platform === 'win32'
-    ? `@echo off\r\n"${process.execPath}" "${entry}" %*\r\n`
+    ? '@echo off\r\n"%HONGGUO_HOST_SELECTION_TEST_NODE%" "%~dp0codex.mjs" %*\r\n'
     : `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(entry)} "$@"\n`, { mode: 0o755 })
-  const env = { ...process.env, HONGGUO_CODEX: command }
+  const env = { ...process.env, HONGGUO_CODEX: command, HONGGUO_HOST_SELECTION_TEST_NODE: process.execPath }
   const before = await readdir(root)
   assert.deepEqual(await hostInstallations({ env, home: root }), installations(false, false))
   assert.deepEqual(await readdir(root), before)
