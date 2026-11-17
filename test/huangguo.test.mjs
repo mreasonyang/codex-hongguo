@@ -14,6 +14,7 @@ import { qualify } from '../src/server/sources/ids.mjs'
 import { Readable } from 'node:stream'
 import { ensureFfmpeg } from '../src/runtime/ffmpeg-runtime.mjs'
 import { runFfmpeg } from '../src/server/media.mjs'
+import { responseBytes } from '../src/server/sources/network.mjs'
 
 const row = { id: 'series_1', title: 'Fixture series', cover: 'https://pic.drleao.cn/cover.jpg', total_episodes: 2 }
 const detail = { ...row, episodes: [{ ep_num: 2, title: 'Second' }, { ep_num: 1, title: 'First' }] }
@@ -100,6 +101,58 @@ test('playback returns a host-only HLS descriptor with a matching Referer and fr
   await assert.rejects(f.provider.resolvePlayback('series_1:999'), /片源/)
   const bad = fixture(t, path => path.endsWith('/playback') ? { streams: { main: 'https://127.0.0.1/private.m3u8' } } : undefined)
   await assert.rejects(bad.provider.resolvePlayback('series_1:1'), /域名/)
+})
+
+test('new Huangguo CDN hosts serve manifests, segments, keys and covers through the bounded host transport', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'huangguo-cdn-')), requested = []
+  const manifestURL = 'https://yd-lphu-hls.tjyyjk.cn/fixture.m3u8'
+  const segmentURL = 'https://tp1.qnlycc.cn/part.ts', keyURL = 'https://tp1.qnlycc.cn/key'
+  const coverURL = 'https://pic.qnlycc.cn/cover.png'
+  const cover = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j7WQAAAAASUVORK5CYII=', 'base64')
+  const manifest = '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="' + keyURL + '"\n#EXTINF:5,\n' + segmentURL + '\n#EXT-X-ENDLIST\n'
+  let playbackURL = manifestURL, redirect = false
+  t.mock.method(globalThis, 'fetch', async (input, options = {}) => {
+    const url = new URL(input)
+    requested.push(url.href)
+    if (url.pathname === '/api/edge/request') {
+      const { path } = JSON.parse(options.body)
+      return Response.json({ status: 1, data: path.endsWith('/playback')
+        ? { manifest_method: 'GET', streams: { main: playbackURL } }
+        : { ...detail, cover: coverURL } })
+    }
+    const headers = new Headers(options.headers)
+    assert.equal(headers.get('cookie'), null)
+    assert.equal(headers.get('authorization'), null)
+    if (url.href === coverURL) return new Response(cover)
+    assert.match(headers.get('referer'), /^https:\/\/(huangguoai\.io|0624\.gitiecgad\.cc)\/video\/series_1\/$/)
+    if (url.href === manifestURL) return redirect
+      ? new Response(null, { status: 302, headers: { location: 'https://qnlycc.cn.evil.invalid/private' } })
+      : new Response(manifest)
+    if (url.href === segmentURL) return new Response('synthetic segment')
+    if (url.href === keyURL) return new Response(Buffer.alloc(16))
+    throw Error('Unexpected fixture destination')
+  })
+  const registry = new ProviderRegistry(root, { directory: '', builtins: builtins.filter(p => p.manifest.id === 'huangguo') })
+  t.after(async () => { await registry.dispose(); await rm(root, { recursive: true, force: true }) })
+  await registry.ready
+  const provider = registry.get('huangguo'), playback = await provider.resolvePlayback('series_1:1')
+  assert.equal(playback.candidates[0].url, manifestURL)
+  for (const [url, expected] of [[manifestURL, Buffer.from(manifest)], [segmentURL, Buffer.from('synthetic segment')], [keyURL, Buffer.alloc(16)]]) {
+    const reply = await playback.fetchMedia(url, 1024, 1000)
+    assert.deepEqual(await responseBytes(reply.body, 1024), expected)
+  }
+  assert.deepEqual((await provider.getCover('series_1')).bytes, cover)
+  for (const domain of ['tjyyjk.cn', 'qnlycc.cn']) assert.equal(huangguoManifest.network.api.includes(domain), false)
+  for (const url of ['https://qnlycc.cn.evil.invalid/x', 'https://eviltjyyjk.cn/x', 'https://127.0.0.1/x']) {
+    const before = requested.length
+    await assert.rejects(playback.fetchMedia(url, 1024, 1000), error => error.code === 'HOST_NOT_ALLOWED')
+    assert.equal(requested.length, before)
+    playbackURL = url
+    await assert.rejects(provider.resolvePlayback('series_1:1'), error => error.code === 'HOST_NOT_ALLOWED')
+  }
+  redirect = true
+  await assert.rejects(playback.fetchMedia(manifestURL, 1024, 1000), error => error.code === 'HOST_NOT_ALLOWED')
+  assert.equal(requested.some(url => new URL(url).hostname === 'qnlycc.cn.evil.invalid'), false)
 })
 
 test('a rejected native catalog does not gate hot browsing, search, detail or fresh playback', async t => {

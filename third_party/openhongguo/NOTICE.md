@@ -6,16 +6,16 @@ archive is the official GitHub source archive, verified by its SHA-256 hash.
 It contains the complete preferred source and upstream tests.
 
 Upstream project: https://github.com/beilunyang/openhongguo
-Revision: 4bc88830eba186c13caf36cc915ace38785e2f8e
-Merged playback fix: https://github.com/beilunyang/openhongguo/pull/7
+Revision: 999f57b141211f43c8c5234386733fb745260e67
+Merged playback fix: https://github.com/beilunyang/openhongguo/pull/13
 License: Apache-2.0 (LICENSE). The Go runtime retains its BSD license (GO_LICENSE).
 
-The upstream commit includes the Argus/Ladon playback signer. No local SDK
-patches are applied. The upstream npm release is still 0.2.0 at the time of
-this integration and does not include that merged fix. The upstream binding's
-package.json is preserved unchanged, including version 0.2.0. source.json and
-the shipped SOURCE.json identify the exact source commit; this is not a new
-upstream npm release.
+The upstream commit includes the V5 playback request, local Medusa/Helios
+signer and encoded media-address parser, with bounded legacy playback fallback.
+No local SDK patches are applied. The upstream binding's package.json is
+preserved unchanged, including version 0.3.0. source.json and the shipped
+SOURCE.json identify the exact merged source commit; the binding version
+alone does not identify this playback fix or a new upstream npm release.
 
 Build: node scripts/build-openhongguo.mjs
 The script downloads the official archive by its fixed commit, verifies its
