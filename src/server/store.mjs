@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { dataRoot } from './paths.mjs'
+import { codex } from '../runtime/host.mjs'
 import { sourceId, seriesPattern, belongsTo, idGlob } from './sources/ids.mjs'
 
 export function validId(value) {
@@ -21,7 +22,9 @@ function rankedTitles(rows) {
   return [...titles.values()]
 }
 export class Store {
-  constructor(root = dataRoot(), memoryOnly = false) {
+  constructor(root, memoryOnly = false, { host = codex } = {}) {
+    root ??= dataRoot({ host })
+    Object.defineProperty(this, 'host', { value: host, enumerable: true })
     if (!memoryOnly) mkdirSync(root, { recursive: true, mode: 0o700 })
     this.persistent = !memoryOnly
     this.root = root

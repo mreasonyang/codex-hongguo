@@ -13,7 +13,7 @@
 
 Watch Hongguo short dramas in the right-hand panel of Codex Desktop, with browsing, search, resume and autoplay next. By default, a new task resumes the selected episode; finishing or interrupting the task pauses playback and saves your position. You can turn off either behavior independently in Settings. The plugin supports local-executor Codex Desktop conversations.
 
-Only the official Codex desktop app is enabled. Third-party clients such as T3 Code and Paseo, and unrecognized hosts, do not receive automatic suggestions or start background player requests.
+Supports the official Codex desktop app, with experimental [Antigravity App support](#antigravity-app-experimental). Third-party clients such as T3 Code and Paseo, and unrecognized hosts, do not receive automatic suggestions or start background player requests. The instructions below default to Codex.
 
 Hongguo, Bilibili and Huangguo (NSFW) are built in. You can also [add your own source](#add-your-own-source) with the `hongguo-provider` skill.
 
@@ -43,7 +43,27 @@ npx.cmd "@kyun.si/codex-hongguo@latest" setup
 
 Keep the package name quoted so PowerShell treats the leading `@` literally. `npx.cmd` invokes the npm command shim directly. See [Windows support](docs/windows-support.md) (Chinese) for details and offline installation.
 
-Default installation and updates do not require Git. The command checks Node, npm and the Codex CLI, prepares the playback component, then uses a local marketplace index to install the plugin from npm. The first installation requires a network connection; later runs reuse the local cache. The installer tells you to review, trust and enable `UserPromptSubmit`, `Stop` and `Interrupt` in Codex **Settings → Hooks**. Then open a new local chat to use the plugin.
+Default installation and updates do not require Git. The command checks Node, npm and the Codex CLI, prepares the playback component, then registers the Codex adapter through a local marketplace. The first installation requires a network connection; later runs reuse the local cache. The installer tells you to review, trust and enable `UserPromptSubmit`, `Stop` and `Interrupt` in Codex **Settings → Hooks**. Then open a new local chat to use the plugin.
+
+### Antigravity App (experimental)
+
+The installer supports Windows x64, Windows 11 ARM64, Linux x64/arm64 and macOS x64/arm64. It requires an Antigravity desktop account with **MCP Apps** enabled (adapted against 2.32.1) and a matching Node.js >=22.16. Codex CLI is not required. This adapter has not shipped to npm `latest` yet; install the current branch from source:
+
+```sh
+npm ci
+npm run build
+node bin/codex-hongguo.mjs setup --host antigravity
+```
+
+Antigravity discovers its manifest, skills and entry points under `.gemini/config/plugins/codex-hongguo/` in your home directory. Use `update --host antigravity` or `uninstall --host antigravity` through the same CLI entrypoint. When using both hosts, close both players before updating. Restart hongguo in Antigravity's MCP Servers settings and open a new Codex chat afterward.
+
+Open the player from the conversation's **＋ → Extensions → 红果短剧**, or from the global sidebar. Suggestions expand in place when clicked. Recommendation players bind to their originating chat; a directly opened panel without host conversation metadata offers **Choose session**, using the conversation ID suffix and timestamp. Unbound panels support manual viewing.
+
+Review and enable `PreInvocation` and `Stop` in **Settings → Customizations → Hooks**. The first model invocation starts a turn; subsequent model calls do not repeatedly resume a manually paused video. Playback pauses when the task becomes fully idle or is cancelled, with independent autoplay and auto-pause switches. Hooks do not store prompts or responses.
+
+Codex and Antigravity under the same OS user share one player, server, SDK, WASM module and managed FFmpeg. Installing the second host reuses the program. Updating from either host selects the new build for both on their next launch. Antigravity stores its own viewing data in `~/Library/Application Support/AntigravityHongguo/` on macOS, `%LOCALAPPDATA%\AntigravityHongguo\` on Windows, and `${XDG_DATA_HOME:-~/.local/share}/antigravity-hongguo/` on Linux. Updates preserve data; uninstall cleans this host's data. Codex history and Providers are not imported automatically.
+
+Protocol and isolated installation tests are available; **live App video, audio and natural task events still require verification**. If the entrypoint is missing or the host reports `MCP Apps support is not enabled`, check sign-in and account availability. Antigravity does not send a view-close notification, so playback saves approximately once per second; abrupt closure may lose the last pending save.
 
 ### Beta testing channel
 
@@ -143,7 +163,7 @@ Uninstall with:
 npx "@kyun.si/codex-hongguo@latest" uninstall
 ```
 
-Uninstalling deletes the plugin's playback components, viewing progress, settings, all video caches and device profiles, including old components and partial downloads. System FFmpeg installations and external executables are kept. Open a new chat afterward. To disable the plugin temporarily while keeping data, use Codex plugin settings.
+Uninstall removes viewing progress, settings, video caches and device profiles for that app. Uninstalling the last host removes the shared program, managed FFmpeg builds and partial downloads. Externally configured FFmpeg executables are kept. Open a new chat afterward. To disable the plugin temporarily while keeping data, use Codex plugin settings.
 
 The default user data directories below are removed automatically during uninstall:
 
@@ -159,7 +179,7 @@ Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn s
 
 | Area | Behavior & Scope |
 | --- | --- |
-| Host scope | Supports only Codex Desktop conversations running on the local executor; does not support cloud/remote executors or other host applications. |
+| Host scope | Local Codex Desktop conversations and experimental Antigravity App MCP Apps; cloud/remote executors are not supported. See the Antigravity section for differences and verification limits. |
 | Content source & streams | Includes Hongguo, Bilibili and Huangguo (NSFW). Huangguo requires confirmation on every entry and streams compatible H.264 HLS segments on demand using anonymous access. Bilibili supports QR sign-in, account management, and sign-out in Settings (**Source accounts**) or directly from login/preview playback prompts. Hover over the source icon to switch sources (NSFW sources require confirmation), then browse recommendations or search by series name; ss/ep links remain supported. Standard AVC/AAC tracks play and seek on demand without downloading the whole episode first. Previews and DRM are rejected. See [Providers](docs/providers.md). |
 | Recommendations & search | Catalog browsing and search rely on the anonymous upstream SDK; the home view prioritizes unwatched shows in batches of up to 12 (recommendations and episode pages share a persistent 15-minute cache across chats, serve stale data while refreshing, and back off after failures) and falls back to configurable search keywords when recommendations are sparse. |
 | Anonymous rate-limit recovery | When an anonymous device is rejected or streams come back empty, the SDK performs bounded retries and device resets before surfacing the failure reason with a retry action. |

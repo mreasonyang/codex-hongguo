@@ -7,6 +7,7 @@ import { packageFile, readPackage } from '../server/providers/package.mjs'
 import { checkInstalledFfmpeg } from '../runtime/ffmpeg-runtime.mjs'
 import { prepareCandidate, runFfmpeg } from '../server/media.mjs'
 import { errorCodes, providerError } from '../../provider-kit/sdk/index.mjs'
+import { codex } from '../runtime/host.mjs'
 
 export const stages = ['manifest', 'load', 'catalog', 'search', 'seriesPage2', 'detail', 'cover', 'episodes',
   'episodePage2', 'emptyResult', 'cancellation', 'resolve', 'runtime', 'media', 'decode', 'audio']
@@ -15,7 +16,7 @@ const offline = () => { throw providerError('OFFLINE') }
 const sampleStages = ['detail', 'cover', 'episodes', 'episodePage2', 'resolve']
 const recoverable = new Set(['NETWORK', 'TIMEOUT', 'NOT_FOUND', 'CONTENT_UNAVAILABLE', 'NO_VIDEO', 'UNSUPPORTED_CODEC', 'MEDIA_EXPIRED'])
 
-export async function checkProvider({ directory, root, action, query }, report) {
+export async function checkProvider({ directory, root, action, query, host = codex }, report) {
   let stage, remaining = byteBudget, fixture = {}, deadline
   let failedChecks = false
   const failedStages = new Set()
@@ -177,7 +178,7 @@ export async function checkProvider({ directory, root, action, query }, report) 
     if (action === 'test') return true
 
     start('runtime')
-    if (!await checkInstalledFfmpeg()) throw providerError('RUNTIME_UNAVAILABLE')
+    if (!await checkInstalledFfmpeg({ host })) throw providerError('RUNTIME_UNAVAILABLE')
     passed()
     start('media')
     const fetchMedia = budgetMedia(playback.fetchMedia || registry.fetchers.get(id), signal)
@@ -186,7 +187,7 @@ export async function checkProvider({ directory, root, action, query }, report) 
     for (const candidate of playback.candidates) {
       try {
         const convert = async (args, input = null, capture = false, cwd) => {
-          try { return await runFfmpeg(args, input, capture, cwd, { signal }) }
+          try { return await runFfmpeg(args, input, capture, cwd, { signal, host }) }
           catch { throw providerError(signal.aborted ? 'TIMEOUT' : 'MEDIA_FORMAT') }
         }
         const firstHlsSegment = candidate.kind === 'hls'
@@ -205,7 +206,7 @@ export async function checkProvider({ directory, root, action, query }, report) 
     start('decode')
     // Frame hashes require actual decoded samples from both tracks.
     const frames = await runFfmpeg(['-protocol_whitelist', 'file', '-f', 'mov', '-i', output, '-t', '1',
-      '-map', '0:v:0', '-map', '0:a:0?', '-f', 'framehash', 'pipe:1'], null, true, undefined, { signal })
+      '-map', '0:v:0', '-map', '0:a:0?', '-f', 'framehash', 'pipe:1'], null, true, undefined, { signal, host })
     const hashes = frames.toString()
     if (!/^0,\s*-?\d+/m.test(hashes)) throw providerError('DECODE_FAILED')
     passed()

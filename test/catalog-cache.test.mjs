@@ -7,6 +7,7 @@ import { fork } from 'node:child_process'
 import { once } from 'node:events'
 import { Store } from '../src/server/store.mjs'
 import { Catalog } from '../src/server/catalog.mjs'
+import { Service } from '../src/server/service.mjs'
 import { SharedCatalogCache, catalogTtl } from '../src/server/catalog-cache.mjs'
 import { stopChild } from '../src/runtime/executables.mjs'
 
@@ -147,10 +148,53 @@ test('a cold abandoned lease can be recovered and persistent catalog metadata st
   assert.equal(store.catalogCache('page:0'), null)
 })
 
+test('a cold first episode selection waits for local FFmpeg verification and grants playback before registration finishes', { timeout: 5000 }, async t => {
+  const { store } = fixture(t)
+  const verification = Promise.withResolvers(), registration = Promise.withResolvers(), listed = Promise.withResolvers()
+  let checks = 0, registrations = 0
+  const catalog = new Catalog(store, {
+    checkRuntime: () => { checks++; return verification.promise },
+    prepareRuntime: () => { registrations++; return registration.promise },
+  })
+  catalog.ffmpeg = false
+  t.mock.method(catalog, 'loadEpisodes', async () => {
+    listed.resolve()
+    return { items: [{ id: 'hg-1', playable: true }], cursor: null }
+  })
+  const service = new Service(store, catalog), scope = service.panel(service.open({ threadId: 'cold' }).panel)
+  const page = service.call(scope, 'get_episodes', { seriesId: 'hg-8' })
+  await listed.promise
+  assert.equal(registrations, 0, 'registration must reuse the result of the initial integrity check')
+  verification.resolve(true)
+  assert.equal((await page).items[0].playable, true)
+  assert.equal(checks, 1)
+  assert.equal(registrations, 1)
+  t.mock.method(catalog, 'prepare', () => ({ status: 'preparing' }))
+  assert.equal((await service.call(scope, 'prepare_playback', { episodeId: 'hg-1' })).status, 'preparing')
+  registration.resolve()
+  await catalog.preparingRuntime
+})
+
+test('progressive episodes bypass a pending local check and other sources return without waiting for a missing FFmpeg download', { timeout: 5000 }, async t => {
+  const { store } = fixture(t)
+  const verification = Promise.withResolvers(), download = Promise.withResolvers()
+  const catalog = new Catalog(store, { checkRuntime: () => verification.promise, prepareRuntime: () => download.promise })
+  catalog.ffmpeg = false
+  t.mock.method(catalog, 'loadEpisodes', async () => ({ items: [{ id: 'hg-1', playable: true }], cursor: null }))
+  const capability = t.mock.method(catalog.sources, 'capability', () => true)
+  assert.equal((await catalog.episodes({ seriesId: 'hg-8' })).items[0].playable, true)
+  capability.mock.restore()
+  verification.resolve(false)
+  assert.equal((await catalog.episodes({ seriesId: 'hg-8' })).items[0].playable, false)
+  download.resolve()
+  await catalog.preparingRuntime
+  assert.equal((await catalog.episodes({ seriesId: 'hg-8' })).items[0].playable, true)
+})
+
 test('episode pagination survives new Catalog instances, respects runtime readiness, and persists empty final pages', async t => {
   const { store, peer } = fixture(t)
   t.mock.method(Catalog.prototype, 'prepareMediaRuntime', async () => {})
-  const a = new Catalog(store), b = new Catalog(peer)
+  const a = new Catalog(store), b = new Catalog(peer, { checkRuntime: async () => false })
   a.ffmpeg = true; b.ffmpeg = false
   let reads = 0
   t.mock.method(a.sources.get('hongguo'), 'sdkCall', async (method, id, { cursor }) => {

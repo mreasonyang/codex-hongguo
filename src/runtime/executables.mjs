@@ -5,6 +5,7 @@ import crossSpawn from 'cross-spawn'
 import escape from 'cross-spawn/lib/util/escape.js'
 import { spawn as nativeSpawn, spawnSync as nativeSpawnSync } from 'node:child_process'
 import { ffmpegPath } from './ffmpeg-runtime.mjs'
+import { codex } from './host.mjs'
 
 // Global npm and custom .cmd shims forward %* through a second cmd.exe parse too.
 // cross-spawn only doubles escaping for shims under node_modules/.bin.
@@ -33,9 +34,9 @@ export function stopChild(child) {
   } else child.kill()
 }
 
-export function findExecutable(name, override, { env = process.env, home = homedir(), platform = process.platform, arch = process.arch } = {}) {
+export function findExecutable(name, override, { host = codex, env = process.env, home = homedir(), platform = process.platform, arch = process.arch } = {}) {
   if (override) return override
-  if (name === 'ffmpeg') return ffmpegPath({ env, home, platform, arch })
+  if (name === 'ffmpeg') return ffmpegPath({ host, env, home, platform, arch })
   const { delimiter, dirname, join, isAbsolute, extname } = platform === 'win32' ? win32 : posix
   const pathKey = Object.keys(env).find(key => key.toUpperCase() === 'PATH') || 'PATH'
   const directories = [dirname(process.execPath), ...(env[pathKey] || '').split(delimiter).filter(Boolean).map(dir => dir.replace(/^"(.*)"$/, '$1'))]

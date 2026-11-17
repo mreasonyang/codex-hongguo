@@ -6,7 +6,65 @@ import { join, resolve } from 'node:path'
 import { install, codexRunner, pluginId } from '../src/cli/main.mjs'
 import { findExecutable, spawnSync } from '../src/runtime/executables.mjs'
 import { Store } from '../src/server/store.mjs'
+import { access, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { nativeProgramSource, replaceDirectory } from '../src/cli/codex-adapter.mjs'
+import { prepareLocalMarketplace } from '../src/cli/local-marketplace.mjs'
 const legacySource = 'mreasonyang/codex-hongguo'
+
+test('the local marketplace supplies only Codex integration files and follows the active program across upgrades', async t => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "红果 '$ market ")))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const market = join(dir, 'market'), programHome = join(dir, 'program')
+  const first = 'builds/' + '1'.repeat(64), next = 'builds/' + '2'.repeat(64)
+  for (const [build, label] of [[first, 'first'], [next, 'next']]) {
+    await mkdir(join(programHome, build, 'bin'), { recursive: true })
+    await writeFile(join(programHome, build, 'bin/codex-hongguo.mjs'), 'console.log(' + JSON.stringify(label) + ')')
+  }
+  const programRoot = join(programHome, first)
+  const launchers = process.platform === 'win32' ? ['run-node.exe', 'run-node-arm64.exe'] : ['run-node']
+  for (const name of launchers) await writeFile(join(programRoot, 'bin', name), 'fixture launcher')
+  await prepareLocalMarketplace(market, { sourceRoot: resolve('.'), programRoot, programHome })
+  const index = JSON.parse(await readFile(join(market, '.agents/plugins/marketplace.json'), 'utf8'))
+  assert.deepEqual(index.plugins[0].source, { source: 'local', path: './plugins/codex-hongguo' })
+  const plugin = join(market, index.plugins[0].source.path)
+  for (const entry of ['.codex-plugin/plugin.json', '.mcp.json', 'hooks/hooks.json', 'skills/hongguo-setup/SKILL.md',
+    'dist/hooks/write.mjs', 'dist/setup/check.mjs', 'dist/server/index.mjs', ...launchers.map(name => 'bin/' + name)]) {
+    await access(join(plugin, entry))
+  }
+  for (const entry of ['dist/vendor', 'dist/ui', 'provider-kit', 'node_modules'])
+    await assert.rejects(access(join(plugin, entry)), { code: 'ENOENT' })
+  for (const [directory, label] of [[first, 'first'], [next, 'next']]) {
+    await writeFile(join(programHome, 'current.json'), JSON.stringify({ directory }))
+    const result = spawnSync(process.execPath, [join(plugin, 'bin/codex-hongguo.mjs')], { cwd: dir, encoding: 'utf8' })
+    assert.equal(result.status, 0)
+    assert.equal(result.stdout.trim(), label)
+  }
+})
+
+test('custom marketplace conversion checks the native cache and preserves legacy and external packages', async t => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), 'hongguo-native-receipt-')))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const cache = join(dir, 'plugins/cache/hongguo-local/codex-hongguo/0.0.32')
+  const receipt = { installedPath: cache, version: '0.0.32', pluginId }
+  const options = { env: { CODEX_HOME: dir } }
+  await mkdir(join(cache, '.codex-plugin'), { recursive: true })
+  await writeFile(join(cache, '.codex-plugin/plugin.json'), JSON.stringify({ name: 'codex-hongguo', version: '0.0.32' }))
+  await assert.rejects(nativeProgramSource({ ...receipt, installedPath: dir }, options), /缓存/)
+  assert.equal(await nativeProgramSource(receipt, options), null)
+  const pkg = { name: '@kyun.si/codex-hongguo', version: '0.0.32', hongguoSharedProgram: 1 }
+  await writeFile(join(cache, 'package.json'), JSON.stringify(pkg))
+  assert.equal(await nativeProgramSource(receipt, options), cache)
+  await assert.rejects(nativeProgramSource({ ...receipt, version: '0.0.33' }, options), /不一致/)
+  const alias = join(cache, '..', 'redirect')
+  await symlink(cache, alias, process.platform === 'win32' ? 'junction' : 'dir')
+  await assert.rejects(nativeProgramSource({ ...receipt, installedPath: alias }, options), /缓存/)
+  await assert.rejects(replaceDirectory(cache, async replace => {
+    await replace(root => writeFile(join(root, 'partial'), 'thin'))
+    throw Error('registration failed')
+  }), /registration failed/)
+  assert.deepEqual(JSON.parse(await readFile(join(cache, 'package.json'), 'utf8')), pkg)
+  await assert.rejects(access(join(cache, 'partial')), { code: 'ENOENT' })
+})
 
 test('setup migrates one ZIP registration and restores its original source after an installation failure', t => {
   const dir = mkdtempSync(join(tmpdir(), '红果 migration '))

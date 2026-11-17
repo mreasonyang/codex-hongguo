@@ -9,8 +9,11 @@ import { tmpdir } from 'node:os'
 import assert from 'node:assert/strict'
 import { Store } from '../src/server/store.mjs'
 import { runFfmpeg } from '../src/server/media.mjs'
+import { verificationRuntime } from './verification-runtime.mjs'
 
 const root = await mkdtemp(join(tmpdir(), 'bilibili-video-qualification-'))
+const runtime = await verificationRuntime(root)
+Object.assign(process.env, runtime)
 const pluginRoot = resolve(process.env.BILIBILI_VERIFY_PACKAGE_ROOT || '.')
 const report = { artifact: process.env.BILIBILI_VERIFY_PACKAGE_ROOT ? 'packaged' : 'source-build',
   authentication: 'anonymous', userPluginChanged: false }
@@ -19,7 +22,7 @@ async function start() {
   client = new Client({ name: 'bilibili-video-qualification', version: '1' })
   await client.connect(new StdioClientTransport({ command: process.execPath,
     args: ['--no-warnings', join(pluginRoot, 'dist/server/index.mjs')],
-    env: { PATH: process.env.PATH || process.env.Path, HONGGUO_DATA_DIR: root }, stderr: 'ignore' }))
+    env: { ...runtime, PATH: process.env.PATH || process.env.Path, HONGGUO_DATA_DIR: root }, stderr: 'ignore' }))
   const opened = await client.callTool({ name: 'open_drama_panel', arguments: {}, _meta: { thread_id: 'video-qualification' } })
   panel = opened._meta.panel
 }

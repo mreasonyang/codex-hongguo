@@ -2,11 +2,16 @@ import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { prepareRuntime, findExecutable, spawnSync } from '../runtime/executables.mjs'
 import { hookAuthorizationHint } from '../server/setup.mjs'
-import { ensureFfmpeg, removeManagedFfmpeg, ffmpegPreparationTimeoutMs } from '../runtime/ffmpeg-runtime.mjs'
+import { ensureFfmpeg, registerFfmpegHost, removeManagedFfmpeg, ffmpegPreparationTimeoutMs } from '../runtime/ffmpeg-runtime.mjs'
 import { removeUserData } from '../runtime/uninstall-data.mjs'
+import { installSharedProgram, removeSharedProgram } from '../runtime/shared-program.mjs'
 import { assertWindowsPluginIdle } from '../runtime/windows-processes.mjs'
 import { marketplaceName } from '../runtime/distribution.mjs'
 import { defaultSource, prepareLocalMarketplace, isManagedMarketplace, marketplaceSource } from './local-marketplace.mjs'
+import { manageAntigravity } from './antigravity.mjs'
+import { hostProfile, codex as codexHost } from '../runtime/host.mjs'
+import { projectRoot } from '../server/paths.mjs'
+import { nativeProgramSource, replaceDirectory, withCodexInstall, writeCodexAdapter } from './codex-adapter.mjs'
 
 export { marketplaceName, defaultSource }
 export const pluginId = 'codex-hongguo@' + marketplaceName
@@ -78,7 +83,7 @@ export function install({ run, source = defaultSource, dryRun = false, log = con
   try {
     run(['plugin', 'marketplace', 'add', source])
     if (source !== defaultSource && !replacing && existing?.marketplaceSource?.sourceType === 'git') run(['plugin', 'marketplace', 'upgrade', marketplaceName])
-    run(['plugin', 'add', pluginId])
+    return run(['plugin', 'add', pluginId])
   } catch (error) {
     // A failed migration must not reintroduce the Git dependency we are removing.
     if (source === defaultSource && existing?.marketplaceSource?.sourceType === 'git')
@@ -94,23 +99,75 @@ export function install({ run, source = defaultSource, dryRun = false, log = con
     }
     throw error
   }
+}
+
+export async function setupCodex({ run, source = defaultSource, sourceRoot = projectRoot, log = console.log }) {
+  const host = codexHost
+  if (source === defaultSource) {
+    await ensureFfmpeg({ host })
+    const previous = marketplaceSource(run(['plugin', 'marketplace', 'list']).marketplaces?.find(row => row.name === marketplaceName))
+    const wasInstalled = run(['plugin', 'list', '--marketplace', marketplaceName]).installed?.some(row => row.pluginId === pluginId)
+    let published = false
+    try {
+      await replaceDirectory(defaultSource, replace => installSharedProgram({ host, sourceRoot }, async shared => {
+        await replace(root => prepareLocalMarketplace(root, { ...shared, sourceRoot }))
+        install({ run, source })
+        published = true
+        await registerFfmpegHost({ host })
+      }))
+    } catch (error) {
+      // Roll back a native publication if registration or the shared commit
+      // fails after plugin add. The old local index is already back in place.
+      if (published) {
+        if (!wasInstalled) run(['plugin', 'remove', pluginId])
+        if (previous !== source) {
+          run(['plugin', 'marketplace', 'remove', marketplaceName])
+          if (previous) run(['plugin', 'marketplace', 'add', previous])
+        }
+        if (wasInstalled) run(['plugin', 'add', pluginId])
+      }
+      throw error
+    }
+  } else {
+    // The native marketplace decides which release to use, including private,
+    // offline or pinned sources that differ from the CLI used for installation.
+    await assertWindowsPluginIdle()
+    const installed = await nativeProgramSource(install({ run, source }))
+    if (installed) {
+      await ensureFfmpeg({ host })
+      await replaceDirectory(installed, replace => installSharedProgram({ host, sourceRoot: installed }, async shared => {
+        await replace(root => writeCodexAdapter(root, { ...shared, sourceRoot: installed }))
+        await registerFfmpegHost({ host })
+      }))
+    } else {
+      await removeSharedProgram({ host }, () => removeManagedFfmpeg({ host, keepLegacy: true }))
+      log('所选市场提供旧版红果，已按该市场的版本保留独立程序和播放组件。')
+    }
+  }
   log('红果短剧已安装。请在新的本地聊天中使用；更新时先关闭旧播放器。')
 }
 
-export async function main(argv = process.argv.slice(2)) {
+export async function main(argv = process.argv.slice(2), app = 'codex') {
   try {
+    argv = [...argv]
+    let host = hostProfile(app)
+    const hostIndex = argv.indexOf('--host')
+    if (hostIndex !== -1) {
+      host = hostProfile(argv[hostIndex + 1])
+      argv.splice(hostIndex, 2)
+    }
     const [action = 'help', ...options] = argv
     if (action === '--version') {
       console.log(JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version)
       return
     }
     if (['help', '--help', '-h'].includes(action)) {
-      console.log('红果短剧\n  codex-hongguo provider --help\n  codex-hongguo setup [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo update [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo uninstall [--dry-run]\n  codex-hongguo doctor\n需要 Node.js >=22.16 和 Codex CLI；播放组件由插件自动准备。')
+      console.log('红果短剧\n  codex-hongguo provider --help\n  codex-hongguo setup [--host codex|antigravity] [--dry-run] [--marketplace owner/repo|目录]\n  codex-hongguo update [--host codex|antigravity] [--dry-run]\n  codex-hongguo uninstall [--host codex|antigravity] [--dry-run]\n  codex-hongguo doctor [--host codex|antigravity]\n需要 Node.js >=22.16；Codex 安装还需要 Codex CLI。播放组件由插件自动准备。')
       return
     }
     if (action === 'provider') {
       const { providerCommand } = await import('./providers.mjs')
-      return await providerCommand(options)
+      return await providerCommand(options, { host })
     }
     if (!['setup', 'update', 'uninstall', 'doctor'].includes(action)) throw Error('未知命令；运行 codex-hongguo --help 查看用法。')
     if (process.platform === 'win32' && !['x64', 'arm64'].includes(process.arch)) throw Error('Windows 需要 x64 或 ARM64 Node.js，请安装对应的 64 位版本后重试。')
@@ -119,7 +176,8 @@ export async function main(argv = process.argv.slice(2)) {
     prepareRuntime()
     if (action === 'doctor') {
       if (options.length) throw Error('doctor 不接受额外参数。')
-      const checked = spawnSync(process.execPath, [fileURLToPath(new URL('../../dist/setup/check.mjs', import.meta.url))], { stdio: 'inherit', timeout: ffmpegPreparationTimeoutMs })
+      const entry = host.id === 'antigravity' ? 'antigravity' : 'check'
+      const checked = spawnSync(process.execPath, [fileURLToPath(new URL('../../dist/setup/' + entry + '.mjs', import.meta.url))], { stdio: 'inherit', timeout: ffmpegPreparationTimeoutMs })
       if (checked.status !== 0) throw Error('环境检查未完成。')
       return
     }
@@ -129,33 +187,34 @@ export async function main(argv = process.argv.slice(2)) {
       else if (action !== 'uninstall' && options[i] === '--marketplace' && options[i + 1]) source = options[++i]
       else throw Error('无法识别命令参数；运行 codex-hongguo --help 查看用法。')
     }
+    if (host.id === 'antigravity') {
+      if (options.includes('--marketplace')) throw Error('Antigravity 安装不使用 Codex 市场参数。')
+      await manageAntigravity(action, { dryRun })
+      return
+    }
     // Resolve everything before changing the host's marketplace registration.
     const codex = findExecutable('codex', process.env.HONGGUO_CODEX)
-    const dependencies = [['Codex CLI', codex]]
-    if (action !== 'uninstall') dependencies.push(['npm', findExecutable('npm')])
-    for (const [name, command] of dependencies) {
-      const checked = spawnSync(command, ['--version'], { stdio: 'ignore', timeout: 15000, windowsHide: true })
-      if (checked.status === 0) continue
-      if (checked.error?.code === 'ETIMEDOUT') throw Error(name + ' 启动超时，请单独运行它的 --version 命令后重试；观看进度保持原样。')
-      if (checked.error?.code === 'ENOENT') throw Error('未找到 ' + name + '。请检查安装位置和 PATH 后重新运行 ' + action + '。')
-      throw Error(name + ' 已找到但启动失败，请单独运行它的 --version 命令查看错误后重试；观看进度保持原样。')
+    const checked = spawnSync(codex, ['--version'], { stdio: 'ignore', timeout: 15000, windowsHide: true })
+    if (checked.status !== 0) {
+      if (checked.error?.code === 'ETIMEDOUT') throw Error('Codex CLI 启动超时，请单独运行 codex --version 后重试。')
+      if (checked.error?.code === 'ENOENT') throw Error('未找到 Codex CLI。请检查安装位置和 PATH 后重新运行 ' + action + '。')
+      throw Error('Codex CLI 启动失败，请单独运行 codex --version 查看错误后重试。')
     }
     if (action === 'uninstall') {
-      if (dryRun) console.log('将卸载 ' + pluginId + '，删除播放组件、观看进度、设置、视频缓存和设备档案。')
+      if (dryRun) console.log('将卸载 ' + pluginId + '，删除 Codex 的观看进度、设置、视频缓存和设备档案。最后一端卸载时会清理共享程序和播放组件。')
       else {
         const run = codexRunner(codex)
-        await uninstall({ run })
-        console.log('红果短剧已卸载，播放组件、观看进度、设置、视频缓存和设备档案已删除。请打开新聊天。')
+        await assertWindowsPluginIdle()
+        await withCodexInstall(() => removeSharedProgram({ host }, () => uninstall({ run, assertIdle: async () => {} })))
+        console.log('Codex 红果短剧已卸载，观看进度、设置、视频缓存和设备档案已删除。请打开新聊天。')
       }
       return
     }
-    if (!dryRun) {
-      if (source === defaultSource) await prepareLocalMarketplace()
-      console.log('正在准备播放组件，首次使用需要联网下载（下载总时限30分钟）…')
-      await ensureFfmpeg()
-    }
-    install({ run: codexRunner(codex), source, dryRun })
-    if (!dryRun) console.log(hookAuthorizationHint)
+    const run = codexRunner(codex)
+    if (dryRun) return install({ run, source, dryRun })
+    console.log('正在准备红果程序和播放组件，本机缺少可复用的播放组件时会下载（下载总时限30分钟）…')
+    await withCodexInstall(() => setupCodex({ run, source }))
+    console.log(hookAuthorizationHint)
   } catch (error) {
     console.error(error.message)
     process.exitCode = 1

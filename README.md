@@ -13,7 +13,7 @@
 
 在 Codex 桌面会话右侧看红果短剧，支持选剧、搜索、续播和连播。默认在新任务开始时续播已选剧集，任务结束或中断时暂停并保存进度；两个行为都可在设置中独立关闭。插件用于使用本机执行器的 Codex 桌面对话。
 
-仅在官方 Codex 桌面 App 中启用。T3 Code、Paseo 等第三方客户端或无法识别的宿主不会自动推荐，也不会启动播放器后台请求。
+支持官方 Codex 桌面 App，并新增实验性的 [Antigravity App 适配](#antigravity-app实验性)。T3 Code、Paseo 等第三方客户端或无法识别的宿主不会自动推荐，也不会启动播放器后台请求。以下默认介绍 Codex 用法。
 
 内置红果、Bilibili 和黄果（NSFW），也可通过 `hongguo-provider` Skill [接入自己的片源](#接入自己的片源)。
 
@@ -43,7 +43,27 @@ npx.cmd "@kyun.si/codex-hongguo@latest" setup
 
 包名的引号必须保留，避免 PowerShell 将 `@` 解析为展开运算符；`npx.cmd` 可直接调用 npm 命令入口。Windows 详细说明和离线安装见 [Windows 支持](docs/windows-support.md)。
 
-默认安装和更新不需要 Git。命令会检查 Node、npm 和 Codex CLI，自动准备播放组件，再通过本机市场索引从 npm 安装插件。首次安装需要联网，之后复用本机缓存。安装完成时会提示你到 Codex「设置 → Hooks」审查、信任并启用 `UserPromptSubmit`、`Stop`、`Interrupt`。然后打开新的本地聊天使用。
+默认安装和更新不需要 Git。命令会检查 Node、npm 和 Codex CLI，自动准备播放组件，再通过本机市场注册 Codex 入口。首次安装需要联网，之后复用本机缓存。安装完成时会提示你到 Codex「设置 → Hooks」审查、信任并启用 `UserPromptSubmit`、`Stop`、`Interrupt`。然后打开新的本地聊天使用。
+
+### Antigravity App（实验性）
+
+安装入口支持 Windows x64、Windows 11 ARM64，以及 Linux 和 macOS 的 x64/arm64。需要已向账号开放 **MCP Apps** 的 Antigravity 桌面 App（接口按 2.32.1 适配）及对应架构的 Node.js >=22.16。不需要 Codex CLI。此适配尚未随 npm `latest` 发布，当前分支请从源码构建后安装：
+
+```sh
+npm ci
+npm run build
+node bin/codex-hongguo.mjs setup --host antigravity
+```
+
+Antigravity 的插件清单、技能和启动入口安装到用户主目录下的 `.gemini/config/plugins/codex-hongguo/`。更新与卸载分别使用同一入口的 `update --host antigravity`、`uninstall --host antigravity`；双端安装时先关闭两个播放器，更新后在 Antigravity 的 MCP Servers 中重启 hongguo，并在 Codex 打开新聊天。
+
+从会话右侧 **＋ → Extensions → 红果短剧** 打开常驻播放器；全局侧栏也有入口。推荐卡点剧名后在卡片原位置展开。推荐入口自动绑定所属聊天；直接从 ＋ 打开的面板若未识别聊天，请用「选择会话」核对会话 ID 后缀与时间，显式绑定。未绑定时可手动观看。
+
+在 **Settings → Customizations → Hooks** 审查并启用红果的 `PreInvocation`、`Stop`。首次模型调用记录任务开始，模型后续调用不会反复续播；后台工作未结束时继续等待，任务完全结束或用户取消时暂停。设置中仍可独立关闭自动播放与暂停。Hooks 不保存提示词或回复。
+
+同一系统用户下，Codex 和 Antigravity 共用一套播放器、服务端、SDK、WASM 及托管的 FFmpeg。安装第二个宿主会复用现有程序。通过任一宿主更新后，两个宿主的新进程都使用更新后的程序。Antigravity 的观看数据单独保存，macOS 数据在 `~/Library/Application Support/AntigravityHongguo/`，Windows 在 `%LOCALAPPDATA%\AntigravityHongguo\`，Linux 在 `${XDG_DATA_HOME:-~/.local/share}/antigravity-hongguo/`。更新保留数据，卸载清理本宿主的数据；不会自动导入 Codex 的观看记录或 Provider。
+
+当前已提供协议与隔离安装测试，**真实 App 的画面、声音和自然任务联动仍待验收**。若没有入口或宿主提示 `MCP Apps support is not enabled`，先确认已登录且账号开放该能力。Antigravity 不发送视图关闭通知，播放时每约 1 秒保存一次进度，突然关闭可能丢失最后一次未完成的保存。完整验证命令见开发指南。
 
 ### Beta 测试渠道
 
@@ -142,7 +162,7 @@ Windows PowerShell 将上述更新和卸载命令中的 `npx` 写为 `npx.cmd`�
 npx "@kyun.si/codex-hongguo@latest" uninstall
 ```
 
-卸载会删除本插件的播放组件、观看进度、设置、全部视频缓存和设备档案，包括历史组件和下载残片；系统或外部自行配置的 FFmpeg 不会删除。完成后打开新聊天。只想暂时停用并保留数据时，可从 Codex 插件设置中禁用。
+卸载会清理当前宿主的观看进度、设置、视频缓存和设备档案。最后一个宿主卸载时，才清理共享程序、托管的 FFmpeg 和下载残片。自行配置的外部 FFmpeg 会保留。完成后打开新聊天。只想暂时停用并保留数据时，可从 Codex 插件设置中禁用。
 
 以下默认用户数据目录会在卸载时自动删除：
 
@@ -158,7 +178,7 @@ npx "@kyun.si/codex-hongguo@latest" uninstall
 
 | 项目 | 说明与限制 |
 | --- | --- |
-| 适用宿主 | 仅支持 Codex 桌面客户端中使用本机执行器的对话，不适用于云端/远程执行器或其他宿主环境。 |
+| 适用宿主 | Codex 桌面本机对话，以及实验性的 Antigravity App MCP Apps；不支持云端/远程执行器。Antigravity 用法与验收边界见上文。 |
 | 片源与选流 | 内置红果、Bilibili 和黄果；黄果每次切入均需确认，采用匿名访问，兼容的 H.264 HLS 视频按需读取分片；Bilibili 可在设置「片源账号」子页或播放受限提示旁扫码登录、管理与退出账号。悬停图标后选择片源，NSFW 片源需确认后切换，浏览推荐或搜索番名，兼容 ss/ep 番剧链接。B站标准双轨支持按需分段播放与跳转，试看和 DRM 会拒绝。详见 [Provider 插件](docs/providers.md)。 |
 | 推荐与搜索 | 片库与搜索依赖匿名上游 SDK；首页优先推荐未看过的剧，每批最多 12 部（推荐与分集缓存 15 分钟，跨对话共享；过期先使用已有内容并后台刷新，失败后逐步延长重试间隔），推荐不足时按设置中的补充关键词搜索。 |
 | 匿名限流与恢复 | 匿名设备被拒或片源为空时，SDK 会按有限次数自动重试与恢复；仍失败时在界面显示原因供手动重试。 |

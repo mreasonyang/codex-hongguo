@@ -1,6 +1,7 @@
 import { PlayerError } from './errors.mjs'
-import { hasFfmpeg, MediaCache, runFfmpeg } from './media.mjs'
-import { ensureFfmpeg } from '../runtime/ffmpeg-runtime.mjs'
+import { hasFfmpeg, MediaCache, mediaRunner } from './media.mjs'
+import { checkInstalledFfmpeg, ensureFfmpeg } from '../runtime/ffmpeg-runtime.mjs'
+import { codex } from '../runtime/host.mjs'
 import { createHash } from 'node:crypto'
 import { SharedCatalogCache } from './catalog-cache.mjs'
 
@@ -9,10 +10,18 @@ import { SourceRegistry } from './sources/registry.mjs'
 import { sourceId, qualify, parseId } from './sources/ids.mjs'
 import { decodeCursor, encodeCursor } from './sources/contracts.mjs'
 export class Catalog {
-  constructor(store, { sources = new SourceRegistry(store.root) } = {}) {
+  constructor(store, { sources = new SourceRegistry(store.root), checkRuntime = checkInstalledFfmpeg, prepareRuntime = ensureFfmpeg } = {}) {
     this.store = store
+    this.host = store.host ?? codex
+    this.prepareRuntime = prepareRuntime
+    this.runFfmpeg = mediaRunner(this.host)
     this.sources = sources
-    this.ffmpeg = hasFfmpeg()
+    this.ffmpeg = hasFfmpeg(this.host)
+    // Finish the local integrity check before registration can hash the same
+    // executable. Browsing never waits for a missing binary to be downloaded.
+    this.localRuntime = Promise.resolve().then(() => checkRuntime({ host: this.host })).then(ready => {
+      if (ready) this.ffmpeg = true
+    }).catch(() => {})
     this.covers = new Map()
     this.coverLookups = new Map()
     this.metadata = new SharedCatalogCache(store)
@@ -24,7 +33,7 @@ export class Catalog {
     await this.sources.ready
   }
   prepareMediaRuntime() {
-    this.preparingRuntime ??= ensureFfmpeg().then(() => { this.ffmpeg = true }).catch(error => {
+    this.preparingRuntime ??= this.localRuntime.then(() => this.prepareRuntime({ host: this.host })).then(() => { this.ffmpeg = true }).catch(error => {
       this.ffmpeg = false
       throw error
     }).finally(() => { this.preparingRuntime = null })
@@ -193,7 +202,7 @@ export class Catalog {
       entry ||= {}
       this.covers.set(id, entry)
       while (this.covers.size > 160) this.covers.delete(this.covers.keys().next().value)
-      const jpeg = await runFfmpeg(
+      const jpeg = await this.runFfmpeg(
         [
           '-protocol_whitelist',
           'pipe',
@@ -222,9 +231,11 @@ export class Catalog {
     if (!this.sources.loaded) await this.sources.ready
     this.sources.forId(seriesId)
     const ref = parseId(seriesId)
-    const canPlay = this.ffmpeg || this.sources.capability(ref.source, 'progressivePlayback') === true
+    const progressive = this.sources.capability(ref.source, 'progressivePlayback') === true
     const key = 'episodes:v2:' + this.sources.revision(ref.source) + JSON.stringify([seriesId, decodeCursor(cursor, ref.source, 'episodes', ref.id) ?? null])
     const page = await this.metadata.get(key, () => this.loadEpisodes(seriesId, cursor))
+    if (!progressive && !this.ffmpeg) await this.localRuntime
+    const canPlay = progressive || this.ffmpeg
     return { ...page, items: page.items.map(ep => ({ ...ep, playable: ep.playable && canPlay })) }
   }
   async loadEpisodes(seriesId, cursor) {
@@ -273,7 +284,7 @@ export class Catalog {
   prepare(id, browser, retry, preload = false) {
     const { source, adapter } = this.sources.forId(id, 'episode')
     if (this.sources.capability(source, 'progressivePlayback')) {
-      this.panelMedia ??= new PanelMedia(this.store.root)
+      this.panelMedia ??= new PanelMedia(this.store.root, this.runFfmpeg)
       const result = this.panelMedia.remote.prepare(id, signal => this.sources.resolvePlayback(id, { signal }),
         () => this.mediaRevision(id), retry, preload)
       if (result.status !== 'fallback') return result
@@ -283,17 +294,17 @@ export class Catalog {
       return { status: 'preparing' }
     }
     if (adapter.rangedFilePlayback) {
-      this.panelMedia ??= new PanelMedia(this.store.root)
+      this.panelMedia ??= new PanelMedia(this.store.root, this.runFfmpeg)
       return this.panelMedia.file.prepare(id, signal => this.sources.resolvePlayback(id, { signal }),
         () => this.mediaRevision(id), retry, preload)
     }
     this.cache ??= new MediaCache(this.store, (ep) => this.sources.resolvePlayback(ep), {
-      revision: ep => this.mediaRevision(ep),
+      revision: ep => this.mediaRevision(ep), run: this.runFfmpeg,
     })
     const result = this.cache.prepare(id, retry)
     if (result.status !== 'ready') return result
     if (browser) return { ...result, src: 'media/' + id }
-    this.panelMedia ??= new PanelMedia(this.store.root)
+    this.panelMedia ??= new PanelMedia(this.store.root, this.runFfmpeg)
     return { ...result, ...this.panelMedia.prepare(id, this.cache.path(id), retry, result.codec, preload) }
   }
 }

@@ -1,5 +1,5 @@
 // Exercise the installed copy in a disposable CLI profile, including paths with spaces.
-import { mkdtemp, mkdir, rm, readFile, writeFile, access, realpath, copyFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, readFile, readdir, writeFile, access, realpath, copyFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fork } from 'node:child_process'
@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto'
 import { Store } from '../src/server/store.mjs'
 import { marketplace, npmPackageName } from './distribution.mjs'
 import { releaseChannel } from '../src/runtime/version.mjs'
+import { sharedProgramHome } from '../src/runtime/shared-program.mjs'
 
 const tmp = await realpath(await mkdtemp(join(tmpdir(), '红果 安装 ')))
 const root = join(tmp, '本地 市场'),
@@ -38,8 +39,8 @@ const env = {
   npm_config_cache: join(tmp, 'npm-cache'),
   NODE_EXTRA_CA_CERTS: join(tmp, 'registry.crt'),
 }
-function run(bin, args) {
-  const r = spawnSync(commands[bin] || bin, args, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: bin === 'npm' ? 420000 : 120000, windowsHide: true })
+function run(bin, args, runEnv = env) {
+  const r = spawnSync(commands[bin] || bin, args, { cwd: root, env: runEnv, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: bin === 'npm' ? 420000 : 120000, windowsHide: true })
   // Never relay host logs. Only a fixed category crosses the diagnostic boundary.
   const diagnostic = (r.stderr || '') + '\n' + (r.stdout || '')
   const reason = /播放组件自动准备失败/.test(diagnostic) ? 'media_prepare_failed'
@@ -92,12 +93,34 @@ try {
   await writeFile(join(npmMarket, '.agents/plugins/marketplace.json'), JSON.stringify(marketplace(version, { source: 'npm', package: npmPackageName, version, registry: origin })))
   const defaultData = dataRoot({ env: { ...env, HONGGUO_DATA_DIR: undefined }, home: tmp })
   env.HONGGUO_DATA_DIR = defaultData
-  const setupOutput = run('npm', ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo', 'setup', '--marketplace', npmMarket])
+  const npmCLI = ['exec', '--yes', '--registry', origin, '--package', npmPackageName + '@' + version, '--', 'codex-hongguo']
+  const setupOutput = run('npm', [...npmCLI, 'setup'])
   assert.match(setupOutput, /审查.*信任.*UserPromptSubmit.*Stop.*Interrupt/, '安装完成时必须明确告知 Hooks 信任步骤')
   assert.match(setupOutput, /新的本地聊天/, '安装完成时必须提示打开新聊天，避免复用旧播放器连接')
+  const localMarket = join(defaultData, 'managed-marketplace', version)
+  const localIndex = JSON.parse(await readFile(join(localMarket, '.agents/plugins/marketplace.json'), 'utf8'))
+  assert.deepEqual(localIndex.plugins[0].source, { source: 'local', path: './plugins/codex-hongguo' })
+  const [defaultPlugin] = JSON.parse(run('codex', ['plugin', 'list', '--marketplace', 'hongguo-local', '--json'])).installed
+  assert.equal(defaultPlugin.source.source, 'local')
+  await assert.rejects(access(join(localMarket, 'plugins/codex-hongguo/dist/vendor')), { code: 'ENOENT' })
+  run('npm', [...npmCLI, 'setup', '--marketplace', npmMarket])
   commands.ffmpeg = findExecutable('ffmpeg', undefined, { env, home: tmp })
   assert.ok(commands.ffmpeg.startsWith(tmp), '播放组件必须位于隔离用户缓存')
   await access(commands.ffmpeg)
+  // Exercise both installers in the same disposable profile. Removing the second
+  // plugin must leave the first one's registered component usable offline.
+  const agyEnv = { ...env, HONGGUO_ANTIGRAVITY_DATA_DIR: join(tmp, 'antigravity-data') }
+  const programHome = sharedProgramHome({ env, home: tmp })
+  const active = async () => JSON.parse(await readFile(join(programHome, 'current.json'), 'utf8')).directory
+  const directory = await active()
+  const programRoot = join(programHome, directory)
+  run('npm', [...npmCLI, 'setup', '--host', 'antigravity'], agyEnv)
+  assert.equal(await active(), directory, '两端安装同一发行包应复用同一份程序')
+  assert.deepEqual(await readdir(join(programHome, 'builds')), [directory.split('/')[1]])
+  await assert.rejects(access(join(tmp, '.gemini/config/plugins/codex-hongguo/dist/vendor')), { code: 'ENOENT' })
+  run('npm', [...npmCLI, 'uninstall', '--host', 'antigravity'], agyEnv)
+  assert.equal(await active(), directory)
+  run(commands.ffmpeg, ['-version'])
   await assert.rejects(access(env.HONGGUO_FORBIDDEN_FFMPEG), '不应调用系统 FFmpeg')
   const seeded = new Store(defaultData)
   seeded.save({ seriesId: 'hg-987654321', episodeId: 'hg-987654322', title: '安装验收进度', label: '2', positionMs: 12345, durationMs: 60000 })
@@ -167,15 +190,16 @@ try {
   const installedRoot = resolve(dirname(detail.onboardingSkill.path), '../..')
   const installedPackage = JSON.parse(await readFile(join(installedRoot, 'package.json'), 'utf8'))
   assert.ok(installedPackage.os.includes(process.platform), '发行包必须声明支持当前安装平台')
-  await access(join(installedRoot, 'bin/run-node'))
-  await access(join(installedRoot, 'bin/run-node.exe'))
-  await access(join(installedRoot, 'bin/run-node-arm64.exe'))
-  await access(join(installedRoot, 'dist/vendor/openhongguo/dist/openhongguo.wasm'))
+  for (const name of process.platform === 'win32' ? ['run-node.exe', 'run-node-arm64.exe'] : ['run-node'])
+    await access(join(installedRoot, 'bin', name))
+  await access(join(programRoot, 'dist/vendor/openhongguo/dist/openhongguo.wasm'))
+  for (const entry of ['dist/vendor', 'dist/ui', 'dist/cli', 'provider-kit'])
+    await assert.rejects(access(join(installedRoot, entry)), { code: 'ENOENT' }, 'Codex 原生安装只能包含适配文件')
   await assert.rejects(access(join(installedRoot, 'node_modules')))
   await assert.rejects(access(join(installedRoot, 'docs/images')), { code: 'ENOENT' }, 'README 截图不得随插件安装')
   const screenshotRoot = `https://raw.githubusercontent.com/mreasonyang/codex-hongguo/v${version}/docs/images/`
   for (const guide of ['README.md', 'README.en.md']) {
-    const contents = await readFile(join(installedRoot, guide), 'utf8')
+    const contents = await readFile(join(programRoot, guide), 'utf8')
     const images = [...contents.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)].map(match => match[1])
     assert.equal(images.length, 2, '中英文安装指南必须保留两张界面截图')
     assert.ok(images.every(url => url.startsWith(screenshotRoot)), '安装指南截图必须引用对应版本的远程图片')
@@ -391,6 +415,8 @@ try {
   assert.equal(installed(), false, 'npx 卸载后插件不应仍在已安装列表中')
   await assert.rejects(access(defaultData), '卸载后应删除整个默认用户数据目录，包括进度、设置、视频缓存和设备档案')
   await assert.rejects(access(componentRoot), '应清空组件专属目录，包括损坏文件、未知版本与下载残片')
+  await assert.rejects(access(programRoot), { code: 'ENOENT' }, '最后一端卸载后应删除共享程序')
+  await assert.rejects(access(join(programHome, 'current.json')), { code: 'ENOENT' })
   assert.equal(await readFile(env.HONGGUO_FFMPEG, 'utf8'), 'external-executable-sentinel')
   run('npm', uninstall)
   console.log('npx 完整卸载、预览和重复卸载通过；组件、进度、设置、视频缓存和设备档案均已删除，外部程序未受影响')
@@ -401,7 +427,7 @@ try {
     platform: process.platform, arch: process.arch,
     powershellInstall: process.platform === 'win32' ? ['5.1', '7'] : [],
     checkedAt: new Date().toISOString(),
-    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'progress-preserved', 'sound-preferences-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'installation-trust-instructions', 'minimal-player-ui', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'npx-uninstall', 'uninstall-dry-run', 'repeat-uninstall', 'uninstall-without-media-runtime', 'uninstall-cleans-component-directory-and-partial-downloads', 'uninstall-preserves-external-executables', 'uninstall-deletes-all-local-data'],
+    checks: ['npx-setup', 'fresh-install', 'repeat-setup', 'native-npm-source', 'shared-program-both-hosts', 'codex-thin-adapter', 'progress-preserved', 'sound-preferences-preserved', 'managed-ffmpeg-without-system-install', 'hook-review-required', 'installation-trust-instructions', 'minimal-player-ui', 'launcher-stdin', 'hook-stop', 'hook-interrupt', 'host-mcp', 'live-catalog', 'npx-uninstall', 'uninstall-dry-run', 'repeat-uninstall', 'uninstall-without-media-runtime', 'uninstall-cleans-component-directory-and-partial-downloads', 'uninstall-preserves-external-executables', 'uninstall-deletes-all-local-data'],
     mediaDecoded: process.argv.includes('--playback'), desktopPlaybackObserved: false,
   }, null, 2) + '\n')
 } finally {

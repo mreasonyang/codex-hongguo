@@ -5,13 +5,13 @@ import { BrowserServer } from '../server/browser.mjs'
 import { ProviderRegistry, builtins } from '../server/providers/registry.mjs'
 import { readPackage } from '../server/providers/package.mjs'
 
-export async function previewProvider({ root, directory }) {
+export async function previewProvider({ root, directory, host }) {
   const plugin = await readPackage(directory)
   const sources = new ProviderRegistry(root, { directory: '', builtins: [builtins[0]] })
   await sources.ready
   await sources.register(plugin.manifest, plugin.factory)
   sources.get(plugin.manifest.id)
-  const store = new Store(root), catalog = new Catalog(store, { sources })
+  const store = new Store(root, false, { host }), catalog = new Catalog(store, { sources })
   const service = new Service(store, catalog)
   // Preview uses a disposable host. Keep pairing tickets inside the HTTP
   // exchange and reject foreign Host headers before creating a ticket.

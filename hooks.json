@@ -1,0 +1,10 @@
+{
+  "hongguo": {
+    "PreInvocation": [
+      { "type": "command", "command": "node ./dist/hooks/antigravity.mjs start", "timeout": 3 }
+    ],
+    "Stop": [
+      { "type": "command", "command": "node ./dist/hooks/antigravity.mjs stop", "timeout": 3 }
+    ]
+  }
+}

@@ -3,7 +3,17 @@ name: hongguo-setup
 description: 配置红果短剧插件，检查本机播放环境和回合自动暂停，带用户完成安装后的首次使用。适用于红果设置、安装后不会用或自动暂停不生效。
 ---
 
-帮助用户在当前安装环境完成红果短剧配置。该插件用于本机执行的 Codex 对话，不需要红果账号、API Key 或浏览器自动化权限。
+帮助用户在当前安装环境完成红果短剧配置。该插件用于本机执行的 Codex 或 Antigravity App 对话，不需要红果账号、API Key 或浏览器自动化权限。
+
+## Antigravity App
+
+当前宿主为 Antigravity 时，使用本节。根据此文件向上两级定位插件根目录，运行 `node "<插件根目录>/bin/codex-hongguo.mjs" doctor --host antigravity`；安装器固定了本机 Node 路径，可从本插件 `mcp_config.json` 的 command 获取。Node 需要 >=22.16。
+
+Codex 和 Antigravity 共用同一套程序，观看进度和片源各自保存。Windows、Linux 和 macOS 均通过同一安装入口注册。此适配尚未随 npm latest 发布。当前从已构建的源码或本分支发行包执行 `node "<构建目录>/bin/codex-hongguo.mjs" setup --host antigravity`；更新用同一入口的 `update --host antigravity`，不要用旧版 latest 覆盖。提示用户在 Settings → Customizations → Hooks 审查并启用红果的 PreInvocation、Stop；不检测授权或修改信任。关闭旧面板后，从 MCP Servers 重启本插件服务，再从会话右侧 ＋ → Extensions → 红果短剧打开。全局入口也可手动观看。
+
+推荐卡会在原位置展开播放，并绑定触发它的会话。直接从 ＋ 打开的面板若未识别会话，请用「选择会话」按会话 ID 后缀与时间绑定；不能猜测或自动绑定最近一条聊天。两种宿主默认使用独立观看数据。Antigravity 需要已向账号开放 MCP Apps 的桌面版本；没有入口或提示未启用时，说明宿主能力尚不可用，不修改功能开关或伪装其他宿主。实际视频和回合联动未经观察时必须标记待验证。完成后停止，不执行下面的 Codex 指令。
+
+## Codex App
 
 默认安装和更新使用持久的本机 npm 市场索引，不要求 Git；仍需要可运行的 Codex CLI。只有显式指定 Git 市场来源时才需要 Git。
 

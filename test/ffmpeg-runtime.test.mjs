@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
-import { pathToFileURL } from 'node:url'
 import { zipSync } from 'fflate'
-import { ensureFfmpeg, ffmpegPath, isFfmpegReady, removeManagedFfmpeg } from '../src/runtime/ffmpeg-runtime.mjs'
+import { ensureFfmpeg, ffmpegPath, isFfmpegReady, registerFfmpegHost, removeManagedFfmpeg } from '../src/runtime/ffmpeg-runtime.mjs'
+import { codex, antigravity } from '../src/runtime/host.mjs'
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex')
 async function fixture(t) {
@@ -23,14 +23,112 @@ test('a cold installation downloads once, verifies bytes, and remains usable wit
   const f = await fixture(t)
   let downloads = 0
   const options = { ...f.options, fetchImpl: async () => { downloads++; return new Response(f.archive) } }
-  const [first, second] = await Promise.all([ensureFfmpeg(options), ensureFfmpeg(options)])
+  const [first, second] = await Promise.all([ensureFfmpeg({ ...options, host: codex }), ensureFfmpeg({ ...options, host: antigravity })])
   assert.equal(first, second)
   assert.equal(downloads, 1)
   assert.deepEqual(await readFile(first), f.binary)
   assert.equal(isFfmpegReady(options), true)
   await ensureFfmpeg({ ...options, fetchImpl: () => assert.fail('a warm cache must not use the network') })
-  assert.deepEqual(await readdir(f.directory), ['codex-hongguo'])
+  assert.deepEqual(await readdir(f.directory), ['hongguo-shared'])
   await assert.rejects(readFile(join(f.directory, 'escape')), { code: 'ENOENT' })
+})
+
+test('both hosts can verify a warm cache without registering as installed', async t => {
+  const f = await fixture(t)
+  const options = { ...f.options, fetchImpl: async () => new Response(f.archive) }
+  await registerFfmpegHost({ ...options, host: codex })
+  const fresh = await import('../src/runtime/ffmpeg-runtime.mjs?app-diagnostics')
+  assert.equal(await fresh.checkInstalledFfmpeg({ ...options, host: antigravity }), true)
+  assert.equal(await fresh.checkInstalledFfmpeg({ ...options, host: codex }), true)
+  await fresh.ensureFfmpeg({ ...options, host: antigravity })
+  await removeManagedFfmpeg({ ...options, host: codex })
+  assert.equal(await fresh.checkInstalledFfmpeg({ ...options, host: antigravity }), false)
+})
+
+function legacyPath(directory, host, artifact, platform = process.platform, arch = process.arch) {
+  return join(directory, host.cacheName, 'runtime', 'ffmpeg', artifact.cacheKey ?? artifact.archiveSha256.slice(0, 16),
+    platform + '-' + arch, platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg')
+}
+
+async function seedLegacy(f, host) {
+  const target = legacyPath(f.directory, host, f.artifact)
+  await mkdir(dirname(target), { recursive: true })
+  await writeFile(target, f.binary, { mode: 0o755 })
+  await writeFile(target + '.json', JSON.stringify({ owner: '@kyun.si/codex-hongguo', schema: 1,
+    version: f.artifact.version, archiveSha256: f.artifact.archiveSha256,
+    binarySha256: f.artifact.binarySha256, binaryBytes: f.binary.length }))
+  return target
+}
+
+test('a configured cache base can use a directory link throughout migration, registration and uninstall', async t => {
+  const f = await fixture(t), directory = join(f.directory, 'storage'), alias = join(f.directory, 'linked-storage')
+  await mkdir(directory)
+  await symlink(directory, alias, process.platform === 'win32' ? 'junction' : 'dir')
+  const base = join(directory, 'new-cache')
+  const options = { ...f.options, env: { HONGGUO_RUNTIME_DIR: join(alias, 'new-cache') },
+    fetchImpl: () => assert.fail('reuse the legacy binary offline') }
+  const direct = { ...options, env: { HONGGUO_RUNTIME_DIR: base } }
+  assert.equal(ffmpegPath(options), ffmpegPath(direct))
+  const legacy = await seedLegacy({ ...f, directory: base }, codex)
+  const target = await registerFfmpegHost({ ...options, host: antigravity })
+  assert.deepEqual(await readFile(legacy), f.binary)
+  assert.equal(await registerFfmpegHost({ ...direct, host: codex }), target)
+  await assert.rejects(lstat(legacy), { code: 'ENOENT' })
+  const external = join(f.directory, 'external-ffmpeg')
+  await writeFile(external, f.binary)
+  const override = { ...options, env: { ...options.env, HONGGUO_FFMPEG: external }, host: antigravity }
+  assert.equal(await registerFfmpegHost(override), external)
+  await removeManagedFfmpeg(override)
+  assert.deepEqual(await readFile(target), f.binary)
+  await removeManagedFfmpeg({ ...options, host: codex })
+  await assert.rejects(lstat(target), { code: 'ENOENT' })
+  assert.deepEqual(await readFile(external), f.binary)
+  assert.equal(await realpath(alias), directory)
+})
+
+test('either App can migrate its old runtime offline while the other App still uses its old path', async t => {
+  for (const first of [codex, antigravity]) await t.test(first.id, async t => {
+    const f = await fixture(t), second = first === codex ? antigravity : codex
+    const secondLegacy = await seedLegacy(f, second)
+    const options = { ...f.options, fetchImpl: () => assert.fail('an installed legacy binary must be reused offline') }
+    const target = ffmpegPath(options)
+    // A new installation can reuse the other App's old binary even before that App upgrades.
+    assert.equal(await ensureFfmpeg({ ...options, host: first }), target)
+    assert.deepEqual(await readFile(secondLegacy), f.binary)
+    const firstLegacy = await seedLegacy(f, first)
+    await registerFfmpegHost({ ...options, host: first })
+    assert.deepEqual(await readFile(target), f.binary)
+    await assert.rejects(lstat(firstLegacy), { code: 'ENOENT' })
+    assert.deepEqual(await readFile(secondLegacy), f.binary)
+    await registerFfmpegHost({ ...options, host: second })
+    await assert.rejects(lstat(secondLegacy), { code: 'ENOENT' })
+    await registerFfmpegHost({ ...options, host: first })
+    await removeManagedFfmpeg({ ...options, host: second })
+    await removeManagedFfmpeg({ ...options, host: second })
+    assert.deepEqual(await readFile(target), f.binary)
+    await removeManagedFfmpeg({ ...options, host: first })
+    await assert.rejects(lstat(target), { code: 'ENOENT' })
+  })
+})
+
+test('a corrupt old binary is not promoted and a failed registration cannot keep a later installation alive', async t => {
+  const f = await fixture(t), oldPath = await seedLegacy(f, antigravity)
+  const damaged = Buffer.alloc(f.binary.length)
+  await writeFile(oldPath, damaged)
+  const offline = { ...f.options, host: antigravity, fetchImpl: () => { throw Error('offline') } }
+  await assert.rejects(registerFfmpegHost(offline), /自动准备失败/)
+  await assert.rejects(lstat(ffmpegPath(f.options)), { code: 'ENOENT' })
+  assert.deepEqual(await readFile(oldPath), damaged)
+  let downloads = 0
+  await registerFfmpegHost({ ...f.options, host: codex, fetchImpl: () => {
+    downloads++
+    return new Response(f.archive)
+  } })
+  assert.equal(downloads, 1)
+  assert.deepEqual(await readFile(ffmpegPath(f.options)), f.binary)
+  await removeManagedFfmpeg({ ...f.options, host: codex })
+  await assert.rejects(lstat(ffmpegPath(f.options)), { code: 'ENOENT' })
+  assert.deepEqual(await readFile(oldPath), damaged)
 })
 
 function compactOptions(f, binary = f.binary) {
@@ -128,16 +226,17 @@ test('the real Windows/Linux component reuses a legacy cache and receipt without
   // Windows can briefly retain the executable after its native version probe.
   t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }))
   const options = { env: { HONGGUO_RUNTIME_DIR: directory } }
-  const oldPath = ffmpegPath({ ...options, artifacts: { [key]: upstream } })
-  assert.equal(ffmpegPath(options), oldPath)
+  const oldPath = legacyPath(directory, codex, upstream)
+  const sharedPath = ffmpegPath(options)
+  assert.equal(ffmpegPath({ ...options, artifacts: { [key]: upstream } }), sharedPath)
   await mkdir(dirname(oldPath), { recursive: true })
   await copyFile(source, oldPath)
   await chmod(oldPath, 0o755)
   const receipt = JSON.stringify({ owner: '@kyun.si/codex-hongguo', schema: 1, version: upstream.version,
     archiveSha256: upstream.archiveSha256, binarySha256: artifact.binarySha256, binaryBytes: artifact.binaryBytes })
   await writeFile(oldPath + '.json', receipt)
-  assert.equal(await ensureFfmpeg({ ...options, fetchImpl: () => assert.fail('real legacy bytes must not be downloaded again') }), oldPath)
-  assert.equal(await readFile(oldPath + '.json', 'utf8'), receipt)
+  assert.equal(await ensureFfmpeg({ ...options, fetchImpl: () => assert.fail('real legacy bytes must not be downloaded again') }), sharedPath)
+  assert.deepEqual(JSON.parse(await readFile(sharedPath + '.json', 'utf8')), JSON.parse(receipt))
 })
 
 test('a corrupt cache is repaired from a verified archive and partial or wrong downloads are never executed', async t => {
@@ -176,6 +275,35 @@ test('a failed explicit native-binary override does not silently run a different
   const options = { ...f.options, env: { HONGGUO_FFMPEG: join(f.directory, 'absent') }, fetchImpl: () => assert.fail('an explicit override must not download') }
   assert.equal(ffmpegPath(options), options.env.HONGGUO_FFMPEG)
   await assert.rejects(ensureFfmpeg(options), /自动准备失败/)
+})
+
+test('switching to a legacy host releases its shared claim and keeps its private component', async t => {
+  const f = await fixture(t)
+  const target = await registerFfmpegHost({ ...f.options, host: codex, fetchImpl: async () => new Response(f.archive) })
+  await registerFfmpegHost({ ...f.options, host: antigravity })
+  const old = legacyPath(f.directory, codex, f.artifact)
+  await mkdir(dirname(old), { recursive: true }); await writeFile(old, 'legacy')
+  await removeManagedFfmpeg({ ...f.options, host: codex, keepLegacy: true })
+  assert.deepEqual(await readFile(target), f.binary)
+  await removeManagedFfmpeg({ ...f.options, host: antigravity })
+  await assert.rejects(lstat(target), { code: 'ENOENT' })
+  assert.equal(await readFile(old, 'utf8'), 'legacy')
+})
+
+test('external FFmpeg survives registration and uninstall of both hosts', async t => {
+  const f = await fixture(t), executable = join(f.directory, 'user-ffmpeg')
+  await writeFile(executable, f.binary, { mode: 0o755 })
+  const options = { ...f.options, env: { ...f.options.env, HONGGUO_FFMPEG: executable },
+    fetchImpl: () => assert.fail('a valid external executable must not download') }
+  for (const host of [codex, antigravity]) {
+    await registerFfmpegHost({ ...options, host })
+    assert.equal(ffmpegPath({ ...options, host }), executable)
+  }
+  for (const host of [codex, antigravity]) {
+    await removeManagedFfmpeg({ ...options, host })
+    assert.deepEqual(await readFile(executable), f.binary)
+  }
+  await assert.rejects(lstat(ffmpegPath(f.options)), { code: 'ENOENT' })
 })
 
 test('transient HTTP and interrupted downloads retry from a clean archive before publishing verified bytes', async t => {
@@ -331,31 +459,36 @@ test('XZ archives are decoded without a system tar or xz program', async t => {
   assert.deepEqual(await readFile(await ensureFfmpeg(options)), f.binary)
 })
 
-test('independent plugin processes share one atomic cold installation', async t => {
+test('independent Codex and Antigravity installers download once and retain both host registrations', async t => {
   const f = await fixture(t)
   const counter = join(f.directory, 'requests'), helper = join(f.directory, 'worker.mjs')
   const moduleUrl = new URL('../src/runtime/ffmpeg-runtime.mjs', import.meta.url).href
+  const hostsUrl = new URL('../src/runtime/host.mjs', import.meta.url).href
   await writeFile(helper, `import {appendFile} from 'node:fs/promises';
-    import {ensureFfmpeg} from ${JSON.stringify(moduleUrl)};
-    await ensureFfmpeg({...${JSON.stringify(f.options)},probe:()=>true,fetchImpl:async()=>{
+    import {registerFfmpegHost} from ${JSON.stringify(moduleUrl)};
+    import {hostProfile} from ${JSON.stringify(hostsUrl)};
+    await registerFfmpegHost({...${JSON.stringify(f.options)},host:hostProfile(process.argv[2]),probe:()=>true,fetchImpl:async()=>{
       await appendFile(${JSON.stringify(counter)},'x');
       await new Promise(resolve=>setTimeout(resolve,150));
       return new Response(Buffer.from(${JSON.stringify(Buffer.from(f.archive).toString('base64'))},'base64'));
     }});`)
-  const child = () => new Promise((resolve, reject) => {
-    const p = spawn(process.execPath, [helper], { stdio: 'ignore' })
+  const child = host => new Promise((resolve, reject) => {
+    const p = spawn(process.execPath, [helper, host.id], { stdio: 'ignore' })
     p.on('error', reject)
     p.on('exit', code => code === 0 ? resolve() : reject(Error('isolated installer failed')))
   })
-  await Promise.all([child(), child()])
+  await Promise.all([child(codex), child(antigravity)])
   assert.equal(await readFile(counter, 'utf8'), 'x')
+  await removeManagedFfmpeg({ ...f.options, host: codex })
   assert.deepEqual(await readFile(ffmpegPath(f.options)), f.binary)
+  await removeManagedFfmpeg({ ...f.options, host: antigravity })
+  await assert.rejects(lstat(ffmpegPath(f.options)), { code: 'ENOENT' })
 })
 
 test('uninstall clears the whole component namespace and preserves external executables and the custom cache root', async t => {
   const f = await fixture(t)
   const target = await ensureFfmpeg({ ...f.options, fetchImpl: async () => new Response(f.archive) })
-  const root = join(f.directory, 'codex-hongguo', 'runtime', 'ffmpeg')
+  const root = join(f.directory, 'hongguo-shared', 'runtime', 'ffmpeg')
   await writeFile(join(f.directory, 'user-file'), 'keep')
   await writeFile(join(f.directory, 'external-ffmpeg'), 'external executable')
   await mkdir(join(f.directory, 'runtime', 'ffmpeg'), { recursive: true })
@@ -376,7 +509,7 @@ test('uninstall leaves no corrupt binary, unknown version, installation lock or 
     await t.test(reason, async t => {
       const f = await fixture(t)
       const target = await ensureFfmpeg({ ...f.options, fetchImpl: async () => new Response(f.archive) })
-      const root = join(f.directory, 'codex-hongguo', 'runtime', 'ffmpeg')
+      const root = join(f.directory, 'hongguo-shared', 'runtime', 'ffmpeg')
       if (reason === 'modified') await writeFile(target, 'other-binary')
       if (reason === 'unknown') { await mkdir(join(root, 'old-version')); await writeFile(join(root, 'old-version', 'ffmpeg'), 'old component') }
       if (reason === 'locked') await mkdir(dirname(target) + '.lock')
@@ -393,7 +526,7 @@ test('uninstall deletes links inside its namespace and leaves every external lin
     await t.test(item, async t => {
       const f = await fixture(t)
       const target = await ensureFfmpeg({ ...f.options, fetchImpl: async () => new Response(f.archive) })
-      const root = join(f.directory, 'codex-hongguo', 'runtime', 'ffmpeg')
+      const root = join(f.directory, 'hongguo-shared', 'runtime', 'ffmpeg')
       const source = item === 'root' ? root : item === 'directory' ? dirname(target) : item === 'binary' ? target : target + '.json'
       const moved = join(f.directory, 'external-copy')
       await rename(source, moved)
@@ -410,7 +543,7 @@ test('uninstall deletes links inside its namespace and leaves every external lin
 test('a substituted ancestor outside the component namespace fails cleanup without touching the external tree', { skip: process.platform === 'win32' }, async t => {
   const f = await fixture(t)
   const target = await ensureFfmpeg({ ...f.options, fetchImpl: async () => new Response(f.archive) })
-  const parent = join(f.directory, 'codex-hongguo', 'runtime'), outside = join(f.directory, 'external-runtime')
+  const parent = join(f.directory, 'hongguo-shared', 'runtime'), outside = join(f.directory, 'external-runtime')
   await rename(parent, outside)
   await symlink(outside, parent)
   await assert.rejects(removeManagedFfmpeg(f.options), /清理失败/)

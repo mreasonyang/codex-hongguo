@@ -9,9 +9,12 @@ import { setTimeout as pause } from 'node:timers/promises'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { runFfmpeg } from '../src/server/media.mjs'
+import { verificationRuntime } from './verification-runtime.mjs'
 
 if (!process.argv.includes('--live')) throw Error('Pass --live to request the upstream catalog; --playback also prepares one full episode.')
 const scratch = await mkdtemp(join(tmpdir(), 'huangguo-verify-'))
+const runtime = await verificationRuntime(scratch)
+Object.assign(process.env, runtime)
 const server = resolve('dist/server/index.mjs')
 const report = { status: 'fail', checkedAt: new Date().toISOString(), platform: process.platform, arch: process.arch,
   upstreamCommit: 'a83dfd9a29b23d439da4f853d104568696cd401c',
@@ -22,8 +25,8 @@ const failed = code => Object.assign(new Error('Verification failed'), { verific
 try {
   client = new Client({ name: 'huangguo-verifier', version: '1.0.0' })
   await client.connect(new StdioClientTransport({ command: process.execPath,
-    args: ['--no-warnings', server], env: { PATH: process.env.PATH, HONGGUO_DATA_DIR: join(scratch, 'data'),
-      HONGGUO_PROVIDERS_DIR: '', ...(process.env.HONGGUO_RUNTIME_DIR ? { HONGGUO_RUNTIME_DIR: process.env.HONGGUO_RUNTIME_DIR } : {}) }, stderr: 'ignore' }))
+    args: ['--no-warnings', server], env: { ...runtime, PATH: process.env.PATH, HONGGUO_DATA_DIR: join(scratch, 'data'),
+      HONGGUO_PROVIDERS_DIR: '' }, stderr: 'ignore' }))
   const opened = await client.callTool({ name: 'open_drama_panel', arguments: {} })
   const panel = opened._meta?.panel
   if (!panel) throw failed('PANEL_UNAVAILABLE')

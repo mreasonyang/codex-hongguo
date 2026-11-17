@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { findExecutable } from '../runtime/executables.mjs'
 import { ensureFfmpeg, isFfmpegReady } from '../runtime/ffmpeg-runtime.mjs'
+import { codex } from '../runtime/host.mjs'
 import { createWriteStream, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -16,13 +17,34 @@ const MB = 1024 * 1024
 const maxEpisode = 256 * MB
 export { cdn } from './sources/network.mjs'
 export const ffmpeg = findExecutable('ffmpeg', process.env.HONGGUO_FFMPEG)
-export function hasFfmpeg() {
-  return isFfmpegReady()
+export function hasFfmpeg(host = codex) {
+  return isFfmpegReady({ host })
 }
-export async function runFfmpeg(args, input = null, capture = false, cwd = undefined, { signal } = {}) {
-  await ensureFfmpeg()
+export function mediaRunner(host = codex) {
+  return (args, input, capture, cwd, options) => runFfmpeg(args, input, capture, cwd, { ...options, host })
+}
+// Some ARM64 Linux guests advertise SIMD instructions that bundled libx264
+// cannot execute. Probe the encoder before it can create partial media files.
+const arm64EncoderOptions = new Map()
+function encoderArgs(executable, args) {
+  if (process.platform !== 'linux' || process.arch !== 'arm64') return args
+  const codec = args.indexOf('-c:v')
+  if (codec < 0 || args[codec + 1] !== 'libx264') return args
+  if (!arm64EncoderOptions.has(executable)) {
+    const probe = spawnSync(executable, ['-nostdin', '-v', 'error', '-f', 'rawvideo', '-pix_fmt', 'yuv420p',
+      '-s', '128x128', '-i', 'pipe:0', '-frames:v', '2', '-c:v', 'libx264', '-preset', 'veryfast', '-f', 'null', '-'],
+    { input: Buffer.alloc(128 * 128 * 3), stdio: ['pipe', 'ignore', 'ignore'], timeout: 5000 })
+    arm64EncoderOptions.set(executable, probe.signal === 'SIGILL')
+  }
+  if (!arm64EncoderOptions.get(executable)) return args
+  return [...args.slice(0, codec + 2), '-x264-params', 'asm=0', ...args.slice(codec + 2)]
+}
+
+export async function runFfmpeg(args, input = null, capture = false, cwd = undefined, { signal, host = codex } = {}) {
+  const executable = await ensureFfmpeg({ host })
+  args = encoderArgs(executable, args)
   return new Promise((resolve, reject) => {
-    const child = spawn(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-nostdin', ...args], {
+    const child = spawn(executable, ['-hide_banner', '-loglevel', 'error', '-nostdin', ...args], {
       cwd,
       stdio: ['pipe', capture ? 'pipe' : 'ignore', 'ignore'],
       windowsHide: true,
@@ -107,10 +129,11 @@ export async function prepareCandidate(stream, raw, output, fetchMedia, budget =
 
 // SQLite coordinates multiple stdio processes sharing the same user cache.
 export class MediaCache {
-  constructor(store, resolve, { maxFiles = 40, maxBytes = 1024 * MB, revision = () => '' } = {}) {
+  constructor(store, resolve, { maxFiles = 40, maxBytes = 1024 * MB, revision = () => '', run = mediaRunner(store.host) } = {}) {
     this.db = store.db
     this.resolve = resolve
     this.revision = revision
+    this.run = run
     this.dir = join(store.root, 'media')
     this.maxFiles = maxFiles
     this.maxBytes = maxBytes
@@ -195,7 +218,7 @@ export class MediaCache {
         lastError = new PlayerError('该集暂未提供可播放的片源')
         for (const stream of descriptor.candidates || []) {
           try {
-            codec = await prepareCandidate(stream, raw, output, fetchMedia)
+            codec = await prepareCandidate(stream, raw, output, fetchMedia, maxEpisode, this.run)
             lastError = null
             break
           } catch (error) { lastError = error; rmSync(output, { force: true }) }

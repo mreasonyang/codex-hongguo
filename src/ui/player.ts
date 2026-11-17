@@ -4,7 +4,7 @@ import { panelStream } from './panel-stream'
 import { mediaErrorMessage, waitForMetadata } from './media-startup'
 import { finishedTurn, startedTurn } from './playback-turn'
 import { ProviderAccount } from './provider-account'
-import { browser, call, connect, reopenPanel, hostLocale, type Context, type State, type Preferences, type SourceId } from './api'
+import { browser, call, connect, reopenPanel, hostLocale, antigravity, unsupportedHostMessage, type Context, type State, type Preferences, type SourceId } from './api'
 import { pickLabel, showWaitingPicks, waitingCard, type WaitingSelection } from './waiting'
 import { createHoverDecoy } from './hover-decoy'
 import { createCoverPage } from './cover-page'
@@ -1222,7 +1222,7 @@ autoNext.onchange = () => {
 video.ontimeupdate = () => {
   updateTime()
   preloadNextEpisode()
-  if (!video.paused && Date.now() - lastSave >= 5000) {
+  if (!video.paused && Date.now() - lastSave >= (antigravity() ? 1000 : 5000)) {
     lastSave = Date.now()
     void save()
   }
@@ -1461,10 +1461,10 @@ el('copy').onclick = async () => {
   const input = el<HTMLInputElement>('linkValue')
   try {
     await navigator.clipboard.writeText(input.value)
-    notice('已复制，请在 Codex 内置浏览器打开')
+    notice('已复制，请在内置浏览器打开')
   } catch {
     input.select()
-    notice('链接已选中，请复制并在 Codex 内置浏览器打开')
+    notice('链接已选中，请复制并在内置浏览器打开')
   }
 }
 el('prefs').onclick = async () => {
@@ -1566,7 +1566,7 @@ window.addEventListener('pageshow', activatePage)
 let startupSelection: WaitingSelection | undefined, reconnecting = false
 function startupFailed(error: unknown) {
   const message = explain(error)
-  const unsupported = message === '红果短剧仅在官方 Codex App 中启用'
+  const unsupported = message === unsupportedHostMessage
   text('startupErrorMessage', unsupported ? message : /请重新打开短剧面板|会话不匹配/.test(message)
     ? '此页面已失效，请重新连接。'
     : /分屏已失效/.test(message) ? '请从原面板重新打开此页面。' : '连接失败，请重新连接后重试。')

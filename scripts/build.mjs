@@ -7,7 +7,8 @@ await import('./build-openhongguo.mjs')
 execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit'], { stdio: 'inherit' })
 await Promise.all([
   build({
-    entryPoints: ['src/server/index.mjs', 'src/hooks/write.mjs', 'src/setup/check.mjs', 'src/cli/main.mjs', 'src/cli/provider-worker.mjs'],
+    entryPoints: ['src/server/index.mjs', 'src/server/antigravity.mjs', 'src/hooks/write.mjs', 'src/hooks/antigravity.mjs',
+      'src/setup/check.mjs', 'src/setup/antigravity.mjs', 'src/cli/main.mjs', 'src/cli/provider-worker.mjs'],
     bundle: true,
     platform: 'node',
     format: 'esm',

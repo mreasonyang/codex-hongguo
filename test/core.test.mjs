@@ -87,7 +87,8 @@ function ffOption(args, name) {
   const index = args.indexOf(name)
   return index < 0 ? undefined : args[index + 1]
 }
-const env = (dir) => ({ PATH: process.env.PATH, HONGGUO_DATA_DIR: dir })
+const env = dir => ({ PATH: process.env.PATH, HONGGUO_DATA_DIR: dir,
+  HONGGUO_RUNTIME_DIR: join(dir, 'runtime'), HONGGUO_FFMPEG: ffmpeg })
 function setup(t) {
   const dir = mkdtempSync(join(tmpdir(), '红果 测试 ')),
     store = new Store(dir)

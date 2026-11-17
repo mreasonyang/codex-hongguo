@@ -1,0 +1,12 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "codex-hongguo",
+  "version": "0.0.40",
+  "displayName": "红果短剧",
+  "description": "在会话侧栏选剧、续播，并随本机任务自动播放和暂停。",
+  "logo": "assets/logo.png",
+  "author": { "name": "Eason Yang" },
+  "license": "AGPL-3.0-only",
+  "repository": "https://github.com/mreasonyang/codex-hongguo",
+  "suggestedPrompts": ["配置红果短剧", "等待时看一集"]
+}

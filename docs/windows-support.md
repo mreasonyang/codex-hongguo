@@ -29,7 +29,7 @@ npx.cmd "@kyun.si/codex-hongguo@latest" setup
 npx.cmd "@kyun.si/codex-hongguo@latest" update
 ```
 
-更新保留进度和设置。卸载会删除本插件的播放组件、观看进度、设置、视频缓存和设备档案：
+更新保留进度和设置。卸载会删除 Codex 的观看进度、设置、视频缓存和设备档案。最后一个宿主卸载时，才会清理共享程序和 FFmpeg。
 
 ```powershell
 npx.cmd "@kyun.si/codex-hongguo@latest" uninstall
@@ -79,7 +79,7 @@ ZIP 包含插件程序，首次准备播放组件仍需联网。更新时切换�
 - Windows 使用固定入口 `run-node.exe` 启动 MCP 和 Hooks；在 ARM64 系统上自动转交 `run-node-arm64.exe` 原生启动器。Windows 11 自带的 x64 兼容机制只用于这个入口，之后按 Node 架构运行原生 Node 与播放组件。启动器检查 Node 版本和 SQLite，并透传 stdin/stdout 与退出码。宿主终止启动器时通过 Windows Job 回收 Node 及子进程。
 - `HONGGUO_NODE` 可指定 x64 或 ARM64 `node.exe` 的绝对路径；设置后不会静默回退。未设置时检查绝对 PATH 项、常见 Node、Volta、nvm-windows 和 Scoop 安装位置。
 - `HONGGUO_FFMPEG` 与 `HONGGUO_CODEX` 可覆盖程序路径，后者允许 `.exe`、`.cmd`。变量必须能被 Codex 子进程读取；仅在安装终端中设置不能保证桌面继承。
-- 进度与缓存位于 `%LOCALAPPDATA%\CodexHongguo\`，缺省为 `%USERPROFILE%\AppData\Local\CodexHongguo\`。卸载删除这些数据；只想暂时停用时在 Codex 中禁用插件。
+- Codex 的观看进度和视频缓存位于 `%LOCALAPPDATA%\CodexHongguo\`，Antigravity 的在 `%LOCALAPPDATA%\AntigravityHongguo\`。共享程序位于 `%LOCALAPPDATA%\HongguoShared\program\`，两端共用的 FFmpeg 位于 `%LOCALAPPDATA%\HongguoShared\Cache\runtime\ffmpeg\`。
 - 源码构建需要 Go >=1.25 交叉编译 Windows x64 和 ARM64 启动器；使用发行包不需要 Go。
 
 ## 自动化与桌面观察

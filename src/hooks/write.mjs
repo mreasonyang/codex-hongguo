@@ -1,4 +1,5 @@
 import { Store } from '../server/store.mjs'
+import { codex } from '../runtime/host.mjs'
 
 process.umask(0o077)
 let store
@@ -16,7 +17,7 @@ try {
   }
   if (officialDesktop && bytes <= 16 * 1024 * 1024) {
     const { session_id, turn_id, hook_event_name } = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-    store = new Store()
+    store = new Store(undefined, false, { host: codex })
     const changed = store.event({ session_id, turn_id, hook_event_name })
     if (changed && hook_event_name === 'UserPromptSubmit' && store.offerable(session_id, turn_id)) {
       output = { hookSpecificOutput: {
