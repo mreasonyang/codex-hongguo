@@ -15,7 +15,7 @@ function fixture(t, host = codex) {
   const root = mkdtempSync(join(tmpdir(), 'hongguo-agy-')), store = new Store(root, false, { host })
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }) })
   const input = { conversationId: 'test-chat', invocationNum: 0, initialNumSteps: 10,
-    lastUserInput: 'PRIVATE PROMPT', transcriptPath: '/PRIVATE/.gemini/antigravity/brain/test-chat/.system_generated/logs/transcript.jsonl' }
+    lastUserInput: 'PRIVATE PROMPT', transcriptPath: '/PRIVATE/.gemini/antigravity/brain/test-chat/.system_generated/logs/transcript_full.jsonl' }
   return { root, store, input, event: (kind, extra = {}) => recordAntigravityEvent(store, kind, { ...input, ...extra }) }
 }
 test('Antigravity starts once per run, waits for background work, and records cancellation without resuming manual pauses', t => {
@@ -50,7 +50,7 @@ test('malformed hook counters and incomplete stop payloads do not change playbac
   event('stop')
   assert.equal(store.state('agy_test-chat').state, 'submitted')
 })
-test('real Antigravity hook process emits one private recommendation and fails open on invalid JSON', t => {
+test('Antigravity hook process accepts the full transcript path, emits one recommendation, and fails open on invalid JSON', t => {
   const { root, store, input } = fixture(t)
   const hook = (kind, payload) => spawnSync(process.execPath, ['dist/hooks/antigravity.mjs', kind], {
     input: payload, encoding: 'utf8', timeout: 3000, env: { ...process.env, HONGGUO_ANTIGRAVITY_DATA_DIR: root },
@@ -72,9 +72,13 @@ test('real Antigravity hook process emits one private recommendation and fails o
   }
 })
 test('App hook origin detection accepts Windows paths and rejects absent or mismatched metadata', () => {
-  const input = { conversationId: 'chat', transcriptPath: 'C:\\Users\\test\\.gemini\\antigravity\\brain\\chat\\.system_generated\\logs\\transcript.jsonl' }
-  assert.equal(isAntigravityApp(input), true)
-  assert.equal(isAntigravityApp({ ...input, conversationId: 'different' }), false)
+  const logs = 'C:\\Users\\test\\.gemini\\antigravity\\brain\\chat\\.system_generated\\logs\\'
+  for (const filename of ['transcript.jsonl', 'transcript_full.jsonl']) {
+    const input = { conversationId: 'chat', transcriptPath: logs + filename }
+    assert.equal(isAntigravityApp(input), true)
+    assert.equal(isAntigravityApp({ ...input, conversationId: 'different' }), false)
+  }
+  assert.equal(isAntigravityApp({ conversationId: 'chat', transcriptPath: logs + 'other.jsonl' }), false)
   for (const value of [null, {}, { conversationId: 'chat' }]) assert.equal(isAntigravityApp(value), false)
 })
 test('only an Antigravity-issued turn capability can bind an unlabelled recommendation; direct panels stay unbound', t => {

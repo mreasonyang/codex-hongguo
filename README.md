@@ -73,7 +73,7 @@ Antigravity 的插件清单、技能和启动入口安装到用户主目录下�
 
 从会话右侧 **＋ → Extensions → 红果短剧** 打开常驻播放器；全局侧栏也有入口。推荐卡点剧名后在卡片原位置展开。推荐入口自动绑定所属聊天；直接从 ＋ 打开的面板若未识别聊天，请用「选择会话」核对会话 ID 后缀与时间，显式绑定。未绑定时可手动观看。
 
-在 **Settings → Customizations → Hooks** 审查并启用红果的 `PreInvocation`、`Stop`。首次模型调用记录任务开始，模型后续调用不会反复续播；后台工作未结束时继续等待，任务完全结束或用户取消时暂停。设置中仍可独立关闭自动播放与暂停。Hooks 不保存提示词或回复。
+在左侧 **Customizations → Installed** 确认“红果短剧”插件已启用（可从插件旁的 **⋮** 管理）。按 [Antigravity 插件说明](https://antigravity.google/docs/plugins)，`PreInvocation`、`Stop` 随已启用的插件加载，无需分别开启。首次模型调用记录任务开始，模型后续调用不会反复续播；后台工作未结束时继续等待，任务完全结束或用户取消时暂停。播放器设置中仍可独立关闭自动播放与暂停。Hooks 不保存提示词或回复；实际任务联动仍需在会话中验证。
 
 同一系统用户下，Codex 和 Antigravity 共用一套播放器、服务端、SDK、WASM 及托管的 FFmpeg。安装第二个宿主会复用现有程序。通过任一宿主更新后，两个宿主的新进程都使用更新后的程序。Antigravity 的观看数据单独保存，macOS 数据在 `~/Library/Application Support/AntigravityHongguo/`，Windows 在 `%LOCALAPPDATA%\AntigravityHongguo\`，Linux 在 `${XDG_DATA_HOME:-~/.local/share}/antigravity-hongguo/`。更新保留数据，卸载清理本宿主的数据；不会自动导入 Codex 的观看记录或 Provider。
 

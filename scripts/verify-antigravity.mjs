@@ -82,7 +82,7 @@ try {
       }))
   }
   const input = { conversationId: 'verification-chat', initialNumSteps: 0, invocationNum: 0,
-    transcriptPath: '/test/.gemini/antigravity/brain/verification-chat/.system_generated/logs/transcript.jsonl' }
+    transcriptPath: '/test/.gemini/antigravity/brain/verification-chat/.system_generated/logs/transcript_full.jsonl' }
   const start = hook('start', input)
   const message = start.injectSteps?.[0]?.systemMessage?.systemMessage
   assert.equal(typeof message, 'string', 'The installed PreInvocation hook must respond to the synthetic start event')

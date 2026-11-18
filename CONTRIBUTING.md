@@ -51,7 +51,7 @@ Antigravity 的普通面板在宿主未传入会话元数据时保持未绑定�
 
 checkbox 使用 `@inquirer/checkbox`，并固定兼容 Node.js 22.16 的 core、ANSI 和 figures 版本。升级这些依赖时需核对 engine 下限，并验证空选提示、终端宽度变化、取消后的 raw mode 与光标恢复；不能将安装器最低 Node 版本隐式抬高。
 
-插件目录也会被 Antigravity CLI / IDE 发现。Hook 仅根据官方 `transcriptPath` 的 App 路径后缀识别来源，不打开或存储 transcript，其他来源保持静默。配置及事件格式参考 [构建插件](https://antigravity.google/docs/build-plugins) 和 [Hooks](https://antigravity.google/docs/hooks)。
+插件目录也会被 Antigravity CLI / IDE 发现。Hook 根据 `transcriptPath` 的 App 路径后缀识别来源，接受 2.32.1 实现传入的 `transcript_full.jsonl` 和文档中的 `transcript.jsonl`。Hook 不打开或存储 transcript，其他来源保持静默。配置及事件格式参考 [构建插件](https://antigravity.google/docs/build-plugins) 和 [Hooks](https://antigravity.google/docs/hooks)。
 
 Antigravity 2.32.1 本机随包指南及前端确认：宿主标识为 `Antigravity` / `web`，入口使用 `com.google.antigravity/ui` 的 `aux_pane` / `global`；只提供 inline 显示模式，最多 4 个并发应用调用，不发送 teardown。前端对请求排队并优先保存与状态读取；推荐卡本地展开到 760px，普通面板占满侧栏。协议测试不能替代解码后的画面、声音、账号能力开通和自然 PreInvocation/Stop 的桌面验证；`release/verification-antigravity.json` 明确保留这些未验收项。
 
