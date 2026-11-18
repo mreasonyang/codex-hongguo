@@ -14,7 +14,7 @@ const buildMarker = '.hongguo-program.json'
 const buildName = /^[a-f0-9]{64}$/
 const required = ['dist', 'bin', 'package.json', 'LICENSE', 'COPYING', 'NOTICE']
 const optional = ['.codex-plugin', '.mcp.json', 'hooks', '.antigravity-plugin', 'mcp_config.json', 'hooks.json',
-  'assets', 'skills', 'provider-kit', 'licenses', 'docs/providers.md', 'README.md', 'README.en.md']
+  'assets', 'skills', 'sidecars', 'provider-kit', 'licenses', 'docs/providers.md', 'README.md', 'README.en.md']
 const windowsLaunchers = ['run-node.exe', 'run-node-arm64.exe']
 const modeFor = name => /^bin\/(run-node(?:-arm64)?(?:\.exe)?|(?:codex|antigravity)-hongguo\.mjs)$/.test(name) ? 0o755 : 0o644
 

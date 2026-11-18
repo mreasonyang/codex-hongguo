@@ -6,7 +6,7 @@ import { leasedProgramEntry } from '../runtime/program-lease.mjs'
 // The entry point reads the active build at launch, so both hosts switch together.
 export async function writeProgramShim(path, programHome, relativeEntry) {
   await mkdir(dirname(path), { recursive: true })
-  if (relativeEntry === 'dist/server/index.mjs' || relativeEntry === 'dist/server/antigravity.mjs') {
+  if (relativeEntry.startsWith('dist/server/')) {
     await writeFile(path, leasedProgramEntry(programHome, relativeEntry), { mode: 0o755 })
     return
   }

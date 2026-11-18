@@ -1,5 +1,6 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { getUiCapability, registerAppTool } from '@modelcontextprotocol/ext-apps/server'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
@@ -11,6 +12,7 @@ import { Catalog } from './catalog.mjs'
 import { registerFfmpegHost } from '../runtime/ffmpeg-runtime.mjs'
 import { BrowserServer } from './browser.mjs'
 import { message } from './errors.mjs'
+import { playerLink, sidecarReady } from './antigravity-sidecar.mjs'
 
 export async function startServer(host) {
   process.umask(0o077)
@@ -56,21 +58,36 @@ export async function startServer(host) {
       server.registerResource(name + '（' + prefix + '）', legacy, { mimeType, _meta: meta }, read)
     }
   }
-  server.registerTool(
+  registerAppTool(server,
     'show_waiting_picks', {
       title: '等待时看一集',
       description: 'Show optional Hongguo titles inline when requested by the Hongguo turn-start hook. Returns immediately.',
       inputSchema: { turnId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/) },
       annotations: { readOnlyHint: true, openWorldHint: false },
-      _meta: { ui: { visibility: ['model'], resourceUri: waitingUri }, 'openai/ui': { preferredModelDisplayMode: 'inline' } },
+      _meta: {
+        ui: { visibility: ['model'], resourceUri: waitingUri },
+        'openai/ui': { preferredModelDisplayMode: 'inline' },
+        ...(host.id === 'antigravity' ? { 'antigravity/alwaysLoad': true } : {}),
+      },
     },
-    ({ turnId }, extra) => {
+    async ({ turnId }, extra) => {
       const initial = service.openWaiting(extra._meta, turnId)
+      const apps = getUiCapability(server.server.getClientCapabilities())
+      const nativePlayer = host.id === 'antigravity' && sidecarReady(store)
+      if (initial && host.id === 'antigravity' && (nativePlayer || !apps?.mimeTypes?.includes(mimeType))) {
+        const titles = await service.textWaitingPicks(initial.panel)
+        const text = titles.length ? '等待时看一集 · 红果短剧：' + titles.map(title => '《' + title + '》').join('、')
+          : '这一轮暂无红果短剧推荐。'
+        const link = nativePlayer && titles.length ? playerLink : undefined
+        return { content: [{ type: 'text', text: link ? text + '\n' + link : text }], structuredContent: {
+          shown: false, presentation: link ? 'sidecar' : 'text', hasPicks: titles.length > 0, ...(link && { playerLink: link }),
+        }, _meta: { panel: initial.panel, waitingTurn: turnId, ui: { resourceUri: waitingUri } } }
+      }
       return { content: [], structuredContent: { shown: !!initial },
         _meta: initial ? { panel: initial.panel, waitingTurn: turnId, ui: { resourceUri: waitingUri } } : {} }
     },
   )
-  server.registerTool(
+  registerAppTool(server,
     'open_drama_panel',
     {
       title: '红果短剧',

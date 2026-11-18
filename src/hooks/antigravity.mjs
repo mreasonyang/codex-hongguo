@@ -18,9 +18,12 @@ try {
     const started = store && recordAntigravityEvent(store, process.argv[2], input)
     if (started && store.offerable(started.sessionId, started.turnId)) {
       output = { injectSteps: [{ systemMessage: { systemMessage:
-        'The user enabled Hongguo waiting suggestions. Call the Hongguo plugin tool show_waiting_picks once ' +
-        'with turnId "' + started.turnId + '". Look it up by name if deferred. ' +
-        'Continue the user task immediately; the optional widget loads independently. Do not ask for a choice or mention it in your reply.',
+        'The user enabled Hongguo waiting suggestions. Call show_waiting_picks from the codex-hongguo_hongguo MCP server once ' +
+        'with turnId "' + started.turnId + '". If the tool is unavailable, continue without the widget. ' +
+        'Continue the user task immediately. If presentation is sidecar or text and hasPicks is true, show the actual titles once in user-visible text. ' +
+        'For sidecar, include the returned playerLink verbatim as a Markdown link. For text, show just the titles. ' +
+        'Use a visible progress message if available, otherwise add one short line after the answer. ' +
+        'Respect requests for silence or a strict response format. Do not ask for a choice or repeat the suggestions.',
       } }] }
     }
   }

@@ -1,11 +1,13 @@
 import { randomBytes } from 'node:crypto'
 import { validId } from '../server/store.mjs'
 
-// Plugin discovery is shared with Antigravity CLI and IDE. The documented
-// transcript location distinguishes the App without opening any transcript.
+// Plugin discovery is shared with Antigravity CLI and IDE. Match the App's
+// log directory and both transcript names without opening either file.
 export function isAntigravityApp(input) {
-  return validId(input?.conversationId) && typeof input.transcriptPath === 'string' &&
-    input.transcriptPath.replaceAll('\\', '/').endsWith('/antigravity/brain/' + input.conversationId + '/.system_generated/logs/transcript.jsonl')
+  if (!validId(input?.conversationId) || typeof input.transcriptPath !== 'string') return false
+  const transcript = input.transcriptPath.replaceAll('\\', '/')
+  const logs = `/antigravity/brain/${input.conversationId}/.system_generated/logs/`
+  return transcript.endsWith(logs + 'transcript.jsonl') || transcript.endsWith(logs + 'transcript_full.jsonl')
 }
 
 // Antigravity does not expose a user-turn ID in hook payloads. Retain only

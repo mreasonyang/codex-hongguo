@@ -125,7 +125,9 @@ export class Service {
       const row = this.store.db.prepare("SELECT session_id FROM turn_state WHERE turn_id=? AND substr(session_id,1,4)='agy_'").get(turnId)
       if (row) sessionId = row.session_id
     }
-    if (!sessionId || [meta?.turn_id, meta?.turnId].some(value => value !== undefined && value !== turnId) ||
+    // Antigravity allocates its own execution IDs. Its card is authorized by
+    // the exact turn capability within the resolved conversation.
+    if (!sessionId || (!this.antigravity && [meta?.turn_id, meta?.turnId].some(value => value !== undefined && value !== turnId)) ||
       !this.store.claimCard(sessionId, turnId)) return null
     const initial = this.open(meta)
     const scope = this.panels.get(initial.panel)
@@ -155,7 +157,7 @@ export class Service {
     return !this.catalog.sources?.requiresConfirmation?.(source) ||
       (this.store.preferences().excludeNsfwRecommendations === false && preferred === source)
   }
-  async waitingPicks(sessionId, turnId, inView, eligible, preferred) {
+  async waitingPicks(sessionId, turnId, inView, eligible, preferred, preview = false) {
     if (!eligible()) return { items: [] }
     const pinned = this.store.turnPicks(sessionId, turnId)
     const available = pick => {
@@ -169,12 +171,24 @@ export class Service {
     if (!this.recommendationAllowed(source, preferred)) return { items: [] }
     const context = this.store.recommendationContext(sessionId, turnId, this.catalog.contentContext?.(source) ?? {})
     const [feed, resume] = await Promise.all([
-      this.catalog.waitingRecommendations(source, context).catch(() => []), this.resumePick(source, context),
+      this.catalog.waitingRecommendations(source, context, preview).catch(() => []), this.resumePick(source, context),
     ])
     // Settings can change in another panel while the feed is in flight.
     if (!this.recommendationAllowed(source, preferred)) return { items: [] }
     return { items: this.store.allocatePicks(sessionId, turnId, resume && available(resume) ? resume : null,
       feed.filter(available), inView, eligible).filter(available) }
+  }
+  async textWaitingPicks(panel) {
+    const { sessionId, source, waiting: { turnId } } = this.panel(panel)
+    // Text-only hosts still need a useful result. Bound the wait so a cold
+    // provider cannot hold up the user's turn.
+    const deadline = AbortSignal.timeout(2500)
+    const eligible = () => !deadline.aborted && this.store.offerable(sessionId, turnId)
+    const { items } = await Promise.race([
+      this.waitingPicks(sessionId, turnId, false, eligible, source, true).catch(() => ({ items: [] })),
+      new Promise(resolve => deadline.addEventListener('abort', () => resolve({ items: [] }), { once: true })),
+    ])
+    return items.slice(0, 3).map(pick => pick.title.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 80)).filter(Boolean)
   }
   panel(key, meta) {
     const scope = this.panels.get(key)

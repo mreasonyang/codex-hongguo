@@ -13,7 +13,7 @@ await writeFile(join(release, 'marketplace/.agents/plugins/marketplace.json'), J
 await rm(npmRoot, { recursive: true, force: true })
 await rm(offline, { recursive: true, force: true })
 await mkdir(npmRoot, { recursive: true })
-for (const file of ['.codex-plugin/plugin.json', '.mcp.json', 'hooks/hooks.json', '.antigravity-plugin/plugin.json', 'mcp_config.json', 'hooks.json', 'assets', 'bin', 'skills', 'provider-kit', 'dist', 'LICENSE', 'COPYING', 'NOTICE']) {
+for (const file of ['.codex-plugin/plugin.json', '.mcp.json', 'hooks/hooks.json', '.antigravity-plugin/plugin.json', 'mcp_config.json', 'hooks.json', 'assets', 'bin', 'skills', 'sidecars', 'provider-kit', 'dist', 'LICENSE', 'COPYING', 'NOTICE']) {
   await mkdir(dirname(join(npmRoot, file)), { recursive: true })
   await cp(file, join(npmRoot, file), { recursive: true })
 }
@@ -32,7 +32,7 @@ await writeFile(join(npmRoot, 'package.json'), JSON.stringify({
   repository: { type: 'git', url: 'git+https://github.com/mreasonyang/codex-hongguo.git' },
   homepage: 'https://github.com/mreasonyang/codex-hongguo#readme',
   bin: { 'codex-hongguo': './bin/codex-hongguo.mjs' },
-  files: ['.codex-plugin/', '.mcp.json', 'hooks/', '.antigravity-plugin/', 'mcp_config.json', 'hooks.json', 'skills/', 'assets/', 'provider-kit/', 'bin/', 'dist/', 'licenses/', 'LICENSE', 'COPYING', 'NOTICE', 'README.md', 'README.en.md', 'docs/providers.md'],
+  files: ['.codex-plugin/', '.mcp.json', 'hooks/', '.antigravity-plugin/', 'mcp_config.json', 'hooks.json', 'skills/', 'sidecars/', 'assets/', 'provider-kit/', 'bin/', 'dist/', 'licenses/', 'LICENSE', 'COPYING', 'NOTICE', 'README.md', 'README.en.md', 'docs/providers.md'],
   publishConfig: { access: 'public', registry: 'https://registry.npmjs.org' },
 }, null, 2) + '\n')
 const guides = {}
@@ -72,7 +72,7 @@ async function sourceTree(path) {
     else if (entry.isFile()) sourceEntries[file.replaceAll('\\', '/')] = new Uint8Array(await readFile(file))
   }
 }
-for (const directory of ['src', 'scripts', 'test', 'provider-kit', 'assets', 'bin', 'skills', 'hooks', '.codex-plugin', '.antigravity-plugin', 'third_party', 'launcher']) await sourceTree(directory)
+for (const directory of ['src', 'scripts', 'test', 'provider-kit', 'assets', 'bin', 'skills', 'sidecars', 'hooks', '.codex-plugin', '.antigravity-plugin', 'third_party', 'launcher']) await sourceTree(directory)
 for (const file of ['package.json', 'package-lock.json', 'tsconfig.json', '.mcp.json', 'plugin.json', 'mcp_config.json', 'hooks.json', 'LICENSE', 'COPYING', 'NOTICE', 'README.md', 'README.en.md', 'docs/providers.md'])
   sourceEntries[file] = new Uint8Array(await readFile(file))
 await writeFile(join(notices, 'codex-hongguo-source.zip'), zipSync(sourceEntries, { level: 6 }))

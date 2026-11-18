@@ -12,11 +12,12 @@ async function setup(t) {
   const root = await mkdtemp(join(tmpdir(), '红果 agy install ')), sourceRoot = join(root, 'source'), configRoot = join(root, 'config')
   t.after(() => rm(root, { recursive: true, force: true }))
   await mkdir(sourceRoot)
-  for (const name of ['.antigravity-plugin', 'mcp_config.json', 'hooks.json']) await cp(name, join(sourceRoot, name), { recursive: true })
+  for (const name of ['.antigravity-plugin', 'mcp_config.json', 'hooks.json', 'sidecars']) await cp(name, join(sourceRoot, name), { recursive: true })
   for (const name of ['assets', 'dist/server', 'dist/hooks', 'bin', 'skills', 'provider-kit', 'docs']) await mkdir(join(sourceRoot, name), { recursive: true })
   for (const name of ['assets/logo.png', 'docs/providers.md', 'LICENSE', 'COPYING', 'NOTICE', 'dist/hooks/antigravity.mjs']) await writeFile(join(sourceRoot, name), 'fixture')
   await cp('package.json', join(sourceRoot, 'package.json'))
   await writeFile(join(sourceRoot, 'dist/server/antigravity.mjs'), "console.log('shared-server')")
+  await writeFile(join(sourceRoot, 'dist/server/antigravity-player.mjs'), "console.log('shared-player')")
   await writeFile(join(sourceRoot, 'bin/antigravity-hongguo.mjs'), "console.log('shared-cli')")
   const checkHost = async ({ host }) => assert.equal(host, antigravity)
   const programHome = join(root, 'program')
@@ -37,13 +38,18 @@ test('Antigravity install and update use absolute Node paths without Codex and p
   assert.equal(mcp.mcpServers.hongguo.command, process.execPath)
   assert.deepEqual(mcp.mcpServers.hongguo.args, ['${PLUGIN_ROOT}/dist/server/antigravity.mjs'])
   assert.equal(mcp.mcpServers.hongguo.env, undefined)
-  for (const [file, output] of [['dist/server/antigravity.mjs', 'shared-server'], ['bin/codex-hongguo.mjs', 'shared-cli']])
+  for (const [file, output] of [['dist/server/antigravity.mjs', 'shared-server'], ['bin/codex-hongguo.mjs', 'shared-cli'],
+    ['sidecars/player/main.mjs', 'shared-player']])
     assert.equal(execFileSync(process.execPath, [join(f.destination, file)], { encoding: 'utf8' }).trim(), output)
   for (const path of ['dist/ui', 'dist/vendor', 'provider-kit'])
     await assert.rejects(readdir(join(f.destination, path)), { code: 'ENOENT' })
   const hooks = JSON.parse(await readFile(join(f.destination, 'hooks.json'), 'utf8'))
+  const sidecar = JSON.parse(await readFile(join(f.destination, 'sidecars/player/sidecar.json'), 'utf8'))
+  assert.equal(sidecar.has_web_ui, true)
+  assert.deepEqual(sidecar.ui_config.views, [{ path: '/', entrypoint: 'SIDECAR_UI_ENTRYPOINT_AUX_PANE', title: '红果短剧' }])
   if (process.platform !== 'win32') {
-    assert.equal(hooks.hongguo.Stop[0].command, quoteCommand(process.execPath) + ' ./dist/hooks/antigravity.mjs stop')
+    const hook = join(f.destination, 'dist/hooks/antigravity.mjs')
+    assert.equal(hooks.hongguo.Stop[0].command, quoteCommand(process.execPath) + ' ' + quoteCommand(hook) + ' stop')
   }
   await writeFile(join(f.sourceRoot, 'NOTICE'), 'updated')
   await manageAntigravity('update', f.options)
@@ -54,6 +60,8 @@ test('Antigravity install and update use absolute Node paths without Codex and p
 })
 test('Windows manifest hooks use the pinned Node path, raw stdin and the correct event argument', { skip: process.platform !== 'win32' }, async t => {
   const f = await setup(t), node = join(f.root, "中文 %USERNAME% !test! & ' node.exe")
+  f.options.configRoot = join(f.root, "配置 %USERNAME% !test! & '")
+  f.destination = join(f.options.configRoot, 'plugins/codex-hongguo')
   await copyFile(process.execPath, node)
   const options = { ...f.options, node }
   const entry = 'dist/hooks/antigravity.mjs'
@@ -61,7 +69,7 @@ test('Windows manifest hooks use the pinned Node path, raw stdin and the correct
   const env = { ...process.env, ...options.env, HONGGUO_ANTIGRAVITY_DATA_DIR: join(f.root, 'antigravity-data'),
     HONGGUO_DATA_DIR: join(f.root, 'codex-data') }
   const run = (file, args, input, windowsVerbatimArguments = false) => JSON.parse(execFileSync(file, args, {
-    cwd: f.destination, env, input, encoding: 'utf8', timeout: 15000, windowsVerbatimArguments,
+    cwd: f.root, env, input, encoding: 'utf8', timeout: 15000, windowsVerbatimArguments,
   }))
   await writeFile(source, `import { createHash } from 'node:crypto'
 const hash = createHash('sha256')
@@ -83,7 +91,7 @@ console.log(JSON.stringify({ node: process.execPath, args: process.argv.slice(2)
   await manageAntigravity('update', options)
   const start = conversationId => JSON.stringify({ invocationNum: 0, initialNumSteps: 0, conversationId,
     transcriptPath: 'C:/test/antigravity/brain/' + conversationId + '/.system_generated/logs/transcript.jsonl' })
-  assert.ok(run(node, [entry, 'start'], start('direct-test')).injectSteps?.length, 'direct Node hook must recognize PreInvocation')
+  assert.ok(run(node, [join(f.destination, entry), 'start'], start('direct-test')).injectSteps?.length, 'direct Node hook must recognize PreInvocation')
   assert.ok(shellHook('PreInvocation', start('shell-test')).injectSteps?.length, 'cmd hook must recognize PreInvocation')
 })
 test('a failed Antigravity update leaves the working installation in place', async t => {

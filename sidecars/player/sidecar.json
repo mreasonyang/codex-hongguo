@@ -1,0 +1,13 @@
+{
+  "command": "node",
+  "args": ["main.mjs"],
+  "restart_policy": "always",
+  "display_name": "红果短剧",
+  "description": "在 Antigravity 会话侧栏选剧和播放。",
+  "has_web_ui": true,
+  "agent_permissions": { "allows_user_interactions": false },
+  "ui_config": {
+    "display_name": "红果短剧",
+    "views": [{ "path": "/", "entrypoint": "SIDECAR_UI_ENTRYPOINT_AUX_PANE", "title": "红果短剧" }]
+  }
+}

@@ -51,7 +51,7 @@ Default installation and updates do not require Git. The command checks the sele
 
 ### Antigravity App (experimental)
 
-The installer supports Windows x64, Windows 11 ARM64, Linux x64/arm64 and macOS x64/arm64. It requires an Antigravity desktop account with **MCP Apps** enabled (adapted against 2.32.1) and a matching Node.js >=22.16. Codex CLI is not required. Antigravity support is available on the npm `beta` channel.
+The installer supports Windows x64, Windows 11 ARM64, Linux x64/arm64 and macOS x64/arm64. It requires the Antigravity desktop app with **Sidecar UI** support and a matching Node.js >=22.16. Antigravity support is available on the npm `beta` channel.
 
 Install on macOS or Linux:
 
@@ -69,15 +69,17 @@ npx.cmd "@kyun.si/codex-hongguo@beta" setup --agy
 
 Update with `npx.cmd "@kyun.si/codex-hongguo@beta" update --agy`.
 
-Antigravity discovers its manifest, skills and entry points under `.gemini/config/plugins/codex-hongguo/` in your home directory. To remove it, use `uninstall --agy` through the same CLI entrypoint. When using both hosts, close both players before updating. Restart hongguo in Antigravity's MCP Servers settings and open a new Codex chat afterward.
+After installing or updating, reopen the **Antigravity desktop app** and start a new local conversation. The plugin lives at `~/.gemini/config/plugins/codex-hongguo/`. Use `uninstall --agy` to remove it.
 
-Open the player from the conversation's **＋ → Extensions → 红果短剧**, or from the global sidebar. Suggestions expand in place when clicked. Recommendation players bind to their originating chat; a directly opened panel without host conversation metadata offers **Choose session**, using the conversation ID suffix and timestamp. Unbound panels support manual viewing.
+- **Watch manually.** Open **Extensions → 红果短剧** from the menu in the top-right corner of the conversation. The side-panel player automatically follows that conversation.
+- **Get suggestions during a turn.** Go to **Customizations → Installed** and confirm that **红果短剧** is enabled. `PreInvocation` and `Stop` load with the plugin. Enable **Suggest shows during a turn** in the player settings. The hook asks the model to show titles in chat. Click **红果短剧** next to the suggestions to open the same side-panel player. Requests for silence or a strict response format take priority.
+- **Link playback to a conversation.** The player settings control resuming at task start and pausing at completion or cancellation. If the panel says the conversation is unlinked, reopen the player from the local conversation you want to follow. Manual playback works without a conversation.
 
-Review and enable `PreInvocation` and `Stop` in **Settings → Customizations → Hooks**. The first model invocation starts a turn; subsequent model calls do not repeatedly resume a manually paused video. Playback pauses when the task becomes fully idle or is cancelled, with independent autoplay and auto-pause switches. Hooks do not store prompts or responses.
+To troubleshoot, run `npx "@kyun.si/codex-hongguo@beta" doctor --agy` (use `npx.cmd` on Windows). `hookActivity` gives the last recorded start and end times. A `null` timestamp means the corresponding event has yet to be recorded. The hooks do not store prompts or responses. [Antigravity plugin documentation](https://antigravity.google/docs/plugins)
 
 Codex and Antigravity under the same OS user share one player, server, SDK, WASM module and managed FFmpeg. Installing the second host reuses the program. Updating from either host selects the new build for both on their next launch. Antigravity stores its own viewing data in `~/Library/Application Support/AntigravityHongguo/` on macOS, `%LOCALAPPDATA%\AntigravityHongguo\` on Windows, and `${XDG_DATA_HOME:-~/.local/share}/antigravity-hongguo/` on Linux. Updates preserve data; uninstall cleans this host's data. Codex history and Providers are not imported automatically.
 
-Protocol and isolated installation tests are available; **live App video, audio and natural task events still require verification**. If the entrypoint is missing or the host reports `MCP Apps support is not enabled`, check sign-in and account availability. Antigravity does not send a view-close notification, so playback saves approximately once per second; abrupt closure may lose the last pending save.
+Desktop testing on macOS with Antigravity 2.32.2 verified opening the native side panel manually and from chat suggestions, resuming video playback, and pausing automatically when a turn ended. Separate audio verification is pending. The player saves progress about once per second in Antigravity. Closing abruptly may lose unsaved progress. See the [contributing guide](CONTRIBUTING.md) for protocol and isolated installation tests.
 
 ### Beta testing channel
 
@@ -193,7 +195,7 @@ Inside this folder, `player.sqlite` and its WAL/SHM files store progress, turn s
 
 | Area | Behavior & Scope |
 | --- | --- |
-| Host scope | Local Codex Desktop conversations and experimental Antigravity App MCP Apps; cloud/remote executors are not supported. See the Antigravity section for differences and verification limits. |
+| Host scope | Local Codex Desktop conversations and experimental Antigravity App Sidecar UI. See the Antigravity section for verification limits. |
 | Content source & streams | Includes Hongguo, Bilibili and Huangguo (NSFW). Huangguo requires confirmation on every entry and streams compatible H.264 HLS segments on demand using anonymous access. Bilibili supports QR sign-in, account management, and sign-out in Settings (**Source accounts**) or directly from login/preview playback prompts. Hover over the source icon to switch sources (NSFW sources require confirmation), then browse recommendations or search by series name; ss/ep links remain supported. Standard AVC/AAC tracks play and seek on demand without downloading the whole episode first. Previews and DRM are rejected. See [Providers](docs/providers.md). |
 | Recommendations & search | Catalog browsing and search rely on the anonymous upstream SDK; the home view prioritizes unwatched shows in batches of up to 12 (recommendations and episode pages share a persistent 15-minute cache across chats, serve stale data while refreshing, and back off after failures) and falls back to configurable search keywords when recommendations are sparse. |
 | Anonymous rate-limit recovery | When an anonymous device is rejected or streams come back empty, the SDK performs bounded retries and device resets before surfacing the failure reason with a retry action. |

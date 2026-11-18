@@ -4,7 +4,7 @@ import { panelStream } from './panel-stream'
 import { mediaErrorMessage, waitForMetadata } from './media-startup'
 import { finishedTurn, startedTurn } from './playback-turn'
 import { ProviderAccount } from './provider-account'
-import { browser, call, connect, reopenPanel, hostLocale, antigravity, unsupportedHostMessage, type Context, type State, type Preferences, type SourceId } from './api'
+import { browser, sidecar, call, connect, reopenPanel, hostLocale, antigravity, unsupportedHostMessage, type Context, type State, type Preferences, type SourceId } from './api'
 import { pickLabel, showWaitingPicks, waitingCard, type WaitingSelection } from './waiting'
 import { createHoverDecoy } from './hover-decoy'
 import { createCoverPage } from './cover-page'
@@ -984,7 +984,7 @@ function displayState() {
   el('lamp').classList.toggle('on', running)
   text(
     'state',
-    !context.identified && browser
+    !context.identified && (browser || sidecar || antigravity())
       ? '未关联对话'
       : !current || current.state === 'unknown'
         ? '等待回合开始'
@@ -1004,7 +1004,7 @@ async function readTurnState() {
   try {
     const revision = preferencesRevision
     const state = await call<State>('get_run_state', {
-      observeSession: true, playerInstance: document.hidden ? undefined : instance,
+      observeSession: true, playerInstance: sidecar || document.hidden ? undefined : instance,
     }, 1800)
     if (!pageActive) return
     turnStateAvailable = true
@@ -1222,7 +1222,7 @@ autoNext.onchange = () => {
 video.ontimeupdate = () => {
   updateTime()
   preloadNextEpisode()
-  if (!video.paused && Date.now() - lastSave >= (antigravity() ? 1000 : 5000)) {
+  if (!video.paused && Date.now() - lastSave >= (sidecar || antigravity() ? 1000 : 5000)) {
     lastSave = Date.now()
     void save()
   }
@@ -1502,13 +1502,15 @@ el('choose').onclick = async () => {
         }),
       ),
     )
-    if (!r.items.length) notice('还没有本机回合记录，可先手动观看')
+    if (!r.items.length) notice(antigravity()
+      ? '暂无本地回合记录。启用 hongguo Hooks 后，在要关联的本地会话发送一条消息，再点确认会话。'
+      : '还没有本机回合记录，可先手动观看')
   } catch (e) {
     notice(explain(e))
   }
 }
 function presence(visible: boolean) {
-  if (!context.identified) return Promise.resolve()
+  if (sidecar || !context.identified) return Promise.resolve()
   return call('set_player_visible', { instance, visible }, 1800).catch(() => {})
 }
 async function suspend() {
@@ -1615,8 +1617,8 @@ async function initPlayer(selection?: WaitingSelection) {
     navigator.mediaSession.setActionHandler('play', () => { if (video.paused && !preparing) void start() })
   }
   timer = window.setInterval(() => void poll(), 1000)
-  el('pair').hidden = browser || isWaiting
-  el('choose').hidden = browser || context.identified
+  el('pair').hidden = browser || sidecar || antigravity() || isWaiting
+  el('choose').hidden = browser || sidecar || context.identified
   current = null
   displayState()
   activatePage()

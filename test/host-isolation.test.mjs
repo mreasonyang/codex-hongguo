@@ -49,7 +49,9 @@ test('both fixed MCP and Hook entrypoints keep their sessions and progress with 
       }
       const result = event('start')
       const turnId = agy ? /turnId "([A-Za-z0-9_-]+)"/.exec(result.injectSteps[0].systemMessage.systemMessage)[1] : 'codex-turn'
-      const client = new Client({ name: 'host-isolation-test', version: '1' })
+      const client = new Client({ name: 'host-isolation-test', version: '1' }, {
+        capabilities: { extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } } },
+      })
       clients.push(client)
       await client.connect(new StdioClientTransport({ command: process.execPath,
         args: ['dist/server/' + (agy ? 'antigravity' : 'index') + '.mjs'], env, stderr: 'pipe' }))

@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { dataRoot } from './paths.mjs'
-import { codex } from '../runtime/host.mjs'
+import { antigravity, codex } from '../runtime/host.mjs'
 import { sourceId, seriesPattern, belongsTo, idGlob } from './sources/ids.mjs'
 
 export function validId(value) {
@@ -77,6 +77,8 @@ export class Store {
         PRAGMA user_version=1;
         COMMIT;`)
     }
+    if (host.id === antigravity.id) this.db.exec(`CREATE TABLE IF NOT EXISTS antigravity_player_ready (
+      id INTEGER PRIMARY KEY CHECK(id=1), seen_at INTEGER NOT NULL)`)
     // Both predecessor branches used version 2 for different migrations.
     // Complete both idempotently, including databases already marked version 2.
     if (this.db.prepare('PRAGMA user_version').get().user_version < 3) {

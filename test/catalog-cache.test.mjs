@@ -234,6 +234,27 @@ test('simultaneous cold Catalog instances share discovery and failed or empty fe
   assert.equal(store.waitingFeed().length, 0, 'failed refresh must not extend stale data freshness')
 })
 
+test('waiting recommendation preview returns the first cold page before the full feed is cached', { timeout: 5000 }, async t => {
+  const { store } = fixture(t)
+  t.mock.method(Catalog.prototype, 'prepareMediaRuntime', async () => {})
+  const catalog = new Catalog(store)
+  const first = { id: 'hg-1', title: '首屏剧目' }
+  const next = { id: 'hg-2', title: '后续剧目' }
+  const fullFeed = Promise.withResolvers()
+  t.mock.method(catalog, 'collectFeed', onPage => {
+    onPage([first])
+    return fullFeed.promise
+  })
+  try {
+    assert.deepEqual(await catalog.waitingRecommendations('hongguo', {}, true), [first])
+    assert.deepEqual(store.waitingFeed(), [])
+  } finally {
+    fullFeed.resolve([first, next])
+    await Promise.all([...catalog.metadata.jobs.values()])
+  }
+  assert.deepEqual(await catalog.waitingRecommendations(), [first, next])
+})
+
 test('changing recommendation terms invalidates an in-flight result without replacing the newer feed', async t => {
   const { store, peer } = fixture(t)
   t.mock.method(Catalog.prototype, 'prepareMediaRuntime', async () => {})

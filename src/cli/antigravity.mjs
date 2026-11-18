@@ -19,8 +19,8 @@ const exists = async path => { try { return await lstat(path) } catch (e) { if (
 export function quoteCommand(value) {
   return "'" + value.replaceAll("'", "'\\''") + "'"
 }
-async function writeAdapter(root, programHome, programRoot, node) {
-  for (const name of ['.antigravity-plugin', 'skills']) {
+async function writeAdapter(root, destination, programHome, programRoot, node) {
+  for (const name of ['.antigravity-plugin', 'skills', 'sidecars']) {
     await cp(join(programRoot, name), join(root, name), { recursive: true })
   }
   const manifest = await readJson(join(root, '.antigravity-plugin/plugin.json'))
@@ -34,21 +34,25 @@ async function writeAdapter(root, programHome, programRoot, node) {
   for (const entry of ['dist/server/antigravity.mjs', hook, 'bin/codex-hongguo.mjs']) {
     await writeProgramShim(join(root, entry), programHome, entry.startsWith('bin/') ? 'bin/antigravity-hongguo.mjs' : entry)
   }
+  await writeProgramShim(join(root, 'sidecars/player/main.mjs'), programHome, 'dist/server/antigravity-player.mjs')
 
   const mcp = await readJson(join(programRoot, 'mcp_config.json'))
   mcp.mcpServers.hongguo.command = node
   await writeJson(join(root, 'mcp_config.json'), mcp)
   const hooks = await readJson(join(programRoot, 'hooks.json'))
+  const hookPath = join(destination, hook)
   for (const [event, mode] of [['PreInvocation', 'start'], ['Stop', 'stop']]) {
     const handler = hooks.hongguo[event][0]
     if (process.platform === 'win32') {
-      // Keep the Node path out of cmd.exe's parser and pass the native stdio
-      // handles directly to Node so PowerShell cannot re-encode Hook JSON.
+      // Keep paths out of cmd.exe's parser and pass native stdio directly to
+      // Node. Neither the launcher nor the manifest lookup depends on cwd.
+      const pathLiteral = path => `[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(path).toString('base64')}'))`
       const script = [
         "$ErrorActionPreference = 'Stop'",
         '$launch = [Diagnostics.ProcessStartInfo]::new()',
-        "$launch.FileName = (ConvertFrom-Json -InputObject ([IO.File]::ReadAllText('mcp_config.json'))).mcpServers.hongguo.command",
-        "$launch.Arguments = './" + hook + " " + mode + "'",
+        '$launch.FileName = ' + pathLiteral(node),
+        '$hook = ' + pathLiteral(hookPath),
+        `$launch.Arguments = [string][char]34 + $hook + [char]34 + ' ${mode}'`,
         '$launch.UseShellExecute = $false',
         '$child = [Diagnostics.Process]::Start($launch)',
         '$child.WaitForExit()',
@@ -57,7 +61,7 @@ async function writeAdapter(root, programHome, programRoot, node) {
       handler.command = 'powershell.exe -NoLogo -NoProfile -NonInteractive -Command "' + script + '"'
       handler.timeout = 10
     } else {
-      handler.command = quoteCommand(node) + ' ./' + hook + ' ' + mode
+      handler.command = quoteCommand(node) + ' ' + quoteCommand(hookPath) + ' ' + mode
     }
   }
   await writeJson(join(root, 'hooks.json'), hooks)
@@ -116,7 +120,7 @@ export async function manageAntigravity(action, {
     try {
       await installSharedProgram({ ...hostOptions, sourceRoot }, async ({ programHome, programRoot }) => {
         await mkdir(candidate)
-        await writeAdapter(candidate, programHome, programRoot, node)
+        await writeAdapter(candidate, destination, programHome, programRoot, node)
         await mkdir(join(configRoot, 'plugins'), { recursive: true })
         if (installed) {
           await rename(destination, backup)
@@ -137,7 +141,9 @@ export async function manageAntigravity(action, {
       }
       throw error
     }
-    log('红果短剧已安装到 Antigravity。请关闭旧播放器，在 MCP Servers 中重启 hongguo 服务后使用。')
+    log('红果短剧已安装到 Antigravity。请重新打开 Antigravity 桌面 App 并新建本地会话。')
+    log('手动观看：在会话侧栏 Extensions → 红果短剧打开播放器。')
+    log('若更新后入口未刷新，可在左侧 Customizations → Installed → 红果短剧 → MCP 重启 hongguo 服务。')
     log(antigravityHookHint)
   } finally {
     try {

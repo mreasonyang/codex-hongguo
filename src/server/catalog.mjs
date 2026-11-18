@@ -107,19 +107,19 @@ export class Catalog {
     const local = this.sources.get(source).localSeries?.(context)?.filter(row => !context.category || context.category === 'all' || row.category === context.category)
     return local?.length ? [...new Map([...this.rows({ items: local.slice(0, 8) }, true, source), ...rows].map(row => [row.id, row])).values()].slice(0, 48) : rows
   }
-  async waitingRecommendations(source = this.defaultSource(), context = this.contentContext(source)) {
+  async waitingRecommendations(source = this.defaultSource(), context = this.contentContext(source), preview = false) {
     this.sources.get(source)
     const feedContext = this.sources.revision(source) + this.feedContext(context)
     const cached = this.store.waitingFeed(false, source, feedContext)
     if (cached.length) return this.withLocalSeries(cached, source, context)
     const previous = this.store.waitingFeed(true, source, feedContext)
-    const refresh = this.recommendations(false, source, context)
+    const refresh = this.recommendations(preview, source, context)
     if (previous.length) {
       void refresh.catch(() => {})
       return this.withLocalSeries(previous, source, context)
     }
-    await refresh
-    return this.withLocalSeries(this.store.waitingFeed(true, source, feedContext), source, context)
+    const rows = await refresh
+    return this.withLocalSeries(preview ? rows : this.store.waitingFeed(true, source, feedContext), source, context)
   }
   async collectFeed(onFirstPage, terms, source, context) {
     const rows = new Map(),

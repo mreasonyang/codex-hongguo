@@ -33,6 +33,8 @@ export type State = {
   preferences?: Preferences
 }
 export const browser = document.documentElement.dataset.host === 'browser'
+export const sidecar = document.documentElement.dataset.host === 'sidecar'
+type SidecarWindow = Window & { sidecar?: { conversationId: string | null; fetch: typeof fetch } }
 const waitingSurface = document.documentElement.dataset.surface === 'waiting'
 let panel = ''
 const deniedTools = new Map<string, ToolAuthorizationDenied>()
@@ -40,7 +42,7 @@ class ToolAuthorizationDenied extends Error {
   constructor() { super('已取消授权，请重新打开播放器后重试') }
 }
 export const isToolAuthorizationDenied = (error: unknown): boolean => error instanceof ToolAuthorizationDenied
-const app = browser ? null : new App({ name: '红果短剧', version: pkg.version }, {}, { autoResize: !waitingSurface })
+const app = browser || sidecar ? null : new App({ name: '红果短剧', version: pkg.version }, {}, { autoResize: !waitingSurface })
 // Use the initialized MCP Apps host identity, not the browser's user agent or
 // the fact that a client happens to run Codex underneath.
 const officialDesktop = () => app?.getHostVersion()?.name === 'chatgpt' && app?.getHostContext()?.platform === 'desktop'
@@ -115,9 +117,24 @@ async function browserContext(): Promise<Context> {
   if (!r.ok) throw Error('分屏已失效，请从面板重新打开')
   return r.json()
 }
+async function sidecarRequest<T>(path: string, args: Record<string, unknown>, timeout: number, keepalive = false): Promise<T> {
+  const bridge = (window as SidecarWindow).sidecar
+  if (!bridge) throw Error(unsupportedHostMessage)
+  const response = await bridge.fetch(path, {
+    method: 'POST', body: JSON.stringify({ ...args, conversationId: bridge.conversationId ?? null }),
+    signal: AbortSignal.timeout(timeout), keepalive,
+  })
+  const result = await response.json()
+  if (!response.ok) throw Error(result.error || '本机服务不可达')
+  return result as T
+}
 /** Renew through the normal host tool so an expired in-memory panel is never reused. */
 export async function reopenPanel(): Promise<Context> {
   if (browser) return browserContext()
+  if (sidecar) {
+    const context = await sidecarRequest<Context & { panel: string }>('/api/context', {}, 4000)
+    return acceptPanel({ _meta: { panel: context.panel }, structuredContent: context })
+  }
   requireSupportedHost()
   const result = await hostCall('open_drama_panel', {}, 10000)
   if (result.isError) throw Error('连接失败，请重试')
@@ -125,8 +142,8 @@ export async function reopenPanel(): Promise<Context> {
 }
 export async function connect(ready: (c: Context) => void, teardown: () => Promise<void>, modeChanged: () => void) {
   modeChangedCallback = modeChanged
-  if (browser) {
-    ready(await browserContext())
+  if (browser || sidecar) {
+    ready(await reopenPanel())
     return
   }
   app!.ontoolresult = (r) => {
@@ -158,12 +175,14 @@ export async function connect(ready: (c: Context) => void, teardown: () => Promi
   modeChanged()
 }
 export async function call<T>(name: string, args: Record<string, unknown> = {}, timeout = 15000): Promise<T> {
+  const keepalive = name === 'save_progress' || (name === 'set_preferences' && 'volume' in args)
+  if (sidecar) return sidecarRequest<T>('/api/call', { name, args, panel }, timeout, keepalive)
   if (browser) {
     const r = await fetch('api/' + name, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(args),
-      keepalive: name === 'save_progress' || (name === 'set_preferences' && 'volume' in args),
+      keepalive,
       signal: AbortSignal.timeout(timeout),
     })
     const data = await r.json()

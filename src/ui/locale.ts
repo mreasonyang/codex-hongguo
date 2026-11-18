@@ -182,6 +182,7 @@ const en: Record<string, string> = {
   本机状态不可达: 'Local status unavailable',
   '已暂停，点击播放继续': 'Paused. Press Play to resume.',
   '还没有本机回合记录，可先手动观看': 'No local turns yet. Choose a show to watch.',
+  '暂无本地回合记录。启用 hongguo Hooks 后，在要关联的本地会话发送一条消息，再点确认会话。': 'No local turns yet. Enable the hongguo hooks, send a message in the local conversation you want to link, then click Choose conversation.',
   '准备超时，请重试': 'Media preparation timed out. Try again.',
   '观看进度暂未写入，请检查本机服务': 'Could not save progress. Check the local service.',
   '该集当前不可播放，请检查片源许可或 FFmpeg 自检结果':
