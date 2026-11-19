@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createCipheriv, createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import { gunzipSync } from 'node:zlib'
 import { readFile } from 'node:fs/promises'
 import { createClient, memoryProfileStore } from '../dist/vendor/openhongguo/index.js'
@@ -24,17 +25,23 @@ const grouped = (id, model = JSON.parse(clearModel.data.video_model)) => ({
 test('the shipped SDK identifies the unmodified official upstream source', async () => {
   const source = JSON.parse(await readFile('third_party/openhongguo/source.json', 'utf8'))
   const built = JSON.parse(await readFile('dist/vendor/openhongguo/SOURCE.json', 'utf8'))
-  const digest = createHash('sha256').update(await readFile('dist/licenses/openhongguo-source.tar.gz')).digest('hex')
+  const digest = createHash('sha256').update(await readFile('node_modules/.cache/codex-hongguo/openhongguo-source.tar.gz')).digest('hex')
   await assert.rejects(readFile('third_party/openhongguo/source.tar.gz'), { code: 'ENOENT' })
   assert.equal(digest, source.sourceSHA256)
   assert.deepEqual(built, source)
-  assert.equal(built.revision, '999f57b141211f43c8c5234386733fb745260e67')
-  assert.equal(built.mergedPullRequest, 'https://github.com/beilunyang/openhongguo/pull/13')
+  assert.equal(built.revision, 'cd27b9ef42a4aa06859d12e5a24ba7653fa64a2c')
+  assert.equal(built.releaseURL, 'https://github.com/beilunyang/openhongguo/releases/tag/v0.4.0')
   assert.equal(built.repository, 'https://github.com/beilunyang/openhongguo')
   assert.equal(built.sourceURL, built.repository + '/tree/' + built.revision)
   assert.deepEqual(built.modifiedFiles, [])
   const shipped = JSON.parse(await readFile('dist/vendor/openhongguo/package.json', 'utf8'))
   assert.equal(shipped.version, source.upstreamVersion)
+  const files = execFileSync('tar', ['-tzf', 'dist/licenses/openhongguo-source.tar.gz'], { encoding: 'utf8' })
+    .trim().split(/\r?\n/).map(path => path.slice(path.indexOf('/') + 1))
+  assert.ok(files.includes('sdk/client.go'))
+  assert.ok(files.includes('bindings/node/index.js'))
+  assert.ok(files.includes('LICENSE'))
+  assert.ok(!files.some(path => path.startsWith('signer/')))
 })
 
 test('the shipped WebAssembly signs consecutive V5 requests over their exact gzip bodies', async () => {
@@ -63,7 +70,13 @@ test('the shipped WebAssembly signs consecutive V5 requests over their exact gzi
     assert.ok((request.headers['x-medusa']?.length || 0) > 64)
     assert.ok(Boolean(request.headers['x-helios']))
     assert.equal(request.headers['x-ss-stub'], createHash('md5').update(request.body).digest('hex').toUpperCase())
-    for (const name of ['x-argus', 'x-ladon', 'x-gorgon', 'cookie', 'authorization'])
+    const cookie = Object.entries(request.headers).find(([key]) => key.toLowerCase() === 'cookie')
+    assert.ok(cookie)
+    assert.deepEqual(cookie[1].split('; ').filter(pair => !pair.endsWith('=')).sort(), [
+      'install_id=' + registration.install_id_str,
+      'ttreq=fixture-guest-ticket',
+    ])
+    for (const name of ['x-argus', 'x-ladon', 'x-gorgon', 'authorization'])
       assert.equal(Object.keys(request.headers).some(key => key.toLowerCase() === name), false)
   }
   assert.notEqual(requests[0].headers['x-medusa'], requests[1].headers['x-medusa'])
