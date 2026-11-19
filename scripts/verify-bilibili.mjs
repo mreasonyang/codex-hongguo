@@ -7,8 +7,11 @@ import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import assert from 'node:assert/strict'
 import { runFfmpeg } from '../src/server/media.mjs'
+import { verificationRuntime } from './verification-runtime.mjs'
 
 const root = await mkdtemp(join(tmpdir(), 'bilibili-qualification-'))
+const runtime = await verificationRuntime(root)
+Object.assign(process.env, runtime)
 const pluginRoot = resolve(process.env.BILIBILI_VERIFY_PACKAGE_ROOT || '.')
 let client, panel, stage = 'startup'
 const report = { sdk: '@ikenxuan/amagi@6.6.0', authentication: 'anonymous',
@@ -17,7 +20,7 @@ async function start() {
   client = new Client({ name: 'bilibili-qualification', version: '1' })
   await client.connect(new StdioClientTransport({ command: process.execPath,
     args: ['--no-warnings', join(pluginRoot, 'dist/server/index.mjs')],
-    env: { PATH: process.env.PATH || process.env.Path, HONGGUO_DATA_DIR: root }, stderr: 'ignore' }))
+    env: { ...runtime, PATH: process.env.PATH || process.env.Path, HONGGUO_DATA_DIR: root }, stderr: 'ignore' }))
   const opened = await client.callTool({ name: 'open_drama_panel', arguments: {}, _meta: { thread_id: 'bilibili-test' } })
   panel = opened._meta.panel
 }

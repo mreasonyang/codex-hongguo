@@ -6,6 +6,7 @@ import { mkdtemp, rm, access } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import assert from 'node:assert/strict'
+import { verificationRuntime } from './verification-runtime.mjs'
 
 const root = await mkdtemp(join(tmpdir(), 'bilibili-auth-qualification-'))
 const pluginRoot = resolve(process.env.BILIBILI_VERIFY_PACKAGE_ROOT || '.')
@@ -22,7 +23,7 @@ async function call(name, input = {}, target = panel) {
 try {
   await client.connect(new StdioClientTransport({ command: process.execPath,
     args: ['--no-warnings', join(pluginRoot, 'dist/server/index.mjs')],
-    env: { PATH: process.env.PATH || process.env.Path, HONGGUO_DATA_DIR: root }, stderr: 'ignore' }))
+    env: { ...await verificationRuntime(root), PATH: process.env.PATH || process.env.Path, HONGGUO_DATA_DIR: root }, stderr: 'ignore' }))
   const open = async thread => (await client.callTool({ name: 'open_drama_panel', arguments: {}, _meta: { thread_id: thread } }))._meta.panel
   panel = await open('auth-owner')
   const other = await open('auth-other')

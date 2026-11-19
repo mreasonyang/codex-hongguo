@@ -12,13 +12,19 @@ npx "@kyun.si/codex-hongguo@latest" update
 npx "@kyun.si/codex-hongguo@latest" uninstall
 ```
 
-命令检查 Node、npm 和 Codex CLI，自动准备播放组件，并将小型 npm 市场索引写入用户数据目录的 `managed-marketplace/<安装器版本>/.agents/plugins/marketplace.json`。Codex 用本机目录注册 `hongguo-local`，然后从 npm 下载插件，默认流程不调用 Git。索引固定为与安装器一致的 npm 版本；使用 `npx ...@latest update` 更新时，新版安装器会注册新目录和新版索引，避免沿用旧市场快照。索引放在持久数据目录，不依赖 npx 临时缓存。仓库中的 `.agents/plugins/marketplace.json` 继续为显式 Git 来源维护确定版本；插件标识始终是 `codex-hongguo@hongguo-local`。
+`setup` 未指定应用时，在交互终端展示 Codex / Antigravity 的 checkbox 列表：↑/↓ 移动，空格勾选或取消勾选，回车确认，可同时勾选两端。引导显示已安装、未安装或暂无法确认的状态，再次执行可以补装另一端或重新安装已安装端；不选择某端不会卸载它。初始不勾选任何端，空选时回车会显示提示；Esc、Ctrl-C 或输入结束会取消安装。后台脚本须显式使用 `--codex`、`--agy` / `--antigravity`，或 `setup --codex --agy`，不再默认为脚本选择 Codex。旧的 `--host codex|antigravity` 参数保留。除 setup 外的命令只接受单端目标，未指定时保留入口默认值（npm 为 Codex，Antigravity 安装副本为 Antigravity）。
 
-两个命令均支持 `--dry-run` 和 `--marketplace owner/repo|本地目录`。预览仍会检查依赖，但不调用 Codex 修改注册。来源参数只接受仓库 slug 或现有本地目录；显式 Git 来源需要 Git。后续操作省略该参数时会选择默认本机 npm 索引，因此自定义和离线来源每次都应显式提供。
+npx 获取包含完整程序的发行包。安装将程序安装到当前系统用户的共享目录；选择 Codex 时，在 `managed-marketplace/<安装器版本>/` 下生成本机市场和入口，并注册 `hongguo-local`。Antigravity 安装自己的清单、技能和 Node 入口，不要求 Codex CLI。两端启动时从同一份程序加载播放器、MCP 服务、SDK 和 WASM。更新会在切换入口前准备新构建，安装第二端时可复用已有构建。显式选择不支持共享安装协议的旧市场版本时，Codex 继续使用所选版本的原生布局。
 
-`uninstall` 自动查找 Codex CLI 并移除插件；本机自管市场同时移除注册，随后删除播放组件、观看进度、设置、全部视频缓存、设备档案和 `managed-marketplace/` 索引。不下载或运行播放组件，也不检查 npm。支持 `--dry-run` 预览，不接受 `--marketplace`。卸载前关闭播放器面板，完成后打开新聊天。
+安装和更新均支持 `--dry-run`；Codex 还支持 `--marketplace owner/repo|本地目录`。预览仍会检查依赖，但不修改注册。来源参数只接受仓库 slug 或现有本地目录；显式 Git 来源需要 Git。自定义或离线来源使用 `setup --codex --marketplace ...`，后续操作省略来源参数时会选择默认本机 npm 索引，因此每次都应显式提供。多端安装分别完成各端操作；一端失败仍会尝试另一端，成功的安装保留，并返回失败状态供重试。
 
-组件目录归属通过固定命名空间确定。默认使用插件专用缓存下的 `runtime/ffmpeg/`；自定义缓存时使用 `<HONGGUO_RUNTIME_DIR>/codex-hongguo/runtime/ffmpeg/`。卸载清空这个专属目录，包括损坏程序、缺失或损坏的回执、未知旧版本、安装锁和下载残片；同时删除默认用户数据目录。目录内及目录本身的符号链接只删除链接，不跟随目标；目录外的系统或自配 FFmpeg、自定义目录的无关内容不删除。自定义 `HONGGUO_DATA_DIR` 时删除插件的 SQLite 及附属文件、`media/`、`panel-media/`、`device/`。完整性校验用于安装和运行，不作为留下组件文件的理由。无法清理时返回失败并提示重试，重复卸载可以继续清理。
+`uninstall` 自动查找 Codex CLI 并移除插件；本机自管市场同时移除注册，随后清理该宿主的观看进度、设置、视频缓存、设备档案和 `managed-marketplace/` 索引。最后一个宿主卸载时会清理共享程序和播放组件。不下载或运行播放组件，也不检查 npm。支持 `--dry-run` 预览，不接受 `--marketplace`。卸载前关闭播放器面板，完成后打开新聊天。
+
+Codex 和 Antigravity 在共享缓存的 `runtime/ffmpeg/` 下按构建和系统架构保存组件。自定义缓存路径为 `<HONGGUO_RUNTIME_DIR>/hongguo-shared/runtime/ffmpeg/`。安装时会从任一宿主的旧缓存校验并复用相同构建。旧版客户端仍可使用原路径，直到该宿主升级或卸载。
+
+每次卸载清理当前宿主的默认用户数据。最后一个宿主卸载时，还会清空共享组件目录，包括历史版本、损坏程序和下载残片。组件目录之外保留一个小型 SQLite 文件，用于协调后续安装和卸载。清理时仅删除组件目录内及目录本身的符号链接，保留其目标和外部配置的 FFmpeg。自定义 `HONGGUO_DATA_DIR` 时仅清理插件的数据文件和子目录。清理失败时可重新运行卸载命令。
+
+Antigravity 安装器退出时，系统会释放安装锁。如果升级前留下了旧版的空锁目录，确认旧安装命令均已退出后，删除报错中列出的空目录即可重试。
 
 如果旧安装来自 ZIP，向导只替换同名市场并重新安装；失败会尝试恢复旧来源和插件注册。默认流程从旧 Git 来源迁移时，失败后提示重试本机安装，不重新拉取旧 Git 来源。观看数据不移动、不清理。迁移前关闭播放器，完成后打开新对话并审查 Hooks。安装器不收集或输出账号凭据，认证由现有 Codex/npm 客户端处理；它不写入 Hook 信任，也不转发宿主原始诊断输出。
 
@@ -26,7 +32,7 @@ npx "@kyun.si/codex-hongguo@latest" uninstall
 
 ## 运行环境与包内容
 
-npm 包的 `os` 为 darwin/linux/win32，Windows 需要 x64 或 ARM64 Node；ARM64 系统需要 Windows 11 和插件 >=0.0.30。Windows PowerShell 使用 `npx.cmd "@kyun.si/codex-hongguo@latest" setup`，详见 [Windows 支持](windows-support.md)。三平台的自动化安装验证与桌面播放观察分别记录。需要外部 Node.js >=22.16（含 npm）和 Codex CLI。播放组件由安装器自动下载到用户缓存，校验固定的归档和可执行文件 SHA-256 后使用；不需要全局安装 FFmpeg。macOS 使用本项目从固定官方源码构建的组件，Windows/Linux 使用本项目独立发布的 BtbN 精简组件。包内提供 JavaScript 依赖、播放器、SDK/WASM、播放组件清单和许可说明。
+npm 包的 `os` 为 darwin/linux/win32，Windows 需要 x64 或 ARM64 Node；ARM64 系统需要 Windows 11 和插件 >=0.0.30。Windows PowerShell 使用 `npx.cmd "@kyun.si/codex-hongguo@latest" setup`，详见 [Windows 支持](windows-support.md)。三平台的自动化安装验证与桌面播放观察分别记录。需要外部 Node.js >=22.16（含 npm）；仅 Codex 适配需要 Codex CLI。播放组件由安装器自动下载到用户缓存，校验固定的归档和可执行文件 SHA-256 后使用；不需要全局安装 FFmpeg。macOS 使用本项目从固定官方源码构建的组件，Windows/Linux 使用本项目独立发布的 BtbN 精简组件。包内提供 JavaScript 依赖、播放器、SDK/WASM、播放组件清单和许可说明。
 
 MCP 使用同名的 `bin/run-node` / Windows `bin/run-node.exe` 入口，Hooks 按平台调用同一启动器。两者都检查 Node 版本及 `node:sqlite`；POSIX 保留 PATH、Homebrew、Volta、nvm、mise、fnm 查找，Windows 支持 PATH、常见 Node、Volta、nvm-windows 和 Scoop 位置。源码构建需 Go >=1.25，发行包使用者无需安装 Go。FFmpeg/Codex 通过 `src/runtime/executables.mjs` 查找，显式覆盖项见 [CONTRIBUTING](../CONTRIBUTING.md#运行环境与诊断)。覆盖值必须在实际宿主子进程的环境中可见。
 
@@ -117,6 +123,8 @@ git push origin v0.0.34
 ```
 
 日常 `ci.yml` 也使用一次构建、三平台共享产物，但不发布。验证完整发布链路时，在 GitHub Actions 中手动运行 Publish，保持 `publish=false`，可留空 `tag` 验证所选提交。该预演会生成合并回执和发布计划，跳过 npm 上传、索引提交和 GitHub Release 创建。
+
+macOS 发布验收固定使用 `macos-26-intel`（x64）。`macos-latest` 当前使用 ARM64；其托管池容量不足时，任务可能在执行任何步骤前因无法取得 runner 而取消。任务的 `timeout-minutes` 控制执行时限，调大它不能修复 runner 分配失败。此类失败可先重跑失败任务；持续失败时，可从包含 runner 配置修复的分支手动运行 Publish，选择原有版本标签。发布源码仍由该标签固定，重新生成的候选包仍需通过三平台验收。Intel 回执不代表 Apple Silicon 的 CI 验收，后者需单独记录。参见 [GitHub runner 规格](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)和[任务超时配置](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idtimeout-minutes)。
 
 失败后优先在同一工作流中仅重跑失败的 job，复用原有验收包；也可以手动选择既有标签并明确勾选 `publish=true`。若 npm 已存在该版本，只有完整性完全一致才可继续收尾；若重新构建的内容不同，流程失败，不覆盖、不推进索引。不得移动已经发布的标签来替换内容。
 

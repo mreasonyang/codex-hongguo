@@ -6,8 +6,8 @@ License, version 3 only (AGPL-3.0-only). The complete license is in LICENSE.
 
 Third-party components retain their respective licenses. In particular,
 openhongguo is built from unmodified official upstream source, pinned to
-4bc88830eba186c13caf36cc915ace38785e2f8e under Apache-2.0. This upstream
-commit includes the merged playback signing fix from pull request #7.
+the v0.4.0 release commit cd27b9ef42a4aa06859d12e5a24ba7653fa64a2c under
+Apache-2.0.
 Its matching source, license and provenance are included in
 licenses/openhongguo/; see NOTICE.md there for the revision-pinned build details.
 

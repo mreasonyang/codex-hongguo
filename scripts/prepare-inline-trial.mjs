@@ -48,6 +48,7 @@ file('config.toml', [
   '[mcp_servers.hongguo-inline]', 'command = ' + quote(process.execPath),
   'args = ' + quote(['--no-warnings', server]), 'cwd = ' + quote(plugin),
   '[mcp_servers.hongguo-inline.env]', 'HONGGUO_DATA_DIR = ' + quote(data), 'HONGGUO_FFMPEG = ' + quote(ffmpeg),
+  'HONGGUO_RUNTIME_DIR = ' + quote(join(data, 'runtime')),
 ].join('\n'))
 writeFileSync(join(trial, '试用说明.md'), [
   '# 红果对话试用', '',

@@ -12,7 +12,7 @@ import { defer } from './cleanup.mjs'
 import { Store } from '../src/server/store.mjs'
 import { Catalog } from '../src/server/catalog.mjs'
 import { Service } from '../src/server/service.mjs'
-import { PanelMedia } from '../src/server/panel-media.mjs'
+import { antigravity } from '../src/runtime/host.mjs'
 import { filePlayback } from '../src/server/sources/contracts.mjs'
 import { PlayerError } from '../src/server/errors.mjs'
 
@@ -211,7 +211,7 @@ test('MP4 index rejects corrupt offsets/counts and has bounded window requests',
   assert.throws(() => movieIndex(corrupt, bytes.length))
 })
 test('Hongguo MCP and browser playback use the indexed path and keep stream access scoped to the preparing viewer', async t => {
-  const f = await fixture(t), store = new Store(join(f.root, 'store'))
+  const f = await fixture(t), store = new Store(join(f.root, 'store'), false, { host: antigravity })
   defer(t, () => store.close())
   const catalog = new Catalog(store), source = catalog.sources.get('hongguo')
   assert.equal(source.rangedFilePlayback, true)
@@ -222,14 +222,18 @@ test('Hongguo MCP and browser playback use the indexed path and keep stream acce
   let resolves = 0
   source.resolvePlayback = async () => { resolves++; return f.descriptor }
   catalog.cache = { prepare: () => assert.fail('Hongguo must not enter the whole-file download path') }
-  catalog.panelMedia = new PanelMedia(store.root); catalog.panelMedia.file = f.media
-  defer(t, () => catalog.panelMedia.close())
+  await catalog.prepareMediaRuntime()
+  const renderer = t.mock.method(catalog, 'runFfmpeg')
+  defer(t, async () => {
+    await catalog.panelMedia?.file.close()
+    catalog.panelMedia?.close()
+  })
   const svc = new Service(store, catalog), a = svc.panel(svc.open({}).panel), b = svc.panel(svc.open({}).panel)
   await svc.call(a, 'get_episodes', { seriesId: 'hg-10' })
   const before = { playing: a.playing, streams: a.streams?.size }
   await svc.call(a, 'preload_playback', { episodeId: 'hg-101' })
   assert.deepEqual({ playing: a.playing, streams: a.streams?.size }, before)
-  const e = f.media.entries.get('hg-101'); await e.job
+  const e = catalog.panelMedia.file.entries.get('hg-101'); await e.job
   await Promise.allSettled([...e.jobs.values()])
   const reads = f.requested.length
   const r = await svc.call(a, 'prepare_playback', { episodeId: 'hg-101', retry: true }, true)
@@ -239,6 +243,7 @@ test('Hongguo MCP and browser playback use the indexed path and keep stream acce
   const args = { episodeId: 'hg-101', stream: r.stream, asset: 'seg00000.ts', offset: 0 }
   const chunk = await svc.call(a, 'read_panel_chunk', args, true)
   assert.ok(Buffer.from(chunk.bytes, 'base64').length)
+  assert.equal(renderer.mock.callCount(), 1, 'the first Hongguo fragment must use the catalog’s FFmpeg runner')
   assert.equal(f.requested.length, reads, 'the preloaded first fragment is reused')
   await svc.call(a, 'read_panel_chunk', args)
   await assert.rejects(svc.call(b, 'read_panel_chunk', args, true))
