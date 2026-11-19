@@ -86,7 +86,7 @@ function setup(t, selected = true) {
   })
   const window = Object.assign(new EventTarget(), { innerWidth: 900, innerHeight: 700, setInterval: () => 1, clearInterval() {}, scrollTo() {} })
   const api = {
-    browser: false, connect: async () => {}, hostLocale: () => 'zh',
+    browser: false, antigravity: () => false, connect: async () => {}, hostLocale: () => 'zh',
     reopenPanel: async () => {
       const initial = service.open({ threadId: 'A' }); panelKey = initial.panel
       return { identified: initial.identified, source: initial.source }

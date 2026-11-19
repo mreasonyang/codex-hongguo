@@ -33,6 +33,8 @@ export type State = {
   preferences?: Preferences
 }
 export const browser = document.documentElement.dataset.host === 'browser'
+export const sidecar = document.documentElement.dataset.host === 'sidecar'
+type SidecarWindow = Window & { sidecar?: { conversationId: string | null; fetch: typeof fetch } }
 const waitingSurface = document.documentElement.dataset.surface === 'waiting'
 let panel = ''
 const deniedTools = new Map<string, ToolAuthorizationDenied>()
@@ -40,18 +42,56 @@ class ToolAuthorizationDenied extends Error {
   constructor() { super('已取消授权，请重新打开播放器后重试') }
 }
 export const isToolAuthorizationDenied = (error: unknown): boolean => error instanceof ToolAuthorizationDenied
-const app = browser ? null : new App({ name: '红果短剧', version: pkg.version }, {}, { autoResize: !waitingSurface })
+const app = browser || sidecar ? null : new App({ name: '红果短剧', version: pkg.version }, {}, { autoResize: !waitingSurface })
 // Use the initialized MCP Apps host identity, not the browser's user agent or
 // the fact that a client happens to run Codex underneath.
 const officialDesktop = () => app?.getHostVersion()?.name === 'chatgpt' && app?.getHostContext()?.platform === 'desktop'
-function requireOfficialDesktop() {
-  if (!officialDesktop()) throw Error('红果短剧仅在官方 Codex App 中启用')
+export const antigravity = () => app?.getHostVersion()?.name === 'Antigravity' && app?.getHostContext()?.platform === 'web'
+const supportedHost = () => officialDesktop() || antigravity()
+export const unsupportedHostMessage = '红果短剧仅在官方 Codex App 或 Antigravity App 中启用'
+function requireSupportedHost() {
+  if (!supportedHost()) throw Error(unsupportedHostMessage)
 }
+// Antigravity allows four concurrent app calls. Keep progress/state ahead of
+// queued covers and media, and reject stale queued work after reconnecting.
+let inFlight = 0
+const pending: { priority: number; run: () => void }[] = []
+function hostCall(name: string, args: Record<string, unknown>, timeout: number, scope?: string) {
+  if (!antigravity()) return app!.callServerTool({ name, arguments: args }, { timeout })
+  const expires = Date.now() + timeout
+  return new Promise<Awaited<ReturnType<App['callServerTool']>>>((resolve, reject) => {
+    const run = () => {
+      if (scope !== undefined && scope !== panel) { reject(Error('请重新打开短剧面板')); return }
+      if (deniedTools.has(name)) { reject(deniedTools.get(name)); return }
+      const remaining = expires - Date.now()
+      if (remaining <= 0) { reject(Error('本机服务请求超时，请重试')); return }
+      inFlight++
+      Promise.resolve().then(() => app!.callServerTool({ name, arguments: args }, { timeout: remaining }))
+        .then(resolve, reject).finally(() => { inFlight--; drain() })
+    }
+    pending.push({ priority: ['save_progress', 'get_run_state', 'set_preferences'].includes(name) ? 1 : 0, run })
+    drain()
+  })
+}
+function drain() {
+  pending.sort((a, b) => b.priority - a.priority)
+  while (pending.length && inFlight < 4) pending.shift()!.run()
+}
+let expandedInline = false, modeChangedCallback = () => {}
 let inlineSizing: ReturnType<typeof trackInlineSize> | undefined
 export const hostLocale = () => app?.getHostContext()?.locale || navigator.language
-export const displayMode = () => app?.getHostContext()?.displayMode
+export const displayMode = () => expandedInline ? 'fullscreen' : app?.getHostContext()?.displayMode
 export async function requestPlayerTab() {
-  requireOfficialDesktop()
+  requireSupportedHost()
+  if (antigravity()) {
+    // This host cannot change display modes. Expand the card in place; its
+    // separate aux_pane entrypoint is available for a persistent side panel.
+    await app!.sendSizeChanged({ height: 760 })
+    inlineSizing?.dispose()
+    expandedInline = true
+    modeChangedCallback()
+    return
+  }
   const result = await app?.requestDisplayMode({ mode: 'fullscreen' }, { timeout: 5000 })
   if (result?.mode !== 'fullscreen') throw Error('当前 Codex 无法在会话中打开播放器')
 }
@@ -77,21 +117,37 @@ async function browserContext(): Promise<Context> {
   if (!r.ok) throw Error('分屏已失效，请从面板重新打开')
   return r.json()
 }
+async function sidecarRequest<T>(path: string, args: Record<string, unknown>, timeout: number, keepalive = false): Promise<T> {
+  const bridge = (window as SidecarWindow).sidecar
+  if (!bridge) throw Error(unsupportedHostMessage)
+  const response = await bridge.fetch(path, {
+    method: 'POST', body: JSON.stringify({ ...args, conversationId: bridge.conversationId ?? null }),
+    signal: AbortSignal.timeout(timeout), keepalive,
+  })
+  const result = await response.json()
+  if (!response.ok) throw Error(result.error || '本机服务不可达')
+  return result as T
+}
 /** Renew through the normal host tool so an expired in-memory panel is never reused. */
 export async function reopenPanel(): Promise<Context> {
   if (browser) return browserContext()
-  requireOfficialDesktop()
-  const result = await app!.callServerTool({ name: 'open_drama_panel', arguments: {} }, { timeout: 10000 })
+  if (sidecar) {
+    const context = await sidecarRequest<Context & { panel: string }>('/api/context', {}, 4000)
+    return acceptPanel({ _meta: { panel: context.panel }, structuredContent: context })
+  }
+  requireSupportedHost()
+  const result = await hostCall('open_drama_panel', {}, 10000)
   if (result.isError) throw Error('连接失败，请重试')
   return acceptPanel(result)
 }
 export async function connect(ready: (c: Context) => void, teardown: () => Promise<void>, modeChanged: () => void) {
-  if (browser) {
-    ready(await browserContext())
+  modeChangedCallback = modeChanged
+  if (browser || sidecar) {
+    ready(await reopenPanel())
     return
   }
   app!.ontoolresult = (r) => {
-    if (!officialDesktop()) return
+    if (!supportedHost()) return
     if (typeof r._meta?.panel !== 'string') return
     ready(acceptPanel(r))
   }
@@ -101,7 +157,7 @@ export async function connect(ready: (c: Context) => void, teardown: () => Promi
     return {}
   }
   app!.onhostcontextchanged = (ctx) => {
-    if (!officialDesktop()) return
+    if (!supportedHost()) return
     syncHostLook(ctx)
     if (ctx.displayMode !== undefined) {
       modeChanged()
@@ -109,7 +165,7 @@ export async function connect(ready: (c: Context) => void, teardown: () => Promi
     }
   }
   await app!.connect()
-  requireOfficialDesktop()
+  requireSupportedHost()
   syncHostLook(app!.getHostContext())
   if (waitingSurface) inlineSizing = trackInlineSize(
     document.getElementById('waitingCard')!,
@@ -119,25 +175,27 @@ export async function connect(ready: (c: Context) => void, teardown: () => Promi
   modeChanged()
 }
 export async function call<T>(name: string, args: Record<string, unknown> = {}, timeout = 15000): Promise<T> {
+  const keepalive = name === 'save_progress' || (name === 'set_preferences' && 'volume' in args)
+  if (sidecar) return sidecarRequest<T>('/api/call', { name, args, panel }, timeout, keepalive)
   if (browser) {
     const r = await fetch('api/' + name, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(args),
-      keepalive: name === 'save_progress' || (name === 'set_preferences' && 'volume' in args),
+      keepalive,
       signal: AbortSignal.timeout(timeout),
     })
     const data = await r.json()
     if (!r.ok) throw Error(data.error || '分屏连接已中断')
     return data as T
   }
-  requireOfficialDesktop()
+  requireSupportedHost()
   if (!panel) throw Error('等待会话面板连接')
   const denied = deniedTools.get(name)
   if (denied) throw denied
   const currentPanel = panel
   try {
-    const r = await app!.callServerTool({ name, arguments: { ...args, panel: currentPanel } }, { timeout })
+    const r = await hostCall(name, { ...args, panel: currentPanel }, timeout, currentPanel)
     if (r.isError) throw Error(r.content?.[0]?.type === 'text' ? r.content[0].text : '本机服务不可达')
     return r._meta?.data as T
   } catch (error) {

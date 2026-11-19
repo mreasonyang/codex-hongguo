@@ -1,0 +1,98 @@
+{
+  "checkedAt": "2026-11-17T16:26:17.504Z",
+  "version": "0.0.41-beta.2",
+  "stage": "local-prepublication-candidate",
+  "registryPublishedByThisCheck": false,
+  "candidate": {
+    "name": "@kyun.si/codex-hongguo",
+    "version": "0.0.41-beta.2",
+    "filename": "kyun.si-codex-hongguo-0.0.41-beta.2.tgz",
+    "size": 7512698,
+    "unpackedSize": 20426039,
+    "sha256": "451eb25ab0d8619405d0e396310d7df2d7322ad3ce1a50e3f5730ddc94e1a55a",
+    "integrity": "sha512-7amsX2pLFHPI2/1v7PnJFg0Xvyk0zWu/mPUTeh9aoUA/JFkbCwHsEbpXD2kyw1WaYr2Ra9is5JMUCHjvhAbrlg=="
+  },
+  "tests": {
+    "command": "npm test",
+    "total": 541,
+    "passed": 533,
+    "failed": 0,
+    "skipped": 8,
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v26.13.1"
+  },
+  "liveMediaEvidence": {
+    "report": "./verification.json",
+    "allMediaSourceHashesUnchanged": true,
+    "hongguoPassed": true,
+    "huangguoFullEpisodeDecoded": true
+  },
+  "isolatedCodexInstallation": {
+    "name": "@kyun.si/codex-hongguo",
+    "version": "0.0.41-beta.2",
+    "installation": "fresh",
+    "sha256": "451eb25ab0d8619405d0e396310d7df2d7322ad3ce1a50e3f5730ddc94e1a55a",
+    "platform": "darwin",
+    "arch": "arm64",
+    "powershellInstall": [],
+    "checkedAt": "2026-11-17T16:25:54.786Z",
+    "checks": [
+      "npx-setup",
+      "fresh-install",
+      "repeat-setup",
+      "native-npm-source",
+      "shared-program-both-hosts",
+      "codex-thin-adapter",
+      "progress-preserved",
+      "sound-preferences-preserved",
+      "managed-ffmpeg-without-system-install",
+      "hook-review-required",
+      "installation-trust-instructions",
+      "minimal-player-ui",
+      "launcher-stdin",
+      "hook-stop",
+      "hook-interrupt",
+      "host-mcp",
+      "live-catalog",
+      "npx-uninstall",
+      "uninstall-dry-run",
+      "repeat-uninstall",
+      "uninstall-without-media-runtime",
+      "uninstall-cleans-component-directory-and-partial-downloads",
+      "uninstall-preserves-external-executables",
+      "uninstall-deletes-all-local-data"
+    ],
+    "mediaDecoded": true,
+    "desktopPlaybackObserved": false
+  },
+  "isolatedAntigravityInstallation": {
+    "version": "0.0.41-beta.2",
+    "platform": "darwin",
+    "uiSha256": "8f7f94a4a516c0e593c3d46bbee2b794d589c695b4fd102dba54da79f1693d33",
+    "checks": [
+      "isolated-install-update-uninstall",
+      "packaged-stdio-mcp",
+      "app-entrypoints-and-html",
+      "fixed-entrypoints-with-opposite-environment",
+      "installed-cli-host-selection",
+      "provider-worker-app-profile",
+      "one-program-and-ffmpeg-survive-single-host-uninstall",
+      "native-shell-hooks",
+      "hook-deduplication-and-cancellation",
+      "bound-waiting-card",
+      "sample-media-transport-and-decode",
+      "progress-preserved"
+    ],
+    "desktopPlaybackObserved": false,
+    "liveAntigravityHooksObserved": false
+  },
+  "desktopPlaybackObserved": false,
+  "userInstallationUpdated": false,
+  "publication": {
+    "requiredWorkflow": ".github/workflows/publish.yml",
+    "channel": "beta",
+    "releaseTag": "v0.0.41-beta.2",
+    "finalArchiveAndRegistryProof": "GitHub Actions candidate, qualifications and publication artifacts"
+  }
+}

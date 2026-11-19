@@ -5,10 +5,11 @@ try {
 } catch (error) {
   // Keep runtime/network paths, URLs, headers and raw exception details out of CI logs.
   const codes = new Set(['download', 'download-url', 'download-http', 'download-network',
-    'archive-size', 'archive-hash', 'extract', 'binary-hash', 'probe', 'publish'])
+    'archive-size', 'archive-hash', 'extract', 'binary-hash', 'probe', 'probe-timeout', 'probe-start', 'publish'])
   console.error('播放组件自动准备失败 ' + JSON.stringify({
     platform: process.platform, arch: process.arch,
     stage: codes.has(error?.code) ? error.code : 'prepare',
+    ...(error?.code === 'probe' && Number.isInteger(error.exitStatus) ? { exitStatus: error.exitStatus } : {}),
     ...(Number.isInteger(error?.httpStatus) && error.httpStatus >= 400 && error.httpStatus <= 599
       ? { httpStatus: error.httpStatus } : {}),
   }))

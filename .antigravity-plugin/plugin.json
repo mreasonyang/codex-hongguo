@@ -1,0 +1,16 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "codex-hongguo",
+  "version": "0.0.41",
+  "displayName": "红果短剧",
+  "description": "在会话侧栏选剧与续播。启用回合联动后，可随本机任务开始续播、结束暂停。",
+  "logo": "assets/logo.png",
+  "author": {
+    "name": "Eason Yang"
+  },
+  "license": "AGPL-3.0-only",
+  "repository": "https://github.com/mreasonyang/codex-hongguo",
+  "suggestedPrompts": [
+    "配置红果短剧"
+  ]
+}

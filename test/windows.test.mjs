@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { findExecutable, spawnSync, spawn } from '../src/runtime/executables.mjs'
 import { dataRoot } from '../src/server/paths.mjs'
+import { verificationRuntime } from '../scripts/verification-runtime.mjs'
 
 test('Windows progress stays in LocalAppData and keeps an explicit override', () => {
   assert.equal(dataRoot({ platform: 'win32', home: 'C:\\Users\\用户', env: { LOCALAPPDATA: 'D:\\本地 数据' } }), 'D:\\本地 数据\\CodexHongguo')
@@ -51,7 +52,8 @@ test('MCP manifest launches the packaged platform entry and keeps stdout as JSON
   if (process.platform === 'win32') cpSync('dist/launcher/run-node-arm64.exe', join(plugin, 'bin/run-node-arm64.exe'))
   // Windows resolves an extensionless command to .exe; exercise exactly that host contract.
   const command = resolve(plugin, manifest.command)
-  const child = spawn(command, manifest.args, { cwd: plugin, env: { ...process.env, HONGGUO_NODE: process.execPath, HONGGUO_DATA_DIR: dir }, stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true })
+  const child = spawn(command, manifest.args, { cwd: plugin, env: { ...process.env, ...await verificationRuntime(dir),
+    HONGGUO_NODE: process.execPath, HONGGUO_DATA_DIR: dir }, stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true })
   t.after(() => child.kill())
   const ready = new Promise((ok, fail) => {
     let buffer = ''

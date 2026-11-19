@@ -11,6 +11,7 @@ import { installedProviders, activatePackage, libraryDirectory } from '../server
 import { isBuiltinProviderId } from '../server/providers/registry.mjs'
 import { packageFile, readPackage } from '../server/providers/package.mjs'
 import { stages, byteBudget } from './provider-check.mjs'
+import { codex } from '../runtime/host.mjs'
 
 const help = `codex-hongguo provider create <directory> [--template search|link] [--id my-source]
 codex-hongguo provider test <directory> [--query text]
@@ -45,7 +46,7 @@ async function create(directory, template, id) {
   } catch (error) { await rm(directory, { recursive: true, force: true }); throw error }
 }
 
-async function runWorker(action, directory, query) {
+async function runWorker(action, directory, query, host) {
   const root = await mkdtemp(join(tmpdir(), 'hongguo-provider-'))
   const child = fork(new URL('./provider-worker.mjs', import.meta.url), [], {
     stdio: ['ignore', 'ignore', 'ignore', 'ipc'], execArgv: [], windowsHide: true,
@@ -94,7 +95,7 @@ async function runWorker(action, directory, query) {
     const exit = new Promise(resolve => {
       child.once('error', () => resolve(1)); child.once('exit', resolve)
     })
-    child.send({ action, directory, query, root }, error => { if (error) stop() })
+    child.send({ action, directory, query, root, app: host.id }, error => { if (error) stop() })
     const status = await exit
     if (preview) return
     report.ok = done && status === 0
@@ -106,7 +107,7 @@ async function runWorker(action, directory, query) {
   }
 }
 
-async function install(root, directory, action) {
+async function install(root, directory, action, host) {
   const plugin = await readPackage(directory), { id, version } = plugin.manifest
   checkId(id)
   const library = libraryDirectory(root)
@@ -122,7 +123,7 @@ async function install(root, directory, action) {
       await mkdir(dirname(target), { recursive: true, mode: 0o700 })
       await copyFile(file, target)
     }
-    const checked = await runWorker('load', destination)
+    const checked = await runWorker('load', destination, undefined, host)
     if (!checked.ok || checked.provider?.id !== id || checked.provider.version !== version) throw Error('LOAD_FAILED')
     return activatePackage(root, action, id, revision, version)
   } catch (error) {
@@ -131,7 +132,7 @@ async function install(root, directory, action) {
   }
 }
 
-export async function providerCommand(argv) {
+export async function providerCommand(argv, { host = codex } = {}) {
   const [action = 'help', ...args] = argv
   if (['help', '-h', '--help'].includes(action)) { console.log(help); return }
   const options = action === 'create' ? { template: { type: 'string', default: 'search' }, id: { type: 'string' } }
@@ -139,7 +140,7 @@ export async function providerCommand(argv) {
   try {
     const { values, positionals } = parseArgs({ args, options, allowPositionals: true })
     if (positionals.length !== (action === 'list' ? 0 : 1)) throw Error('USAGE')
-    const [target] = positionals, root = dataRoot()
+    const [target] = positionals, root = dataRoot({ host })
     let result
     switch (action) {
       case 'create': result = await create(resolve(target), values.template, values.id ?? basename(resolve(target))); break
@@ -151,11 +152,11 @@ export async function providerCommand(argv) {
           if (!item) throw Error('NOT_INSTALLED')
           directory = join(libraryDirectory(root), item.active)
         }
-        result = await runWorker(action, directory, values.query)
+        result = await runWorker(action, directory, values.query, host)
         if (result && !result.ok) process.exitCode = 1
         break
       }
-      case 'install': case 'update': result = await install(root, resolve(target), action); break
+      case 'install': case 'update': result = await install(root, resolve(target), action, host); break
       case 'rollback': case 'remove':
         checkId(target, { allowBuiltin: action === 'remove' })
         result = activatePackage(root, action, target); break

@@ -1,15 +1,15 @@
 {
   "project": "openhongguo",
-  "upstreamVersion": "0.2.0",
-  "version": "0.2.0",
+  "upstreamVersion": "0.4.0",
+  "version": "0.4.0",
   "license": "Apache-2.0",
-  "revision": "4bc88830eba186c13caf36cc915ace38785e2f8e",
+  "revision": "cd27b9ef42a4aa06859d12e5a24ba7653fa64a2c",
   "repository": "https://github.com/beilunyang/openhongguo",
-  "sourceTree": "8367d057a4bb787af6eda9726feb1b2040b33aaa",
-  "mergedPullRequest": "https://github.com/beilunyang/openhongguo/pull/7",
-  "sourceURL": "https://github.com/beilunyang/openhongguo/tree/4bc88830eba186c13caf36cc915ace38785e2f8e",
-  "archiveURL": "https://codeload.github.com/beilunyang/openhongguo/tar.gz/4bc88830eba186c13caf36cc915ace38785e2f8e",
+  "sourceTree": "9bcbb608404cef4f20852fb814e90f2c9e4ef7ed",
+  "releaseURL": "https://github.com/beilunyang/openhongguo/releases/tag/v0.4.0",
+  "sourceURL": "https://github.com/beilunyang/openhongguo/tree/cd27b9ef42a4aa06859d12e5a24ba7653fa64a2c",
+  "archiveURL": "https://codeload.github.com/beilunyang/openhongguo/tar.gz/cd27b9ef42a4aa06859d12e5a24ba7653fa64a2c",
   "archive": "source.tar.gz",
-  "sourceSHA256": "e8bb1daacb40f3901c2668742ab95707525ebf8ac14f64103b58bbc74603256e",
+  "sourceSHA256": "745d7fe91d609cdb1cbfb26321ed16a0521b383fb0ae6939bace9cf3a5c5a228",
   "modifiedFiles": []
 }

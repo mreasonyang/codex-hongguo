@@ -15,7 +15,8 @@ const apiHosts = ['huangguoai.io', '0624.gitiecgad.cc']
 const temporaryReadFailures = new Set(['获取视频列表失败', '获取视频失败'])
 const terminalErrors = new Set(['ABORTED', 'RATE_LIMITED', 'AUTHENTICATION_REQUIRED', 'CONTENT_UNAVAILABLE',
   'NOT_FOUND', 'BUDGET', 'HOST_NOT_ALLOWED', 'CONTRACT'])
-const mediaDomains = ['drleao.cn', 'hzjvlo.cn', 'ovscdns.com', 'intlscdn.com', 'dnsv1.com', 'hnydns.com']
+const mediaDomains = ['drleao.cn', 'hzjvlo.cn', 'ovscdns.com', 'intlscdn.com', 'dnsv1.com', 'hnydns.com',
+  'tjyyjk.cn', 'qnlycc.cn']
 export const huangguoManifest = {
   apiVersion: 1, id: 'huangguo', name: '黄果', version: '1.0.0', nsfw: true,
   queryMode: 'search', queryHint: '搜索剧名', emptyMessage: '暂时没有找到短剧，请换个关键词试试',

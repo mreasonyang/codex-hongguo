@@ -73,7 +73,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        # macos-latest uses ARM64; its hosted pool can fail before allocating a runner.
+        os: [macos-26-intel, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
@@ -126,6 +127,11 @@ jobs:
         timeout-minutes: 5
       - name: Install the shared npm archive
         run: npm run verify:install
+      - name: Extract the tested npm archive for the Antigravity adapter
+        shell: bash
+        run: tar -xzf release/*.tgz -C release/npm/codex-hongguo --strip-components=1
+      - name: Verify the packaged Antigravity adapter, native shell hooks and playback
+        run: npm run verify:antigravity
       - name: Bind native installer receipt to source
         run: node scripts/release-artifacts.mjs receipt
         env:

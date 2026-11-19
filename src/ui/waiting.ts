@@ -95,7 +95,7 @@ export function waitingCard(openPlayer: (selection: WaitingSelection) => void, c
       clearInterval(timer)
     }
     if (!ready || dismissed || !allowed || expanded) return
-    status.textContent = tr(error instanceof Error ? error.message : '当前 Codex 无法在会话中打开播放器')
+    status.textContent = tr(error instanceof Error ? error.message : '当前无法在会话中打开播放器')
     card.hidden = false
   }
   async function refresh(force = false) {

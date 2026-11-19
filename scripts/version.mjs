@@ -20,7 +20,7 @@ if (mode !== '--next') {
   if (lock.version !== current || lock.packages[''].version !== current) {
     throw new Error('package-lock.json 的项目版本与 package.json 不一致')
   }
-  for (const path of ['plugin.json', '.codex-plugin/plugin.json']) {
+  for (const path of ['plugin.json', '.codex-plugin/plugin.json', '.antigravity-plugin/plugin.json']) {
     const manifest = read(path)
     if (manifest.version === current) continue
     if (mode !== '--sync') throw new Error(path + ' 的版本不一致，请运行 node scripts/version.mjs --sync 同步清单')

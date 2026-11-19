@@ -54,7 +54,7 @@ export class PanelMedia {
     this.run = run
     this.entries = new Map()
     this.remote = new DashMedia(root)
-    this.file = new FileMedia(root)
+    this.file = new FileMedia(root, { run })
     mkdirSync(this.root, { recursive: true, mode: 0o700 })
     for (const item of readdirSync(this.root, { withFileTypes: true })) {
       const dir = join(this.root, item.name)

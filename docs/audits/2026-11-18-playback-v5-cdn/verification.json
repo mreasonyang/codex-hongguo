@@ -1,0 +1,253 @@
+{
+  "checkedAt": "2026-11-17T16:03:54.319Z",
+  "branch": "fix/playback-v5-cdn",
+  "baseline": "7bd1fb2",
+  "projectVersion": "0.0.41-beta.1",
+  "localCandidate": true,
+  "published": false,
+  "userInstallationUpdated": false,
+  "sdk": {
+    "project": "openhongguo",
+    "upstreamVersion": "0.3.0",
+    "version": "0.3.0",
+    "license": "Apache-2.0",
+    "revision": "999f57b141211f43c8c5234386733fb745260e67",
+    "repository": "https://github.com/beilunyang/openhongguo",
+    "sourceTree": "98c91d4148135cb11e6f8b043fbe9e229bce9c07",
+    "mergedPullRequest": "https://github.com/beilunyang/openhongguo/pull/13",
+    "sourceURL": "https://github.com/beilunyang/openhongguo/tree/999f57b141211f43c8c5234386733fb745260e67",
+    "archiveURL": "https://codeload.github.com/beilunyang/openhongguo/tar.gz/999f57b141211f43c8c5234386733fb745260e67",
+    "archive": "source.tar.gz",
+    "sourceSHA256": "5667336b19f4ead83d91c1195105c93975529ef53f5afef1305fb95b086b3ffc",
+    "modifiedFiles": []
+  },
+  "changes": {
+    "huangguoMediaDomains": [
+      "tjyyjk.cn",
+      "qnlycc.cn"
+    ],
+    "applicationSourceFiles": [
+      "src/server/sources/huangguo.mjs"
+    ],
+    "fileSha256": {
+      "third_party/openhongguo/source.json": "153f9cd1d8ad35855b09c72921c02c8d8bc3e8370d082bf0a8c4f66a2cc7e3bb",
+      "third_party/openhongguo/NOTICE.md": "b66edd486414a97956e002d5a61e78f0be32e24abe8567b5ac189b836db48171",
+      "src/server/sources/huangguo.mjs": "6ec792322dac4a8bd3e3548c39086c7555d5477c6ba2a5682cdb2e79a08b07c7",
+      "test/hongguo-sdk.test.mjs": "8ba47ad6cc41929bf4d2d31d8a4708253ab5ec5b19a3e57941a2f9bfe77db799",
+      "test/huangguo.test.mjs": "4c7f13306df8549c9a66e598221d464076759fed209221365e8606fee20ca2f9"
+    }
+  },
+  "tests": {
+    "command": "npm run build && node scripts/prepare-media.mjs && node --test --test-timeout=180000 test/*.test.mjs",
+    "total": 541,
+    "passed": 533,
+    "failed": 0,
+    "skipped": 8,
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v26.13.1",
+    "codex": "0.169.0"
+  },
+  "media": {
+    "hongguo": {
+      "startedAt": "2026-11-17T16:01:18.985Z",
+      "sdkRevision": "999f57b141211f43c8c5234386733fb745260e67",
+      "samples": [
+        {
+          "label": "long",
+          "positions": [
+            {
+              "position": 276,
+              "readyMs": 262,
+              "bytesFetched": 576408,
+              "cumulativeBytes": 1508186,
+              "totalBytes": 19178460,
+              "wholeRequests": 0,
+              "decoded": true,
+              "frames": 180,
+              "firstPTS": 276,
+              "partial": true,
+              "targetTimestamp": true
+            },
+            {
+              "position": 0,
+              "readyMs": 142,
+              "bytesFetched": 378070,
+              "cumulativeBytes": 1886256,
+              "totalBytes": 19178460,
+              "wholeRequests": 0,
+              "decoded": true,
+              "frames": 179,
+              "firstPTS": 0.03333333333333333,
+              "partial": true,
+              "targetTimestamp": true
+            },
+            {
+              "position": 552,
+              "readyMs": 118,
+              "bytesFetched": 144374,
+              "cumulativeBytes": 2030630,
+              "totalBytes": 19178460,
+              "wholeRequests": 0,
+              "decoded": true,
+              "frames": 110,
+              "firstPTS": 552,
+              "partial": true,
+              "targetTimestamp": true
+            }
+          ],
+          "prepareMs": 730,
+          "indexBytes": 931778,
+          "totalBytes": 19178460,
+          "durationMs": 555655
+        },
+        {
+          "label": "medium",
+          "positions": [
+            {
+              "position": 150,
+              "readyMs": 1064,
+              "bytesFetched": 649742,
+              "cumulativeBytes": 1159548,
+              "totalBytes": 9808523,
+              "wholeRequests": 0,
+              "decoded": true,
+              "frames": 180,
+              "firstPTS": 150,
+              "partial": true,
+              "targetTimestamp": true
+            },
+            {
+              "position": 0,
+              "readyMs": 228,
+              "bytesFetched": 255992,
+              "cumulativeBytes": 1415540,
+              "totalBytes": 9808523,
+              "wholeRequests": 0,
+              "decoded": true,
+              "frames": 179,
+              "firstPTS": 0.03333333333333333,
+              "partial": true,
+              "targetTimestamp": true
+            },
+            {
+              "position": 300,
+              "readyMs": 583,
+              "bytesFetched": 154144,
+              "cumulativeBytes": 1569684,
+              "totalBytes": 9808523,
+              "wholeRequests": 0,
+              "decoded": true,
+              "frames": 104,
+              "firstPTS": 300,
+              "partial": true,
+              "targetTimestamp": true
+            }
+          ],
+          "prepareMs": 614,
+          "indexBytes": 509806,
+          "totalBytes": 9808523,
+          "durationMs": 303439
+        }
+      ],
+      "passed": true
+    },
+    "huangguo": {
+      "status": "pass",
+      "checkedAt": "2026-11-17T16:01:20.196Z",
+      "platform": "darwin",
+      "arch": "arm64",
+      "upstreamCommit": "a83dfd9a29b23d439da4f853d104568696cd401c",
+      "serverSha256": "008ac6787bd3dfc951416c313248d4cca883facfd16a7a866b9139004843c7af",
+      "fullEpisodeDecoded": true,
+      "installedAppPlaybackObserved": false,
+      "confirmationRequired": true,
+      "catalogItems": 16,
+      "searchQuery": "AI",
+      "searchItems": 16,
+      "coverDecoded": true,
+      "episodeCount": 13,
+      "durationMs": 314833,
+      "assets": 63,
+      "chunkCalls": 321,
+      "mediaBytes": 61056572,
+      "historyIsolated": true
+    }
+  },
+  "candidate": {
+    "name": "@kyun.si/codex-hongguo",
+    "version": "0.0.41-beta.1",
+    "filename": "kyun.si-codex-hongguo-0.0.41-beta.1.tgz",
+    "size": 7512657,
+    "unpackedSize": 20426016,
+    "sha256": "6a59f0a96eba7e908f5411d8bda20d0f12a781aeda4552712e651de6bced56a8",
+    "offlineZip": "codex-hongguo-0.0.41-beta.1.zip",
+    "offlineZipSha256": "35453d127894c8d7006a63525ff2d2c9c9f6897621d7f6c0be28e0aac5afb5fa"
+  },
+  "isolatedCodexInstallation": {
+    "name": "@kyun.si/codex-hongguo",
+    "version": "0.0.41-beta.1",
+    "installation": "fresh",
+    "sha256": "6a59f0a96eba7e908f5411d8bda20d0f12a781aeda4552712e651de6bced56a8",
+    "platform": "darwin",
+    "arch": "arm64",
+    "powershellInstall": [],
+    "checkedAt": "2026-11-17T16:03:23.986Z",
+    "checks": [
+      "npx-setup",
+      "fresh-install",
+      "repeat-setup",
+      "native-npm-source",
+      "shared-program-both-hosts",
+      "codex-thin-adapter",
+      "progress-preserved",
+      "sound-preferences-preserved",
+      "managed-ffmpeg-without-system-install",
+      "hook-review-required",
+      "installation-trust-instructions",
+      "minimal-player-ui",
+      "launcher-stdin",
+      "hook-stop",
+      "hook-interrupt",
+      "host-mcp",
+      "live-catalog",
+      "npx-uninstall",
+      "uninstall-dry-run",
+      "repeat-uninstall",
+      "uninstall-without-media-runtime",
+      "uninstall-cleans-component-directory-and-partial-downloads",
+      "uninstall-preserves-external-executables",
+      "uninstall-deletes-all-local-data"
+    ],
+    "mediaDecoded": true,
+    "desktopPlaybackObserved": false
+  },
+  "isolatedAntigravityInstallation": {
+    "version": "0.0.41-beta.1",
+    "platform": "darwin",
+    "uiSha256": "4227050be2b047fe0bae44fabcb3589b4c9c88e38e2f7fa9154ca1e61cea0431",
+    "checks": [
+      "isolated-install-update-uninstall",
+      "packaged-stdio-mcp",
+      "app-entrypoints-and-html",
+      "fixed-entrypoints-with-opposite-environment",
+      "installed-cli-host-selection",
+      "provider-worker-app-profile",
+      "one-program-and-ffmpeg-survive-single-host-uninstall",
+      "native-shell-hooks",
+      "hook-deduplication-and-cancellation",
+      "bound-waiting-card",
+      "sample-media-transport-and-decode",
+      "progress-preserved"
+    ],
+    "desktopPlaybackObserved": false,
+    "liveAntigravityHooksObserved": false
+  },
+  "desktopPlaybackObserved": false,
+  "liveHooksObserved": false,
+  "limitations": [
+    "Desktop picture, audio and natural task hooks were not observed in this run.",
+    "Platform-specific skipped tests still require their native platforms.",
+    "The source version and package version alone do not identify this local candidate; use the recorded commit and archive digest."
+  ]
+}

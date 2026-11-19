@@ -13,7 +13,7 @@
 
 在 Codex 桌面会话右侧看红果短剧，支持选剧、搜索、续播和连播。默认在新任务开始时续播已选剧集，任务结束或中断时暂停并保存进度；两个行为都可在设置中独立关闭。插件用于使用本机执行器的 Codex 桌面对话。
 
-仅在官方 Codex 桌面 App 中启用。T3 Code、Paseo 等第三方客户端或无法识别的宿主不会自动推荐，也不会启动播放器后台请求。
+支持官方 Codex 桌面 App，并新增实验性的 [Antigravity App 适配](#antigravity-app实验性)。T3 Code、Paseo 等第三方客户端或无法识别的宿主不会自动推荐，也不会启动播放器后台请求。以下默认介绍 Codex 用法。
 
 内置红果、Bilibili 和黄果（NSFW），也可通过 `hongguo-provider` Skill [接入自己的片源](#接入自己的片源)。
 
@@ -27,7 +27,7 @@
 
 ## 安装与配置
 
-支持 macOS、Linux（x64/arm64）、Windows x64 和 Windows 11 ARM64。需要对应架构的 Node.js >=22.16（含 npm）和支持 npm 插件源的 Codex CLI。播放组件由插件自动准备，无需单独安装 FFmpeg。
+支持 macOS、Linux（x64/arm64）、Windows x64 和 Windows 11 ARM64。需要对应架构的 Node.js >=22.16（含 npm）；选择 Codex 时还需要支持 npm 插件源的 Codex CLI。播放组件由插件自动准备，无需单独安装 FFmpeg。
 
 macOS / Linux 使用 npm 安装：
 
@@ -43,7 +43,43 @@ npx.cmd "@kyun.si/codex-hongguo@latest" setup
 
 包名的引号必须保留，避免 PowerShell 将 `@` 解析为展开运算符；`npx.cmd` 可直接调用 npm 命令入口。Windows 详细说明和离线安装见 [Windows 支持](docs/windows-support.md)。
 
-默认安装和更新不需要 Git。命令会检查 Node、npm 和 Codex CLI，自动准备播放组件，再通过本机市场索引从 npm 安装插件。首次安装需要联网，之后复用本机缓存。安装完成时会提示你到 Codex「设置 → Hooks」审查、信任并启用 `UserPromptSubmit`、`Stop`、`Interrupt`。然后打开新的本地聊天使用。
+`setup` 会显示 Codex、Antigravity 的 checkbox 选择列表：用 ↑/↓ 移动、空格勾选或取消勾选、回车确认，Esc 或 Ctrl-C 取消。可以同时勾选两端，列表会显示已安装状态；再次运行可补装另一端，也可勾选已安装的端重新安装。未选择的端不会被卸载。
+
+也可用快捷参数直接安装：`setup --codex`、`setup --agy`（或 `--antigravity`），同时安装用 `setup --codex --agy`。这些参数跳过选择，适合脚本和没有交互终端的环境；原来的 `--host codex|antigravity` 仍可用。`update`、`uninstall`、`doctor` 也支持同样的单端快捷参数。
+
+默认安装和更新不需要 Git。命令会检查所选应用需要的环境并自动准备播放组件；Codex 使用本机市场注册入口。首次安装需要联网，之后复用本机缓存。Codex 安装完成时会提示你到「设置 → Hooks」审查、信任并启用 `UserPromptSubmit`、`Stop`、`Interrupt`，然后打开新的本地聊天使用。
+
+### Antigravity App（实验性）
+
+安装入口支持 Windows x64、Windows 11 ARM64，以及 Linux 和 macOS 的 x64/arm64。需要支持 **Sidecar UI** 的 Antigravity 桌面 App 及对应架构的 Node.js >=22.16。不需要 Codex CLI。Antigravity 适配随 npm 正式版发布。
+
+macOS / Linux 安装：
+
+```sh
+npx "@kyun.si/codex-hongguo@latest" setup --agy
+```
+
+也可直接运行 `setup`，在引导中选择 Antigravity。`--antigravity` 与 `--agy` 等价。后续更新使用 `npx "@kyun.si/codex-hongguo@latest" update --agy`。
+
+Windows PowerShell 安装：
+
+```powershell
+npx.cmd "@kyun.si/codex-hongguo@latest" setup --agy
+```
+
+后续更新使用 `npx.cmd "@kyun.si/codex-hongguo@latest" update --agy`。
+
+安装或更新后重新打开 **Antigravity 桌面 App**，新建一个本地会话。插件位于 `~/.gemini/config/plugins/codex-hongguo/`，可用 `uninstall --agy` 卸载。
+
+- **手动观看**。从会话右上角菜单的 **Extensions → 红果短剧** 打开原生侧栏播放器。播放器自动关联当前对话。
+- **等待时推荐**。在左侧 **Customizations → Installed** 确认“红果短剧”已启用。`PreInvocation`、`Stop` 随插件加载。开启播放器的「当前回合进行时显示推荐」后，Hook 会请模型在聊天里显示剧目。点击推荐旁的「红果短剧」可打开同一个侧栏播放器。静默要求和严格回复格式优先。
+- **播放联动**。播放器设置可控制任务开始时续播、结束或取消时暂停。侧栏显示「未关联对话」时，可回到目标本地会话重新打开播放器。手动选剧和观看无需关联会话。
+
+排查触发问题时，可运行 `npx "@kyun.si/codex-hongguo@latest" doctor --agy`（Windows 使用 `npx.cmd`）。`hookActivity` 显示最近记录的开始和结束时间，值为 `null` 表示对应事件尚未记录。Hooks 不保存提示词或回复。[Antigravity 插件说明](https://antigravity.google/docs/plugins)
+
+同一系统用户下，Codex 和 Antigravity 共用一套播放器、服务端、SDK、WASM 及托管的 FFmpeg。安装第二个宿主会复用现有程序。通过任一宿主更新后，两个宿主的新进程都使用更新后的程序。Antigravity 的观看数据单独保存，macOS 数据在 `~/Library/Application Support/AntigravityHongguo/`，Windows 在 `%LOCALAPPDATA%\AntigravityHongguo\`，Linux 在 `${XDG_DATA_HOME:-~/.local/share}/antigravity-hongguo/`。更新保留数据，卸载清理本宿主的数据；不会自动导入 Codex 的观看记录或 Provider。
+
+已在 macOS 的 Antigravity 2.32.2 中实测手动打开原生侧栏、从聊天推荐打开同一个侧栏、视频续播和回合结束后自动暂停。音频单项验收仍待进行。Antigravity 播放时每约 1 秒保存一次进度，突然关闭可能丢失尚未保存的进度。协议测试和隔离安装测试的命令见[开发指南](CONTRIBUTING.md)。
 
 ### Beta 测试渠道
 
@@ -142,7 +178,7 @@ Windows PowerShell 将上述更新和卸载命令中的 `npx` 写为 `npx.cmd`�
 npx "@kyun.si/codex-hongguo@latest" uninstall
 ```
 
-卸载会删除本插件的播放组件、观看进度、设置、全部视频缓存和设备档案，包括历史组件和下载残片；系统或外部自行配置的 FFmpeg 不会删除。完成后打开新聊天。只想暂时停用并保留数据时，可从 Codex 插件设置中禁用。
+卸载会清理当前宿主的观看进度、设置、视频缓存和设备档案。最后一个宿主卸载时，才清理共享程序、托管的 FFmpeg 和下载残片。自行配置的外部 FFmpeg 会保留。完成后打开新聊天。只想暂时停用并保留数据时，可从 Codex 插件设置中禁用。
 
 以下默认用户数据目录会在卸载时自动删除：
 
@@ -158,7 +194,7 @@ npx "@kyun.si/codex-hongguo@latest" uninstall
 
 | 项目 | 说明与限制 |
 | --- | --- |
-| 适用宿主 | 仅支持 Codex 桌面客户端中使用本机执行器的对话，不适用于云端/远程执行器或其他宿主环境。 |
+| 适用宿主 | Codex 桌面本机对话、实验性的 Antigravity App Sidecar UI。Antigravity 用法与验收边界见上文。 |
 | 片源与选流 | 内置红果、Bilibili 和黄果；黄果每次切入均需确认，采用匿名访问，兼容的 H.264 HLS 视频按需读取分片；Bilibili 可在设置「片源账号」子页或播放受限提示旁扫码登录、管理与退出账号。悬停图标后选择片源，NSFW 片源需确认后切换，浏览推荐或搜索番名，兼容 ss/ep 番剧链接。B站标准双轨支持按需分段播放与跳转，试看和 DRM 会拒绝。详见 [Provider 插件](docs/providers.md)。 |
 | 推荐与搜索 | 片库与搜索依赖匿名上游 SDK；首页优先推荐未看过的剧，每批最多 12 部（推荐与分集缓存 15 分钟，跨对话共享；过期先使用已有内容并后台刷新，失败后逐步延长重试间隔），推荐不足时按设置中的补充关键词搜索。 |
 | 匿名限流与恢复 | 匿名设备被拒或片源为空时，SDK 会按有限次数自动重试与恢复；仍失败时在界面显示原因供手动重试。 |
