@@ -1,0 +1,94 @@
+name: Follow openhongguo releases
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Stage a compatible SDK update and publish after qualification'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: follow-openhongguo
+  cancel-in-progress: false
+jobs:
+  check:
+    if: ${{ github.repository == 'mreasonyang/codex-hongguo' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      source_sha: ${{ steps.stage.outputs.source_sha }}
+      resume_sha: ${{ steps.baseline.outputs.resume_sha }}
+      release_tag: ${{ steps.stage.outputs.release_tag || steps.baseline.outputs.release_tag }}
+      branch: ${{ steps.stage.outputs.branch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - id: baseline
+        run: bash scripts/upstream-release.sh baseline
+      - id: upstream
+        if: steps.baseline.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGE_UPDATE: ${{ github.event_name == 'schedule' || inputs.publish }}
+        run: |
+          if [[ "$STAGE_UPDATE" == true ]]; then
+            node scripts/follow-openhongguo.mjs --prepare
+          else
+            node scripts/follow-openhongguo.mjs
+          fi
+      - name: Report an update requiring review
+        if: steps.upstream.outputs.action == 'review'
+        run: |
+          echo '::error::Upstream release requires review. See the job summary.'
+          exit 1
+      - id: stage
+        if: steps.upstream.outputs.action == 'candidate' && (github.event_name == 'schedule' || inputs.publish)
+        env:
+          UPSTREAM_TAG: ${{ steps.upstream.outputs.tag }}
+        run: bash scripts/upstream-release.sh stage
+  qualify:
+    needs: check
+    if: needs.check.outputs.source_sha != ''
+    uses: ./.github/workflows/ci.yml
+    with:
+      source_sha: ${{ needs.check.outputs.source_sha }}
+      clean_build: true
+  release:
+    needs: [check, qualify]
+    if: >-
+      !cancelled() && needs.check.result == 'success' &&
+      (github.event_name == 'schedule' || inputs.publish) &&
+      ((needs.qualify.result == 'success' && needs.check.outputs.source_sha != '') ||
+       (needs.qualify.result == 'skipped' && needs.check.outputs.resume_sha != ''))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: write
+    env:
+      SOURCE_SHA: ${{ needs.check.outputs.source_sha || needs.check.outputs.resume_sha }}
+      RELEASE_TAG: ${{ needs.check.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Fast-forward the qualified commit and create its tag together
+        if: needs.check.outputs.source_sha != ''
+        env:
+          STAGE_BRANCH: ${{ needs.check.outputs.branch }}
+        run: bash scripts/upstream-release.sh promote
+      - name: Dispatch the trusted npm publisher for the immutable tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/upstream-release.sh dispatch

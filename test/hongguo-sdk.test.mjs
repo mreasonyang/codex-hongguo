@@ -22,14 +22,23 @@ const grouped = (id, model = JSON.parse(clearModel.data.video_model)) => ({
   code: 0, data: { '1004': { [id]: { video_model: model } } },
 })
 
+test('the shipped Node declarations support the calls and fields used by the adapter', () => {
+  execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '--strict', '--noEmit',
+    '--skipLibCheck', '--target', 'ES2022', '--module', 'NodeNext', 'test/fixtures/hongguo-sdk-contract.mts'],
+  { stdio: 'inherit' })
+})
+
 test('the shipped SDK identifies the unmodified official upstream source', async () => {
   const source = JSON.parse(await readFile('third_party/openhongguo/source.json', 'utf8'))
   const built = JSON.parse(await readFile('dist/vendor/openhongguo/SOURCE.json', 'utf8'))
   await assert.rejects(readFile('third_party/openhongguo/source.tar.gz'), { code: 'ENOENT' })
   // The build verifies the original download. Qualification runners receive only the shipped artifacts.
   assert.deepEqual(built, source)
-  assert.equal(built.revision, 'cd27b9ef42a4aa06859d12e5a24ba7653fa64a2c')
-  assert.equal(built.releaseURL, 'https://github.com/beilunyang/openhongguo/releases/tag/v0.4.0')
+  assert.match(built.revision, /^[a-f0-9]{40}$/)
+  assert.match(built.sourceTree, /^[a-f0-9]{40}$/)
+  assert.match(built.sourceSHA256, /^[a-f0-9]{64}$/)
+  assert.equal(built.releaseURL, built.repository + '/releases/tag/v' + built.upstreamVersion)
+  assert.equal(built.archiveURL, 'https://codeload.github.com/beilunyang/openhongguo/tar.gz/' + built.revision)
   assert.equal(built.repository, 'https://github.com/beilunyang/openhongguo')
   assert.equal(built.sourceURL, built.repository + '/tree/' + built.revision)
   assert.deepEqual(built.modifiedFiles, [])

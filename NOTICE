@@ -5,9 +5,9 @@ This version of codex-hongguo is licensed under the GNU Affero General Public
 License, version 3 only (AGPL-3.0-only). The complete license is in LICENSE.
 
 Third-party components retain their respective licenses. In particular,
-openhongguo is built from unmodified official upstream source, pinned to
-the v0.4.0 release commit cd27b9ef42a4aa06859d12e5a24ba7653fa64a2c under
-Apache-2.0.
+openhongguo is built from unmodified official upstream source under Apache-2.0.
+The exact release, commit and archive digest are recorded in the accompanying
+openhongguo source.json.
 Its matching source, license and provenance are included in
 licenses/openhongguo/; see NOTICE.md there for the revision-pinned build details.
 

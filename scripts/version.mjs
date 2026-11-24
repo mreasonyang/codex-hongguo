@@ -1,11 +1,11 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { isVersion, nextBetaVersion } from '../src/runtime/version.mjs'
-import { spawnSync, findExecutable } from '../src/runtime/executables.mjs'
 
 const read = (path) => JSON.parse(readFileSync(path, 'utf8'))
 const mode = process.argv[2]
 const current = read('package.json').version
 if (mode === '--beta') {
+  const { spawnSync, findExecutable } = await import('../src/runtime/executables.mjs')
   const result = spawnSync(findExecutable('npm'), ['version', nextBetaVersion(current), '--no-git-tag-version'], { stdio: 'inherit' })
   if (result.status !== 0) throw Error('Beta 版本更新失败')
   process.exit(0)

@@ -3,27 +3,18 @@ import { execFileSync } from 'node:child_process'
 import { cp, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
+import { archiveURL, downloadArchive } from './openhongguo-archive.mjs'
 
 const source = resolve('third_party/openhongguo')
 const manifest = JSON.parse(await readFile(join(source, 'source.json'), 'utf8'))
 const archive = resolve('node_modules/.cache/codex-hongguo/openhongguo-source.tar.gz')
 const distribution = resolve('dist/licenses/openhongguo-source.tar.gz')
-const expectedURL = 'https://codeload.github.com/beilunyang/openhongguo/tar.gz/' + manifest.revision
-if (!/^[a-f0-9]{40}$/.test(manifest.revision) || manifest.archiveURL !== expectedURL)
+if (manifest.archiveURL !== archiveURL(manifest.revision))
   throw Error('Invalid official openhongguo source location')
 const hash = bytes => createHash('sha256').update(bytes).digest('hex')
 let bytes = await readFile(archive).catch(() => null)
 if (!bytes || hash(bytes) !== manifest.sourceSHA256) {
-  const response = await fetch(expectedURL, { redirect: 'error', signal: AbortSignal.timeout(60000) })
-  if (!response.ok || Number(response.headers.get('content-length')) > 8 * 1024 * 1024)
-    throw Error('Official openhongguo source unavailable')
-  const chunks = []; let size = 0
-  for await (const chunk of response.body) {
-    size += chunk.length
-    if (size > 8 * 1024 * 1024) throw Error('openhongguo source exceeds limit')
-    chunks.push(chunk)
-  }
-  bytes = Buffer.concat(chunks)
+  bytes = await downloadArchive(manifest.revision)
   if (hash(bytes) !== manifest.sourceSHA256) throw Error('openhongguo source checksum mismatch')
   await mkdir(dirname(archive), { recursive: true })
   const part = archive + '.' + process.pid + '.part'

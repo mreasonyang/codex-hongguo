@@ -118,6 +118,8 @@ npm run version:patch
 
 普通提交只运行 CI。维护者确认后推送与版本一致的 `v<版本>` 标签，触发 CI 固定该提交、构建一次、三平台验收同一份包，再通过 npm OIDC 发布该 tgz。市场索引和发布记录只在 registry 完整性回读成功后更新。手动运行 Publish 且保持 `publish=false` 可预演完整流程；详见 [CI 发布说明](docs/npm-distribution.md#版本与-ci-发布)。
 
+红果 SDK 的兼容更新可由 GitHub Actions 定时跟随并发布补丁版本，预演入口与人工审阅条件见[跟随 openhongguo 正式版](docs/npm-distribution.md#跟随-openhongguo-正式版)。
+
 ## 运行环境与诊断
 
 | 环境变量 | 读取方与用途 |
