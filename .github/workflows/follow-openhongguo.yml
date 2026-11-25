@@ -2,6 +2,14 @@ name: Follow openhongguo releases
 on:
   schedule:
     - cron: '23 */6 * * *'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/follow-openhongguo.yml'
+      - 'scripts/follow-openhongguo.mjs'
+      - 'scripts/openhongguo-archive.mjs'
+      - 'scripts/upstream-release.sh'
+      - 'third_party/openhongguo/source.json'
   workflow_dispatch:
     inputs:
       publish:
@@ -11,11 +19,26 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: follow-openhongguo
+  group: follow-openhongguo-${{ github.event.pull_request.number || 'release' }}
   cancel-in-progress: false
 jobs:
+  preview:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Compare the proposed SDK pin with the upstream release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/follow-openhongguo.mjs
   check:
-    if: ${{ github.repository == 'mreasonyang/codex-hongguo' && github.ref == 'refs/heads/main' }}
+    if: ${{ github.event_name != 'pull_request' && github.repository == 'mreasonyang/codex-hongguo' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
