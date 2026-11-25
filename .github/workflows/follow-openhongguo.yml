@@ -2,6 +2,11 @@ name: Follow openhongguo releases
 on:
   schedule:
     - cron: '23 */6 * * *'
+  push:
+    branches-ignore: [main, 'automation/**']
+    paths:
+      - '.github/workflows/follow-openhongguo.yml'
+      - 'scripts/follow-openhongguo.mjs'
   pull_request:
     branches: [main]
     paths:
@@ -19,11 +24,11 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: follow-openhongguo-${{ github.event.pull_request.number || 'release' }}
+  group: follow-openhongguo-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 jobs:
   preview:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -38,7 +43,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/follow-openhongguo.mjs
   check:
-    if: ${{ github.event_name != 'pull_request' && github.repository == 'mreasonyang/codex-hongguo' && github.ref == 'refs/heads/main' }}
+    if: >-
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+      github.repository == 'mreasonyang/codex-hongguo' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

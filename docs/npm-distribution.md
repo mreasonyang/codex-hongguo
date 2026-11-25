@@ -132,7 +132,7 @@ npm 上传成功与公开元数据可见可能相隔数分钟。发布脚本最�
 
 ### 跟随 openhongguo 正式版
 
-修改上游跟随流程或 SDK 固定版本的 PR 会在 GitHub 上运行只读预演。在 `Follow openhongguo releases` 的 `preview` 摘要中可以看到当前版本、上游版本，以及是否需要人工审阅。
+修改工作流或版本检测脚本并推送到开发分支时，GitHub 会先运行只读预演。修改上游跟随流程或 SDK 固定版本的 PR 也会运行预演。在 `Follow openhongguo releases` 的 `preview` 摘要中可以看到当前版本、上游版本，以及是否需要人工审阅。
 
 默认分支上的 `Follow openhongguo releases` 每六小时检查一次上游 GitHub Release。手动运行时默认只读预览，勾选 `publish` 可提前执行一次完整检查。跟踪范围是红果 SDK。上游进入新主版本、0.x 跨次版本、发布说明或提交声明破坏性变更时，Actions 摘要会列出人工审阅原因。请求签名、设备校验、所附许可有变化，或 GitHub 无法提供完整差异时，同样转人工审阅。
 
