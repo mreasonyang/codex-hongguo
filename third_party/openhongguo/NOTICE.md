@@ -6,8 +6,7 @@ archive contains the SDK source and upstream tests from the verified GitHub
 source. The standalone signer service and its bundled binary are omitted.
 
 Upstream project: https://github.com/beilunyang/openhongguo
-Revision: cd27b9ef42a4aa06859d12e5a24ba7653fa64a2c
-Release: https://github.com/beilunyang/openhongguo/releases/tag/v0.4.0
+Revision and release URL: see the accompanying source.json.
 License: Apache-2.0 (LICENSE). The Go runtime retains its BSD license (GO_LICENSE).
 
 The SDK uses the upstream built-in signer and includes the V5 playback fixes

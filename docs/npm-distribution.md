@@ -130,6 +130,16 @@ macOS 发布验收固定使用 `macos-26-intel`（x64）。`macos-latest` 当前
 
 npm 上传成功与公开元数据可见可能相隔数分钟。发布脚本最多等待十分钟回读版本、完整性和渠道指向；若仍超时，先检查 registry，再重跑原工作流的失败 job。仅因回读延迟不需要递增版本或再次上传。
 
+### 跟随 openhongguo 正式版
+
+修改工作流或版本检测脚本并推送到开发分支时，GitHub 会先运行只读预演。修改上游跟随流程或 SDK 固定版本的 PR 也会运行预演。在 `Follow openhongguo releases` 的 `preview` 摘要中可以看到当前版本、上游版本，以及是否需要人工审阅。
+
+默认分支上的 `Follow openhongguo releases` 每六小时检查一次上游 GitHub Release。手动运行时默认只读预览，勾选 `publish` 可提前执行一次完整检查。跟踪范围是红果 SDK。上游进入新主版本、0.x 跨次版本、发布说明或提交声明破坏性变更时，Actions 摘要会列出人工审阅原因。请求签名、设备校验、所附许可有变化，或 GitHub 无法提供完整差异时，同样转人工审阅。
+
+兼容候选固定到上游标签对应的提交、源码树和归档 SHA-256，并在独立分支递增插件补丁版本。三平台验收覆盖 SDK 类型、实际适配调用、回归和安装。通过后，机器人才把已测试的提交快进到 `main` 并创建插件标签。验收期间主线有新提交时，下次检查会在新基线上重新生成候选。失败的候选分支可供排查。
+
+随后由机器人显式调度现有 `Publish`，针对该标签重新构建并执行完整的三平台发布验收，通过后经 npm OIDC 上传。两个流程使用仓库内置的 `GITHUB_TOKEN`。仓库规则需允许工作流写候选分支、快进主线、创建标签和调度 Actions。若标签已创建而调度中断，下一次检查会补调度；已启动的 Publish 有运行链接，遇到失败从该运行重试即可复用原有产物。
+
 ## npm 受信任发布者
 
 在 npm 包设置中为 `mreasonyang/codex-hongguo` 的 `publish.yml` 配置受信任发布者，并允许直接 `npm publish`。流程使用 GitHub 托管 runner、Node 24、npm 11 和仅发布 job 的 `id-token: write`，不保存长期 npm token。配置要求以 [npm 受信任发布者文档](https://docs.npmjs.com/trusted-publishers/) 为准；预演不验证 npm 账户端的发布授权。
