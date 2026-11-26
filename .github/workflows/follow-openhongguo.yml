@@ -76,11 +76,6 @@ jobs:
           else
             node scripts/follow-openhongguo.mjs
           fi
-      - name: Report an update requiring review
-        if: steps.upstream.outputs.action == 'review'
-        run: |
-          echo '::error::Upstream release requires review. See the job summary.'
-          exit 1
       - id: stage
         if: steps.upstream.outputs.action == 'candidate' && (github.event_name == 'schedule' || inputs.publish)
         env:

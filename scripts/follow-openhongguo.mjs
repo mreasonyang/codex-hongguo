@@ -105,7 +105,14 @@ async function main() {
   const tag = plan.tag?.startsWith('v') && stable(plan.tag.slice(1)) ? plan.tag : ''
   const summary = ['openhongguo v' + pin.version, tag, plan.action, plan.reason].filter(Boolean).join(' · ')
   console.log(summary)
-  if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, summary + '\n')
+  let report = summary
+  if (plan.action === 'review') {
+    const target = tag ? `[${tag}](${repository}/releases/tag/${tag})` : '上游版本'
+    report = `**等待人工审阅，本次跳过发布。**\n\n项目当前固定 v${pin.version}，本次检查的目标为 ${target}。${plan.reason}`
+    if (process.env.GITHUB_ACTIONS === 'true')
+      console.log('::warning title=openhongguo 更新待审::' + [tag, plan.reason].filter(Boolean).join(' · '))
+  }
+  if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, report + '\n')
   if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, 'action=' + plan.action + '\ntag=' + tag + '\n')
 }
 
